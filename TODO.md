@@ -1,7 +1,7 @@
 # TODO
 
 ## 已完成
-
+- [x] 补充项目开发启动说明，包括 Docker、后端、前端的启动与停止命令。
 - [x] 初始化 `backend + frontend` 单仓库结构。
 - [x] 初始化后端 Spring Boot 项目，并使用 Maven Wrapper。
 - [x] 后端包名确定为 `com.jt.learning`。
@@ -20,7 +20,6 @@
 
 ### P0
 
-- [ ] 补充项目开发启动说明，包括 Docker、后端、前端的启动与停止命令。
 - [ ] 确认本地开发配置是否需要拆分 `dev` profile。
 - [ ] 详细讨论并确定 MVP 数据库表设计。
 
