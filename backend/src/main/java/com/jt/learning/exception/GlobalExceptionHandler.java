@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -34,10 +35,14 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(ErrorCode.PARAM_ERROR.getCode(), exception.getMessage());
     }
 
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ApiResponse<Void> handleMethodArgumentTypeMismatchException(MethodArgumentTypeMismatchException exception) {
+        return ApiResponse.error(ErrorCode.PARAM_ERROR.getCode(), exception.getName() + ": 参数类型错误");
+    }
+
     @ExceptionHandler(Exception.class)
     public ApiResponse<Void> handleException(Exception exception) {
         log.error("Unhandled exception", exception);
         return ApiResponse.error(ErrorCode.SYSTEM_ERROR.getCode(), ErrorCode.SYSTEM_ERROR.getMessage());
     }
 }
-
