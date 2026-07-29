@@ -22,4 +22,11 @@ public interface TagMapper {
             @Param("limit") int limit,
             @Param("offset") long offset
     );
+
+    List<Tag> selectEnabledTagsByType(@Param("tagType") String tagType);
+
+    List<Tag> selectEnabledTagsByCodes(
+            @Param("tagType") String tagType,
+            @Param("codes") List<String> codes
+    );
 }

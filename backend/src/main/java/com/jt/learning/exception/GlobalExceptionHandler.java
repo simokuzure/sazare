@@ -4,6 +4,7 @@ import com.jt.learning.common.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -38,6 +39,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ApiResponse<Void> handleMethodArgumentTypeMismatchException(MethodArgumentTypeMismatchException exception) {
         return ApiResponse.error(ErrorCode.PARAM_ERROR.getCode(), exception.getName() + ": 参数类型错误");
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ApiResponse<Void> handleHttpMessageNotReadableException(HttpMessageNotReadableException exception) {
+        return ApiResponse.error(ErrorCode.PARAM_ERROR.getCode(), "请求体不能为空或 JSON 格式错误");
     }
 
     @ExceptionHandler(Exception.class)

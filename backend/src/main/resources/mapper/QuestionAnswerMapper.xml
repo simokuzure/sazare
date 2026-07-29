@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jt.learning.mapper.QuestionAnswerMapper">
+
+    <insert id="insertQuestionAnswer" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        insert into question_answers (
+            question_id,
+            answer_text,
+            answer_type,
+            primary_answer,
+            sort_order,
+            deleted,
+            created_at,
+            updated_at
+        ) values (
+            #{questionId},
+            #{answerText},
+            #{answerType},
+            #{primaryAnswer},
+            #{sortOrder},
+            #{deleted},
+            #{createdAt},
+            #{updatedAt}
+        )
+    </insert>
+</mapper>

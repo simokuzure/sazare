@@ -31,6 +31,33 @@ type Tag = {
   sortOrder: number
 }
 
+type QuestionAnswer = {
+  id: number
+  answerText: string
+  answerType: 'STANDARD' | 'REFERENCE'
+  primaryAnswer: boolean
+  sortOrder: number
+}
+
+type Question = {
+  id: number
+  questionType: 'TRANSLATION_ZH_TO_JA'
+  sourceText: string
+  contextText: string
+  level: string
+  difficulty: number
+  grammarPoint: string
+  spoken: boolean
+  business: boolean
+  exam: boolean
+  sourceType: 'AI' | 'MANUAL'
+  enabled: boolean
+  tags: Tag[]
+  answers: QuestionAnswer[]
+  createdAt: string
+  updatedAt: string
+}
+
 type PageData<T> = {
   items: T[]
   page: number
@@ -59,10 +86,15 @@ function App() {
   const [practiceTags, setPracticeTags] = useState<Tag[]>([])
   const [practiceTagsLoading, setPracticeTagsLoading] = useState(false)
   const [practiceTagsError, setPracticeTagsError] = useState<string | null>(null)
+  const [questionCount, setQuestionCount] = useState('1')
   const [level, setLevel] = useState('')
   const [difficulty, setDifficulty] = useState('3')
   const [sceneTagCode, setSceneTagCode] = useState('')
   const [functionTagCode, setFunctionTagCode] = useState('')
+  const [extraRequirements, setExtraRequirements] = useState('')
+  const [generatedQuestions, setGeneratedQuestions] = useState<Question[]>([])
+  const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0)
+  const [questionGenerating, setQuestionGenerating] = useState(false)
   const [answerText, setAnswerText] = useState('')
   const [practiceNotice, setPracticeNotice] = useState<PracticeNotice | null>(null)
 
@@ -110,14 +142,7 @@ function App() {
         const response = await fetch(`/api/tags?${searchParams.toString()}`, {
           signal: controller.signal,
         })
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`)
-        }
-
-        const result = (await response.json()) as ApiResponse<PageData<Tag>>
-        if (result.code !== 0) {
-          throw new Error(result.message)
-        }
+        const result = await readApiResponse<PageData<Tag>>(response)
 
         setPracticeTags(result.data?.items ?? [])
       } catch (fetchError: unknown) {
@@ -160,14 +185,7 @@ function App() {
         const response = await fetch(`/api/tags?${searchParams.toString()}`, {
           signal: controller.signal,
         })
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`)
-        }
-
-        const result = (await response.json()) as ApiResponse<PageData<Tag>>
-        if (result.code !== 0) {
-          throw new Error(result.message)
-        }
+        const result = await readApiResponse<PageData<Tag>>(response)
 
         setTags(result.data?.items ?? [])
         setTotal(result.data?.total ?? 0)
@@ -202,16 +220,54 @@ function App() {
   const totalPages = Math.max(Math.ceil(total / size), 1)
   const firstItemNo = total === 0 ? 0 : (page - 1) * size + 1
   const lastItemNo = Math.min(page * size, total)
+  const selectedQuestion = generatedQuestions[selectedQuestionIndex] ?? null
 
-  function handleGenerateQuestion() {
-    setPracticeNotice({
-      kind: 'info',
-      title: '题目生成接口待接入',
-      message: '当前仅完成前端入口。后端生成题目 API 实现后，这里会请求新题并展示题干、语境和标签。',
-    })
+  async function handleGenerateQuestion() {
+    setQuestionGenerating(true)
+    setPracticeNotice(null)
+
+    try {
+      const response = await fetch('/api/questions/ai-generations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(buildAiQuestionGenerationPayload()),
+      })
+      const result = await readApiResponse<Question[]>(response)
+
+      const questions = result.data ?? []
+      setGeneratedQuestions(questions)
+      setSelectedQuestionIndex(0)
+      setAnswerText('')
+      setPracticeNotice({
+        kind: 'info',
+        title: questions.length > 0 ? '题目已生成' : '没有返回题目',
+        message: questions.length > 0 ? `已生成 ${questions.length} 道题。` : '后端没有返回可展示的题目。',
+      })
+    } catch (fetchError: unknown) {
+      setGeneratedQuestions([])
+      setSelectedQuestionIndex(0)
+      setPracticeNotice({
+        kind: 'error',
+        title: '题目生成失败',
+        message: getErrorMessage(fetchError),
+      })
+    } finally {
+      setQuestionGenerating(false)
+    }
   }
 
   function handleSubmitAnswer() {
+    if (!selectedQuestion) {
+      setPracticeNotice({
+        kind: 'error',
+        title: '请先生成题目',
+        message: '生成题目后再填写日语回答。',
+      })
+      return
+    }
+
     if (!answerText.trim()) {
       setPracticeNotice({
         kind: 'error',
@@ -224,13 +280,49 @@ function App() {
     setPracticeNotice({
       kind: 'info',
       title: '评分接口待接入',
-      message: '当前答案没有提交到后端。后续接入评分 API 后，这里会展示分数、评价和改进建议。',
+      message: '当前仅完成题目生成。后续接入评分 API 后，这里会提交答案并展示评价。',
     })
   }
 
   function handleClearAnswer() {
     setAnswerText('')
     setPracticeNotice(null)
+  }
+
+  function buildAiQuestionGenerationPayload() {
+    const payload: {
+      questionCount?: number
+      level?: string
+      difficulty?: number
+      sceneTagCodes?: string[]
+      functionTagCodes?: string[]
+      excludedSourceTexts?: string[]
+      extraRequirements?: string
+    } = {}
+
+    if (questionCount) {
+      payload.questionCount = Number(questionCount)
+    }
+    if (level) {
+      payload.level = level
+    }
+    if (difficulty) {
+      payload.difficulty = Number(difficulty)
+    }
+    if (sceneTagCode) {
+      payload.sceneTagCodes = [sceneTagCode]
+    }
+    if (functionTagCode) {
+      payload.functionTagCodes = [functionTagCode]
+    }
+    if (generatedQuestions.length > 0) {
+      payload.excludedSourceTexts = generatedQuestions.map((question) => question.sourceText)
+    }
+    if (extraRequirements.trim()) {
+      payload.extraRequirements = extraRequirements.trim()
+    }
+
+    return payload
   }
 
   return (
@@ -276,9 +368,20 @@ function App() {
 
                 <form className="form-grid" onSubmit={(event) => event.preventDefault()}>
                   <label>
+                    <span>题目数量</span>
+                    <select value={questionCount} onChange={(event) => setQuestionCount(event.target.value)}>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                      <option value="5">5</option>
+                    </select>
+                  </label>
+
+                  <label>
                     <span>JLPT 等级</span>
                     <select value={level} onChange={(event) => setLevel(event.target.value)}>
-                      <option value="">不限制</option>
+                      <option value="">默认 N3</option>
                       <option value="N5">N5</option>
                       <option value="N4">N4</option>
                       <option value="N3">N3</option>
@@ -322,8 +425,23 @@ function App() {
                     </select>
                   </label>
 
-                  <button type="button" className="primary-button" onClick={handleGenerateQuestion}>
-                    生成题目
+                  <label className="wide-field">
+                    <span>额外要求</span>
+                    <input
+                      value={extraRequirements}
+                      maxLength={500}
+                      placeholder="例如：偏口语、商务场景、考试表达"
+                      onChange={(event) => setExtraRequirements(event.target.value)}
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={questionGenerating}
+                    onClick={handleGenerateQuestion}
+                  >
+                    {questionGenerating ? '生成中' : '生成题目'}
                   </button>
                 </form>
 
@@ -333,29 +451,62 @@ function App() {
               <section className="surface question-panel" aria-label="question preview">
                 <div className="section-title">
                   <span className="label">题目展示</span>
-                  <strong>等待后端生成题目</strong>
+                  <strong>{selectedQuestion ? `题目 #${selectedQuestion.id}` : '等待生成题目'}</strong>
                 </div>
+
+                {generatedQuestions.length > 1 ? (
+                  <div className="question-selector" aria-label="generated questions">
+                    {generatedQuestions.map((question, index) => (
+                      <button
+                        key={question.id}
+                        type="button"
+                        className={selectedQuestionIndex === index ? 'is-selected' : ''}
+                        onClick={() => setSelectedQuestionIndex(index)}
+                      >
+                        {index + 1}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
 
                 <dl className="question-details">
                   <div>
                     <dt>中文原文</dt>
-                    <dd>待生成</dd>
+                    <dd>{selectedQuestion?.sourceText ?? '待生成'}</dd>
                   </div>
                   <div>
                     <dt>语境</dt>
-                    <dd>待后端返回</dd>
+                    <dd>{selectedQuestion?.contextText ?? '待后端返回'}</dd>
                   </div>
                   <div>
                     <dt>语法点</dt>
-                    <dd>待后端返回</dd>
+                    <dd>{selectedQuestion?.grammarPoint ?? '待后端返回'}</dd>
                   </div>
                   <div>
                     <dt>标签</dt>
-                    <dd>待后端返回</dd>
+                    <dd>
+                      {selectedQuestion ? (
+                        <span className="tag-chip-row">
+                          {selectedQuestion.tags.map((tag) => (
+                            <span key={tag.id}>{tag.name}</span>
+                          ))}
+                        </span>
+                      ) : (
+                        '待后端返回'
+                      )}
+                    </dd>
                   </div>
                   <div>
                     <dt>难度</dt>
-                    <dd>待后端返回</dd>
+                    <dd>
+                      {selectedQuestion
+                        ? `${selectedQuestion.level} / ${selectedQuestion.difficulty}`
+                        : '待后端返回'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>来源</dt>
+                    <dd>{selectedQuestion ? selectedQuestion.sourceType : '待后端返回'}</dd>
                   </div>
                 </dl>
               </section>
@@ -368,15 +519,16 @@ function App() {
 
                 <textarea
                   value={answerText}
-                  placeholder="题目生成后，在这里输入你的日语回答。"
+                  disabled={!selectedQuestion}
+                  placeholder={selectedQuestion ? '输入你的日语回答。' : '题目生成后，在这里输入你的日语回答。'}
                   onChange={(event) => setAnswerText(event.target.value)}
                 />
 
                 <div className="action-row">
-                  <button type="button" className="primary-button" onClick={handleSubmitAnswer}>
+                  <button type="button" className="primary-button" disabled={!selectedQuestion} onClick={handleSubmitAnswer}>
                     提交答案
                   </button>
-                  <button type="button" onClick={handleClearAnswer}>
+                  <button type="button" disabled={!selectedQuestion && !answerText} onClick={handleClearAnswer}>
                     清空
                   </button>
                 </div>
@@ -395,10 +547,27 @@ function App() {
                   </div>
                 ) : (
                   <div className="notice">
-                    <strong>评分接口待接入</strong>
-                    <p>提交后这里会展示评分结果、AI 总体评价和改进建议。</p>
+                    <strong>等待生成</strong>
+                    <p>生成题目后这里会显示接口状态和标准答案。</p>
                   </div>
                 )}
+
+                {selectedQuestion ? (
+                  <details className="answer-reference">
+                    <summary>查看标准答案</summary>
+                    <ol>
+                      {selectedQuestion.answers.map((answer) => (
+                        <li key={answer.id}>
+                          <span>
+                            {answer.answerType === 'STANDARD' ? '标准' : '参考'}
+                            {answer.primaryAnswer ? ' / 主答案' : ''}
+                          </span>
+                          <strong>{answer.answerText}</strong>
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                ) : null}
               </section>
             </div>
           </section>
@@ -550,6 +719,26 @@ function StatusBadge({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   )
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : '请求失败'
+}
+
+async function readApiResponse<T>(response: Response): Promise<ApiResponse<T>> {
+  let result: ApiResponse<T> | null = null
+
+  try {
+    result = (await response.json()) as ApiResponse<T>
+  } catch {
+    throw new Error(response.ok ? '响应不是合法 JSON' : `HTTP ${response.status}`)
+  }
+
+  if (!response.ok || result.code !== 0) {
+    throw new Error(result.message || `HTTP ${response.status}`)
+  }
+
+  return result
 }
 
 function StatusBlock({ label, value }: { label: string; value: string }) {

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jt.learning.mapper.QuestionMapper">
+
+    <insert id="insertQuestion" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        insert into questions (
+            question_type,
+            source_text,
+            context_text,
+            level,
+            difficulty,
+            grammar_point,
+            spoken,
+            business,
+            exam,
+            source_type,
+            enabled,
+            deleted,
+            created_at,
+            updated_at
+        ) values (
+            #{questionType},
+            #{sourceText},
+            #{contextText},
+            #{level},
+            #{difficulty},
+            #{grammarPoint},
+            #{spoken},
+            #{business},
+            #{exam},
+            #{sourceType},
+            #{enabled},
+            #{deleted},
+            #{createdAt},
+            #{updatedAt}
+        )
+    </insert>
+</mapper>

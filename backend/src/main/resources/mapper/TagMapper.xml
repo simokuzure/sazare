@@ -38,4 +38,48 @@
         limit #{limit}
         offset #{offset}
     </select>
+
+    <select id="selectEnabledTagsByType" resultType="com.jt.learning.entity.Tag">
+        select
+            id,
+            tag_type,
+            parent_id,
+            code,
+            name,
+            description,
+            sort_order,
+            enabled,
+            deleted,
+            created_at,
+            updated_at
+        from tags
+        where deleted = false
+          and enabled = true
+          and tag_type = #{tagType}
+        order by sort_order asc, id asc
+    </select>
+
+    <select id="selectEnabledTagsByCodes" resultType="com.jt.learning.entity.Tag">
+        select
+            id,
+            tag_type,
+            parent_id,
+            code,
+            name,
+            description,
+            sort_order,
+            enabled,
+            deleted,
+            created_at,
+            updated_at
+        from tags
+        where deleted = false
+          and enabled = true
+          and tag_type = #{tagType}
+          and code in
+          <foreach collection="codes" item="code" open="(" separator="," close=")">
+              #{code}
+          </foreach>
+        order by sort_order asc, id asc
+    </select>
 </mapper>
