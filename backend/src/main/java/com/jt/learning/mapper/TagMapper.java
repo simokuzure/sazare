@@ -29,4 +29,6 @@ public interface TagMapper {
             @Param("tagType") String tagType,
             @Param("codes") List<String> codes
     );
+
+    List<Tag> selectEnabledTagsByQuestionId(@Param("questionId") Long questionId);
 }

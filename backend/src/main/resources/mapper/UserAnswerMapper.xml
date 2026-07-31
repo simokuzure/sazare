@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jt.learning.mapper.UserAnswerMapper">
+
+    <insert id="insertUserAnswer" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        insert into user_answers (
+            user_id,
+            question_id,
+            answer_text,
+            answer_status,
+            deleted,
+            created_at,
+            updated_at
+        ) values (
+            #{userId},
+            #{questionId},
+            #{answerText},
+            #{answerStatus},
+            #{deleted},
+            #{createdAt},
+            #{updatedAt}
+        )
+    </insert>
+
+    <update id="updateReviewed">
+        update user_answers
+        set answer_status = 'REVIEWED',
+            grammar_vocabulary_score = #{grammarVocabularyScore},
+            natural_fluency_score = #{naturalFluencyScore},
+            scenario_adaptation_score = #{scenarioAdaptationScore},
+            information_completeness_score = #{informationCompletenessScore},
+            total_score = #{totalScore},
+            ai_overall_comment = #{aiOverallComment},
+            updated_at = #{updatedAt}
+        where id = #{id}
+          and deleted = false
+    </update>
+
+    <update id="updateFailed">
+        update user_answers
+        set answer_status = 'FAILED',
+            updated_at = #{updatedAt}
+        where id = #{id}
+          and deleted = false
+    </update>
+</mapper>

@@ -7,4 +7,6 @@ import org.apache.ibatis.annotations.Mapper;
 public interface QuestionMapper {
 
     int insertQuestion(Question question);
+
+    Question selectActiveQuestionById(Long id);
 }

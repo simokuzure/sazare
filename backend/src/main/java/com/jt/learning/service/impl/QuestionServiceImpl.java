@@ -1,5 +1,12 @@
 package com.jt.learning.service.impl;
 
+import com.jt.learning.dto.AiAnswerErrorAnalysisDTO;
+import com.jt.learning.dto.AiAnswerRecommendedExpressionDTO;
+import com.jt.learning.dto.AiAnswerReviewCommentsDTO;
+import com.jt.learning.dto.AiAnswerReviewDTO;
+import com.jt.learning.dto.AiAnswerScoresDTO;
+import com.jt.learning.dto.AiAnswerScoringRequest;
+import com.jt.learning.dto.AiAnswerScoringResponseDTO;
 import com.jt.learning.dto.AiGeneratedQuestionDTO;
 import com.jt.learning.dto.AiQuestionAnswerDTO;
 import com.jt.learning.dto.AiQuestionGenerationRequest;
@@ -8,21 +15,33 @@ import com.jt.learning.dto.AiQuestionTagOptionDTO;
 import com.jt.learning.entity.Question;
 import com.jt.learning.entity.QuestionAnswer;
 import com.jt.learning.entity.Tag;
+import com.jt.learning.entity.User;
+import com.jt.learning.entity.UserAnswer;
 import com.jt.learning.exception.BusinessException;
 import com.jt.learning.exception.ErrorCode;
 import com.jt.learning.mapper.QuestionAnswerMapper;
 import com.jt.learning.mapper.QuestionMapper;
 import com.jt.learning.mapper.QuestionTagMapper;
 import com.jt.learning.mapper.TagMapper;
+import com.jt.learning.mapper.UserAnswerMapper;
+import com.jt.learning.mapper.UserMapper;
+import com.jt.learning.service.AiAnswerScoringClient;
 import com.jt.learning.service.AiQuestionClient;
 import com.jt.learning.service.AiQuestionPrompt;
 import com.jt.learning.service.QuestionService;
+import com.jt.learning.vo.AnswerErrorAnalysisVO;
+import com.jt.learning.vo.AnswerRecommendedExpressionVO;
+import com.jt.learning.vo.AnswerReviewCommentsVO;
+import com.jt.learning.vo.AnswerReviewVO;
+import com.jt.learning.vo.AnswerScoresVO;
 import com.jt.learning.vo.QuestionAnswerVO;
 import com.jt.learning.vo.QuestionVO;
 import com.jt.learning.vo.TagVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -45,8 +64,22 @@ public class QuestionServiceImpl implements QuestionService {
     private static final String TAG_TYPE_FUNCTION = "FUNCTION";
     private static final String ANSWER_TYPE_STANDARD = "STANDARD";
     private static final String ANSWER_TYPE_REFERENCE = "REFERENCE";
+    private static final String LOCAL_DEFAULT_USER_CODE = "LOCAL_DEFAULT";
+    private static final String ANSWER_STATUS_SUBMITTED = "SUBMITTED";
+    private static final String ANSWER_STATUS_REVIEWED = "REVIEWED";
+    private static final String ANSWER_STATUS_FAILED = "FAILED";
 
     private static final Set<String> VALID_ANSWER_TYPES = Set.of(ANSWER_TYPE_STANDARD, ANSWER_TYPE_REFERENCE);
+    private static final Set<String> VALID_ERROR_TYPES = Set.of(
+            "GRAMMAR",
+            "VOCABULARY",
+            "NATURALNESS",
+            "HONORIFIC",
+            "SCENARIO",
+            "COMPLETENESS"
+    );
+    private static final Set<String> VALID_ERROR_SEVERITIES = Set.of("LOW", "MEDIUM", "HIGH");
+    private static final Set<String> VALID_FORMALITIES = Set.of("CASUAL", "NEUTRAL", "POLITE", "BUSINESS");
     private static final Pattern CHINESE_PATTERN = Pattern.compile(".*[\\u4e00-\\u9fff].*");
     private static final Pattern JAPANESE_TEXT_PATTERN = Pattern.compile(".*[\\u3040-\\u30ff\\u4e00-\\u9fff].*");
 
@@ -54,8 +87,12 @@ public class QuestionServiceImpl implements QuestionService {
     private final QuestionMapper questionMapper;
     private final QuestionAnswerMapper questionAnswerMapper;
     private final QuestionTagMapper questionTagMapper;
+    private final UserMapper userMapper;
+    private final UserAnswerMapper userAnswerMapper;
     private final AiQuestionPromptBuilder promptBuilder;
     private final AiQuestionClient aiQuestionClient;
+    private final AiAnswerScoringPromptBuilder answerScoringPromptBuilder;
+    private final AiAnswerScoringClient aiAnswerScoringClient;
     private final ObjectMapper objectMapper;
 
     public QuestionServiceImpl(
@@ -63,16 +100,24 @@ public class QuestionServiceImpl implements QuestionService {
             QuestionMapper questionMapper,
             QuestionAnswerMapper questionAnswerMapper,
             QuestionTagMapper questionTagMapper,
+            UserMapper userMapper,
+            UserAnswerMapper userAnswerMapper,
             AiQuestionPromptBuilder promptBuilder,
             AiQuestionClient aiQuestionClient,
+            AiAnswerScoringPromptBuilder answerScoringPromptBuilder,
+            AiAnswerScoringClient aiAnswerScoringClient,
             ObjectMapper objectMapper
     ) {
         this.tagMapper = tagMapper;
         this.questionMapper = questionMapper;
         this.questionAnswerMapper = questionAnswerMapper;
         this.questionTagMapper = questionTagMapper;
+        this.userMapper = userMapper;
+        this.userAnswerMapper = userAnswerMapper;
         this.promptBuilder = promptBuilder;
         this.aiQuestionClient = aiQuestionClient;
+        this.answerScoringPromptBuilder = answerScoringPromptBuilder;
+        this.aiAnswerScoringClient = aiAnswerScoringClient;
         this.objectMapper = objectMapper;
     }
 
@@ -104,6 +149,211 @@ public class QuestionServiceImpl implements QuestionService {
             savedQuestions.add(saveQuestion(validatedQuestion));
         }
         return savedQuestions;
+    }
+
+    @Override
+    @Transactional(noRollbackFor = BusinessException.class)
+    public AnswerReviewVO submitAnswer(Long questionId, AiAnswerScoringRequest request) {
+        Question question = questionMapper.selectActiveQuestionById(questionId);
+        if (question == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或不可用");
+        }
+
+        List<QuestionAnswer> standardAnswers = questionAnswerMapper.selectActiveAnswersByQuestionId(questionId);
+        if (standardAnswers.isEmpty()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目没有可用标准答案");
+        }
+
+        User user = userMapper.selectEnabledUserByCode(LOCAL_DEFAULT_USER_CODE);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "本地用户不存在或不可用");
+        }
+
+        List<Tag> tags = tagMapper.selectEnabledTagsByQuestionId(questionId);
+        List<AiQuestionTagOptionDTO> tagOptions = toTagOptions(tags);
+        UserAnswer userAnswer = saveSubmittedAnswer(user.getId(), questionId, request.answerText().trim());
+
+        try {
+            AiQuestionPrompt prompt = answerScoringPromptBuilder.build(question, standardAnswers, tagOptions, request);
+            AiAnswerScoringResponseDTO aiResponse = parseAiAnswerScoringResponse(
+                    aiAnswerScoringClient.scoreAnswer(prompt, request, question, standardAnswers, tagOptions)
+            );
+            AiAnswerReviewDTO review = validateAnswerReview(aiResponse);
+            BigDecimal totalScore = calculateTotalScore(review.scores());
+            LocalDateTime updatedAt = LocalDateTime.now();
+            userAnswerMapper.updateReviewed(
+                    userAnswer.getId(),
+                    review.scores().grammarVocabularyScore(),
+                    review.scores().naturalFluencyScore(),
+                    review.scores().scenarioAdaptationScore(),
+                    review.scores().informationCompletenessScore(),
+                    totalScore,
+                    review.overallComment().trim(),
+                    updatedAt
+            );
+            userAnswer.setAnswerStatus(ANSWER_STATUS_REVIEWED);
+            userAnswer.setGrammarVocabularyScore(review.scores().grammarVocabularyScore());
+            userAnswer.setNaturalFluencyScore(review.scores().naturalFluencyScore());
+            userAnswer.setScenarioAdaptationScore(review.scores().scenarioAdaptationScore());
+            userAnswer.setInformationCompletenessScore(review.scores().informationCompletenessScore());
+            userAnswer.setTotalScore(totalScore);
+            userAnswer.setAiOverallComment(review.overallComment().trim());
+            userAnswer.setUpdatedAt(updatedAt);
+            return toAnswerReviewVO(userAnswer, review);
+        } catch (BusinessException exception) {
+            markAnswerReviewFailed(userAnswer);
+            throw exception;
+        }
+    }
+
+    private UserAnswer saveSubmittedAnswer(Long userId, Long questionId, String answerText) {
+        LocalDateTime now = LocalDateTime.now();
+        UserAnswer userAnswer = new UserAnswer();
+        userAnswer.setUserId(userId);
+        userAnswer.setQuestionId(questionId);
+        userAnswer.setAnswerText(answerText);
+        userAnswer.setAnswerStatus(ANSWER_STATUS_SUBMITTED);
+        userAnswer.setDeleted(false);
+        userAnswer.setCreatedAt(now);
+        userAnswer.setUpdatedAt(now);
+        userAnswerMapper.insertUserAnswer(userAnswer);
+        return userAnswer;
+    }
+
+    private void markAnswerReviewFailed(UserAnswer userAnswer) {
+        LocalDateTime updatedAt = LocalDateTime.now();
+        userAnswerMapper.updateFailed(userAnswer.getId(), updatedAt);
+        userAnswer.setAnswerStatus(ANSWER_STATUS_FAILED);
+        userAnswer.setUpdatedAt(updatedAt);
+    }
+
+    private AiAnswerScoringResponseDTO parseAiAnswerScoringResponse(String aiContent) {
+        if (aiContent == null || aiContent.isBlank()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分输出为空");
+        }
+
+        try {
+            JsonNode root = objectMapper.readTree(aiContent);
+            validateAnswerScoringRootJson(root);
+            return objectMapper.treeToValue(root, AiAnswerScoringResponseDTO.class);
+        } catch (JacksonException exception) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分输出不是合法 JSON");
+        }
+    }
+
+    private void validateAnswerScoringRootJson(JsonNode root) {
+        if (!root.isObject()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 JSON 顶层必须是对象");
+        }
+
+        List<String> fields = new ArrayList<>(root.propertyNames());
+        if (!fields.equals(List.of("review"))) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 JSON 顶层只能包含 review 字段");
+        }
+        if (!root.get("review").isObject()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 review 必须是对象");
+        }
+    }
+
+    private AiAnswerReviewDTO validateAnswerReview(AiAnswerScoringResponseDTO aiResponse) {
+        if (aiResponse.review() == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 review 不能为空");
+        }
+
+        AiAnswerReviewDTO review = aiResponse.review();
+        validateScores(review.scores());
+        if (review.totalScore() == null
+                || review.totalScore().compareTo(BigDecimal.ZERO) < 0
+                || review.totalScore().compareTo(BigDecimal.valueOf(100)) > 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 totalScore 不合法");
+        }
+        validateRequiredText(review.overallComment(), "AI 评分 overallComment 不能为空");
+        validateComments(review.comments());
+        validateErrorAnalysis(review.errorAnalysis());
+        validateRevisionSuggestions(review.revisionSuggestions());
+        validateRecommendedExpressions(review.recommendedExpressions());
+        return review;
+    }
+
+    private void validateScores(AiAnswerScoresDTO scores) {
+        if (scores == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 scores 不能为空");
+        }
+        validateScore(scores.grammarVocabularyScore(), "grammarVocabularyScore");
+        validateScore(scores.naturalFluencyScore(), "naturalFluencyScore");
+        validateScore(scores.scenarioAdaptationScore(), "scenarioAdaptationScore");
+        validateScore(scores.informationCompletenessScore(), "informationCompletenessScore");
+    }
+
+    private void validateScore(Integer score, String fieldName) {
+        if (score == null || score < 0 || score > 100) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 " + fieldName + " 不合法");
+        }
+    }
+
+    private void validateComments(AiAnswerReviewCommentsDTO comments) {
+        if (comments == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 comments 不能为空");
+        }
+        validateRequiredText(comments.grammarComment(), "AI 评分 grammarComment 不能为空");
+        validateRequiredText(comments.vocabularyComment(), "AI 评分 vocabularyComment 不能为空");
+        validateRequiredText(comments.naturalnessComment(), "AI 评分 naturalnessComment 不能为空");
+        validateRequiredText(comments.scenarioComment(), "AI 评分 scenarioComment 不能为空");
+    }
+
+    private void validateErrorAnalysis(List<AiAnswerErrorAnalysisDTO> errorAnalysis) {
+        if (errorAnalysis == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis 不能为空");
+        }
+        for (AiAnswerErrorAnalysisDTO error : errorAnalysis) {
+            if (error == null) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis 项不能为空");
+            }
+            if (!VALID_ERROR_TYPES.contains(error.type())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis.type 不合法");
+            }
+            validateRequiredText(error.original(), "AI 评分 errorAnalysis.original 不能为空");
+            validateRequiredText(error.issue(), "AI 评分 errorAnalysis.issue 不能为空");
+            validateRequiredText(error.suggestion(), "AI 评分 errorAnalysis.suggestion 不能为空");
+            if (!VALID_ERROR_SEVERITIES.contains(error.severity())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis.severity 不合法");
+            }
+        }
+    }
+
+    private void validateRevisionSuggestions(List<String> revisionSuggestions) {
+        if (revisionSuggestions == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 revisionSuggestions 不能为空");
+        }
+        for (String suggestion : revisionSuggestions) {
+            validateRequiredText(suggestion, "AI 评分 revisionSuggestions 项不能为空");
+        }
+    }
+
+    private void validateRecommendedExpressions(List<AiAnswerRecommendedExpressionDTO> recommendedExpressions) {
+        if (recommendedExpressions == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 recommendedExpressions 不能为空");
+        }
+        for (AiAnswerRecommendedExpressionDTO expression : recommendedExpressions) {
+            if (expression == null) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 recommendedExpressions 项不能为空");
+            }
+            validateRequiredText(expression.expression(), "AI 评分 recommendedExpressions.expression 不能为空");
+            validateRequiredText(expression.usage(), "AI 评分 recommendedExpressions.usage 不能为空");
+            if (!VALID_FORMALITIES.contains(expression.formality())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 recommendedExpressions.formality 不合法");
+            }
+            validateRequiredText(expression.note(), "AI 评分 recommendedExpressions.note 不能为空");
+        }
+    }
+
+    private BigDecimal calculateTotalScore(AiAnswerScoresDTO scores) {
+        int sum = scores.grammarVocabularyScore()
+                + scores.naturalFluencyScore()
+                + scores.scenarioAdaptationScore()
+                + scores.informationCompletenessScore();
+        return BigDecimal.valueOf(sum)
+                .divide(BigDecimal.valueOf(4), 2, RoundingMode.HALF_UP);
     }
 
     private List<Tag> loadCandidateTags(String tagType, List<String> requestedCodes) {
@@ -394,6 +644,61 @@ public class QuestionServiceImpl implements QuestionService {
                 tag.getName(),
                 tag.getDescription(),
                 tag.getSortOrder()
+        );
+    }
+
+    private AnswerReviewVO toAnswerReviewVO(UserAnswer userAnswer, AiAnswerReviewDTO review) {
+        return new AnswerReviewVO(
+                userAnswer.getId(),
+                userAnswer.getQuestionId(),
+                userAnswer.getAnswerText(),
+                userAnswer.getAnswerStatus(),
+                toAnswerScoresVO(userAnswer),
+                userAnswer.getTotalScore(),
+                userAnswer.getAiOverallComment(),
+                toAnswerReviewCommentsVO(review.comments()),
+                review.errorAnalysis().stream().map(this::toAnswerErrorAnalysisVO).toList(),
+                review.revisionSuggestions().stream().map(String::trim).toList(),
+                review.recommendedExpressions().stream().map(this::toAnswerRecommendedExpressionVO).toList(),
+                userAnswer.getCreatedAt(),
+                userAnswer.getUpdatedAt()
+        );
+    }
+
+    private AnswerScoresVO toAnswerScoresVO(UserAnswer userAnswer) {
+        return new AnswerScoresVO(
+                userAnswer.getGrammarVocabularyScore(),
+                userAnswer.getNaturalFluencyScore(),
+                userAnswer.getScenarioAdaptationScore(),
+                userAnswer.getInformationCompletenessScore()
+        );
+    }
+
+    private AnswerReviewCommentsVO toAnswerReviewCommentsVO(AiAnswerReviewCommentsDTO comments) {
+        return new AnswerReviewCommentsVO(
+                comments.grammarComment().trim(),
+                comments.vocabularyComment().trim(),
+                comments.naturalnessComment().trim(),
+                comments.scenarioComment().trim()
+        );
+    }
+
+    private AnswerErrorAnalysisVO toAnswerErrorAnalysisVO(AiAnswerErrorAnalysisDTO error) {
+        return new AnswerErrorAnalysisVO(
+                error.type(),
+                error.original().trim(),
+                error.issue().trim(),
+                error.suggestion().trim(),
+                error.severity()
+        );
+    }
+
+    private AnswerRecommendedExpressionVO toAnswerRecommendedExpressionVO(AiAnswerRecommendedExpressionDTO expression) {
+        return new AnswerRecommendedExpressionVO(
+                expression.expression().trim(),
+                expression.usage().trim(),
+                expression.formality(),
+                expression.note().trim()
         );
     }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import './App.css'
 
 type HealthResponse = {
@@ -58,6 +58,51 @@ type Question = {
   updatedAt: string
 }
 
+type AnswerScores = {
+  grammarVocabularyScore: number
+  naturalFluencyScore: number
+  scenarioAdaptationScore: number
+  informationCompletenessScore: number
+}
+
+type AnswerReviewComments = {
+  grammarComment: string
+  vocabularyComment: string
+  naturalnessComment: string
+  scenarioComment: string
+}
+
+type AnswerErrorAnalysis = {
+  type: 'GRAMMAR' | 'VOCABULARY' | 'NATURALNESS' | 'HONORIFIC' | 'SCENARIO' | 'COMPLETENESS'
+  original: string
+  issue: string
+  suggestion: string
+  severity: 'LOW' | 'MEDIUM' | 'HIGH'
+}
+
+type AnswerRecommendedExpression = {
+  expression: string
+  usage: string
+  formality: 'CASUAL' | 'NEUTRAL' | 'POLITE' | 'BUSINESS'
+  note: string
+}
+
+type AnswerReview = {
+  userAnswerId: number
+  questionId: number
+  answerText: string
+  answerStatus: 'SUBMITTED' | 'REVIEWED' | 'FAILED'
+  scores: AnswerScores
+  totalScore: number
+  overallComment: string
+  comments: AnswerReviewComments
+  errorAnalysis: AnswerErrorAnalysis[]
+  revisionSuggestions: string[]
+  recommendedExpressions: AnswerRecommendedExpression[]
+  createdAt: string
+  updatedAt: string
+}
+
 type PageData<T> = {
   items: T[]
   page: number
@@ -96,6 +141,8 @@ function App() {
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0)
   const [questionGenerating, setQuestionGenerating] = useState(false)
   const [answerText, setAnswerText] = useState('')
+  const [answerScoring, setAnswerScoring] = useState(false)
+  const [answerReview, setAnswerReview] = useState<AnswerReview | null>(null)
   const [practiceNotice, setPracticeNotice] = useState<PracticeNotice | null>(null)
 
   const [tags, setTags] = useState<Tag[]>([])
@@ -240,6 +287,7 @@ function App() {
       setGeneratedQuestions(questions)
       setSelectedQuestionIndex(0)
       setAnswerText('')
+      setAnswerReview(null)
       setPracticeNotice({
         kind: 'info',
         title: questions.length > 0 ? '题目已生成' : '没有返回题目',
@@ -258,7 +306,14 @@ function App() {
     }
   }
 
-  function handleSubmitAnswer() {
+  function handleSelectQuestion(index: number) {
+    setSelectedQuestionIndex(index)
+    setAnswerText('')
+    setAnswerReview(null)
+    setPracticeNotice(null)
+  }
+
+  async function handleSubmitAnswer() {
     if (!selectedQuestion) {
       setPracticeNotice({
         kind: 'error',
@@ -277,15 +332,40 @@ function App() {
       return
     }
 
-    setPracticeNotice({
-      kind: 'info',
-      title: '评分接口待接入',
-      message: '当前仅完成题目生成。后续接入评分 API 后，这里会提交答案并展示评价。',
-    })
+    setAnswerScoring(true)
+    setAnswerReview(null)
+    setPracticeNotice(null)
+
+    try {
+      const response = await fetch(`/api/questions/${selectedQuestion.id}/answers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ answerText: answerText.trim() }),
+      })
+      const result = await readApiResponse<AnswerReview>(response)
+
+      setAnswerReview(result.data)
+      setPracticeNotice({
+        kind: 'info',
+        title: '评分完成',
+        message: result.data ? `本次总分 ${formatScore(result.data.totalScore)}。` : '后端没有返回评分结果。',
+      })
+    } catch (fetchError: unknown) {
+      setPracticeNotice({
+        kind: 'error',
+        title: '评分失败',
+        message: getErrorMessage(fetchError),
+      })
+    } finally {
+      setAnswerScoring(false)
+    }
   }
 
   function handleClearAnswer() {
     setAnswerText('')
+    setAnswerReview(null)
     setPracticeNotice(null)
   }
 
@@ -461,7 +541,7 @@ function App() {
                         key={question.id}
                         type="button"
                         className={selectedQuestionIndex === index ? 'is-selected' : ''}
-                        onClick={() => setSelectedQuestionIndex(index)}
+                        onClick={() => handleSelectQuestion(index)}
                       >
                         {index + 1}
                       </button>
@@ -525,8 +605,13 @@ function App() {
                 />
 
                 <div className="action-row">
-                  <button type="button" className="primary-button" disabled={!selectedQuestion} onClick={handleSubmitAnswer}>
-                    提交答案
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={!selectedQuestion || answerScoring}
+                    onClick={handleSubmitAnswer}
+                  >
+                    {answerScoring ? '评分中' : '提交答案'}
                   </button>
                   <button type="button" disabled={!selectedQuestion && !answerText} onClick={handleClearAnswer}>
                     清空
@@ -551,6 +636,88 @@ function App() {
                     <p>生成题目后这里会显示接口状态和标准答案。</p>
                   </div>
                 )}
+
+                {answerReview ? (
+                  <div className="review-result">
+                    <div className="score-summary">
+                      <span>总分</span>
+                      <strong>{formatScore(answerReview.totalScore)}</strong>
+                    </div>
+
+                    <dl className="score-grid">
+                      <div>
+                        <dt>语法与词汇</dt>
+                        <dd>{answerReview.scores.grammarVocabularyScore}</dd>
+                      </div>
+                      <div>
+                        <dt>自然度与流畅度</dt>
+                        <dd>{answerReview.scores.naturalFluencyScore}</dd>
+                      </div>
+                      <div>
+                        <dt>敬语与场景</dt>
+                        <dd>{answerReview.scores.scenarioAdaptationScore}</dd>
+                      </div>
+                      <div>
+                        <dt>表达完整性</dt>
+                        <dd>{answerReview.scores.informationCompletenessScore}</dd>
+                      </div>
+                    </dl>
+
+                    <section className="review-section">
+                      <strong>总评</strong>
+                      <p>{answerReview.overallComment}</p>
+                    </section>
+
+                    <dl className="comment-list">
+                      <div>
+                        <dt>语法评价</dt>
+                        <dd>{answerReview.comments.grammarComment}</dd>
+                      </div>
+                      <div>
+                        <dt>词汇评价</dt>
+                        <dd>{answerReview.comments.vocabularyComment}</dd>
+                      </div>
+                      <div>
+                        <dt>自然度评价</dt>
+                        <dd>{answerReview.comments.naturalnessComment}</dd>
+                      </div>
+                      <div>
+                        <dt>场景适合度评价</dt>
+                        <dd>{answerReview.comments.scenarioComment}</dd>
+                      </div>
+                    </dl>
+
+                    <ReviewList title="错误分析" emptyText="本次没有返回具体错误。" items={answerReview.errorAnalysis}>
+                      {(item) => (
+                        <div>
+                          <span>{item.type} / {item.severity}</span>
+                          <strong>{item.original}</strong>
+                          <p>{item.issue}</p>
+                          <p>{item.suggestion}</p>
+                        </div>
+                      )}
+                    </ReviewList>
+
+                    <ReviewList title="修改建议" emptyText="本次没有返回修改建议。" items={answerReview.revisionSuggestions}>
+                      {(item) => <p>{item}</p>}
+                    </ReviewList>
+
+                    <ReviewList
+                      title="推荐表达"
+                      emptyText="本次没有返回推荐表达。"
+                      items={answerReview.recommendedExpressions}
+                    >
+                      {(item) => (
+                        <div>
+                          <span>{item.formality}</span>
+                          <strong>{item.expression}</strong>
+                          <p>{item.usage}</p>
+                          <p>{item.note}</p>
+                        </div>
+                      )}
+                    </ReviewList>
+                  </div>
+                ) : null}
 
                 {selectedQuestion ? (
                   <details className="answer-reference">
@@ -719,6 +886,37 @@ function StatusBadge({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   )
+}
+
+function ReviewList<T>({
+  title,
+  emptyText,
+  items,
+  children,
+}: {
+  title: string
+  emptyText: string
+  items: T[]
+  children: (item: T) => ReactNode
+}) {
+  return (
+    <section className="review-section">
+      <strong>{title}</strong>
+      {items.length > 0 ? (
+        <ol className="review-list">
+          {items.map((item, index) => (
+            <li key={index}>{children(item)}</li>
+          ))}
+        </ol>
+      ) : (
+        <p>{emptyText}</p>
+      )}
+    </section>
+  )
+}
+
+function formatScore(score: number) {
+  return score.toFixed(2)
 }
 
 function getErrorMessage(error: unknown) {

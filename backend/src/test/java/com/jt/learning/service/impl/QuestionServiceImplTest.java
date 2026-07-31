@@ -1,21 +1,30 @@
 package com.jt.learning.service.impl;
 
+import com.jt.learning.dto.AiAnswerScoringRequest;
 import com.jt.learning.dto.AiQuestionGenerationRequest;
 import com.jt.learning.entity.Question;
 import com.jt.learning.entity.QuestionAnswer;
 import com.jt.learning.entity.Tag;
+import com.jt.learning.entity.User;
+import com.jt.learning.entity.UserAnswer;
 import com.jt.learning.exception.BusinessException;
 import com.jt.learning.mapper.QuestionAnswerMapper;
 import com.jt.learning.mapper.QuestionMapper;
 import com.jt.learning.mapper.QuestionTagMapper;
 import com.jt.learning.mapper.TagMapper;
+import com.jt.learning.mapper.UserAnswerMapper;
+import com.jt.learning.mapper.UserMapper;
+import com.jt.learning.service.AiAnswerScoringClient;
 import com.jt.learning.service.AiQuestionClient;
+import com.jt.learning.vo.AnswerReviewVO;
 import com.jt.learning.vo.QuestionVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import tools.jackson.databind.ObjectMapper;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -35,7 +44,10 @@ class QuestionServiceImplTest {
     private QuestionMapper questionMapper;
     private QuestionAnswerMapper questionAnswerMapper;
     private QuestionTagMapper questionTagMapper;
+    private UserMapper userMapper;
+    private UserAnswerMapper userAnswerMapper;
     private AiQuestionClient aiQuestionClient;
+    private AiAnswerScoringClient aiAnswerScoringClient;
     private QuestionServiceImpl questionService;
 
     @BeforeEach
@@ -44,7 +56,10 @@ class QuestionServiceImplTest {
         questionMapper = mock(QuestionMapper.class);
         questionAnswerMapper = mock(QuestionAnswerMapper.class);
         questionTagMapper = mock(QuestionTagMapper.class);
+        userMapper = mock(UserMapper.class);
+        userAnswerMapper = mock(UserAnswerMapper.class);
         aiQuestionClient = mock(AiQuestionClient.class);
+        aiAnswerScoringClient = mock(AiAnswerScoringClient.class);
 
         ObjectMapper objectMapper = new ObjectMapper();
         questionService = new QuestionServiceImpl(
@@ -52,8 +67,12 @@ class QuestionServiceImplTest {
                 questionMapper,
                 questionAnswerMapper,
                 questionTagMapper,
+                userMapper,
+                userAnswerMapper,
                 new AiQuestionPromptBuilder(objectMapper),
                 aiQuestionClient,
+                new AiAnswerScoringPromptBuilder(objectMapper),
+                aiAnswerScoringClient,
                 objectMapper
         );
     }
@@ -236,6 +255,98 @@ class QuestionServiceImplTest {
         verify(tagMapper).selectEnabledTagsByType("FUNCTION");
     }
 
+    @Test
+    void submitAnswerShouldSaveReviewedResultWithCalculatedTotalScore() {
+        Question question = question(100L);
+        QuestionAnswer answer = answer(200L, "今日の午後、銀行へ振り込みに行きます。");
+        Tag tag = tag(1L, "SCENE", "FINANCE_BANK", "银行");
+        when(questionMapper.selectActiveQuestionById(100L)).thenReturn(question);
+        when(questionAnswerMapper.selectActiveAnswersByQuestionId(100L)).thenReturn(List.of(answer));
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user(10L));
+        when(tagMapper.selectEnabledTagsByQuestionId(100L)).thenReturn(List.of(tag));
+        when(userAnswerMapper.insertUserAnswer(any())).thenAnswer(invocation -> {
+            UserAnswer userAnswer = invocation.getArgument(0);
+            assertThat(userAnswer.getAnswerStatus()).isEqualTo("SUBMITTED");
+            assertThat(userAnswer.getAnswerText()).isEqualTo("今日の午後、銀行に送金をしに行きます。");
+            userAnswer.setId(300L);
+            return 1;
+        });
+        when(aiAnswerScoringClient.scoreAnswer(any(), any(), any(), anyList(), anyList())).thenReturn(validReviewJson());
+
+        AnswerReviewVO review = questionService.submitAnswer(
+                100L,
+                new AiAnswerScoringRequest("今日の午後、銀行に送金をしに行きます。")
+        );
+
+        assertThat(review.userAnswerId()).isEqualTo(300L);
+        assertThat(review.answerStatus()).isEqualTo("REVIEWED");
+        assertThat(review.totalScore()).isEqualByComparingTo(new BigDecimal("81.50"));
+        assertThat(review.overallComment()).isEqualTo("整体意思基本准确，语法和用词可以再自然一些。");
+        assertThat(review.errorAnalysis()).hasSize(1);
+        assertThat(review.recommendedExpressions()).extracting("expression")
+                .containsExactly("今日の午後、銀行へ振り込みに行きます。");
+
+        ArgumentCaptor<BigDecimal> totalScoreCaptor = ArgumentCaptor.forClass(BigDecimal.class);
+        verify(userAnswerMapper).updateReviewed(
+                eq(300L),
+                eq(82),
+                eq(78),
+                eq(80),
+                eq(86),
+                totalScoreCaptor.capture(),
+                eq("整体意思基本准确，语法和用词可以再自然一些。"),
+                any(LocalDateTime.class)
+        );
+        assertThat(totalScoreCaptor.getValue()).isEqualByComparingTo(new BigDecimal("81.50"));
+    }
+
+    @Test
+    void submitAnswerShouldMarkFailedWhenAiReviewIsInvalid() {
+        Question question = question(100L);
+        QuestionAnswer answer = answer(200L, "今日の午後、銀行へ振り込みに行きます。");
+        when(questionMapper.selectActiveQuestionById(100L)).thenReturn(question);
+        when(questionAnswerMapper.selectActiveAnswersByQuestionId(100L)).thenReturn(List.of(answer));
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user(10L));
+        when(tagMapper.selectEnabledTagsByQuestionId(100L)).thenReturn(List.of());
+        when(userAnswerMapper.insertUserAnswer(any())).thenAnswer(invocation -> {
+            UserAnswer userAnswer = invocation.getArgument(0);
+            userAnswer.setId(300L);
+            return 1;
+        });
+        when(aiAnswerScoringClient.scoreAnswer(any(), any(), any(), anyList(), anyList())).thenReturn("""
+                {
+                  "review": {
+                    "scores": {
+                      "grammarVocabularyScore": 101,
+                      "naturalFluencyScore": 78,
+                      "scenarioAdaptationScore": 80,
+                      "informationCompletenessScore": 86
+                    },
+                    "totalScore": 86.25,
+                    "overallComment": "总评",
+                    "comments": {
+                      "grammarComment": "语法评价",
+                      "vocabularyComment": "词汇评价",
+                      "naturalnessComment": "自然度评价",
+                      "scenarioComment": "场景评价"
+                    },
+                    "errorAnalysis": [],
+                    "revisionSuggestions": [],
+                    "recommendedExpressions": []
+                  }
+                }
+                """);
+
+        assertThatThrownBy(() -> questionService.submitAnswer(
+                100L,
+                new AiAnswerScoringRequest("今日の午後、銀行に送金をしに行きます。")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("grammarVocabularyScore");
+
+        verify(userAnswerMapper).updateFailed(eq(300L), any(LocalDateTime.class));
+    }
+
     private AiQuestionGenerationRequest request() {
         return new AiQuestionGenerationRequest(
                 1,
@@ -275,6 +386,90 @@ class QuestionServiceImplTest {
                   ]
                 }
                 """;
+    }
+
+    private String validReviewJson() {
+        return """
+                {
+                  "review": {
+                    "scores": {
+                      "grammarVocabularyScore": 82,
+                      "naturalFluencyScore": 78,
+                      "scenarioAdaptationScore": 80,
+                      "informationCompletenessScore": 86
+                    },
+                    "totalScore": 1,
+                    "overallComment": "整体意思基本准确，语法和用词可以再自然一些。",
+                    "comments": {
+                      "grammarComment": "句子结构基本正确，助词使用需要继续注意。",
+                      "vocabularyComment": "核心词汇能表达原意，但部分搭配不够自然。",
+                      "naturalnessComment": "表达可以理解，不过和日语母语者常用说法仍有距离。",
+                      "scenarioComment": "语气基本符合题目场景，敬体表达还可以更稳定。"
+                    },
+                    "errorAnalysis": [
+                      {
+                        "type": "NATURALNESS",
+                        "original": "今日の午後、銀行に送金をしに行きます。",
+                        "issue": "表达能传达大意，但整体不够像自然日语。",
+                        "suggestion": "参考标准答案调整助词和动词搭配。",
+                        "severity": "MEDIUM"
+                      }
+                    ],
+                    "revisionSuggestions": [
+                      "先确认中文原文中的时间、动作和对象是否完整保留。"
+                    ],
+                    "recommendedExpressions": [
+                      {
+                        "expression": "今日の午後、銀行へ振り込みに行きます。",
+                        "usage": "适合本题语境的基础推荐表达。",
+                        "formality": "POLITE",
+                        "note": "可以作为当前题目的优先记忆表达。"
+                      }
+                    ]
+                  }
+                }
+                """;
+    }
+
+    private Question question(Long id) {
+        Question question = new Question();
+        question.setId(id);
+        question.setQuestionType("TRANSLATION_ZH_TO_JA");
+        question.setSourceText("我今天下午要去银行办理转账。");
+        question.setContextText("日常生活中说明下午的计划。");
+        question.setLevel("N4");
+        question.setDifficulty(3);
+        question.setGrammarPoint("予定を表す表現");
+        question.setSpoken(true);
+        question.setBusiness(false);
+        question.setExam(false);
+        question.setSourceType("AI");
+        question.setEnabled(true);
+        question.setDeleted(false);
+        return question;
+    }
+
+    private QuestionAnswer answer(Long id, String text) {
+        QuestionAnswer answer = new QuestionAnswer();
+        answer.setId(id);
+        answer.setQuestionId(100L);
+        answer.setAnswerText(text);
+        answer.setAnswerType("STANDARD");
+        answer.setPrimaryAnswer(true);
+        answer.setSortOrder(0);
+        answer.setDeleted(false);
+        return answer;
+    }
+
+    private User user(Long id) {
+        User user = new User();
+        user.setId(id);
+        user.setUserCode("LOCAL_DEFAULT");
+        user.setNickname("本地用户");
+        user.setUserType("LOCAL");
+        user.setEnabled(true);
+        user.setDeleted(false);
+        return user;
     }
 
     private Tag tag(Long id, String tagType, String code, String name) {

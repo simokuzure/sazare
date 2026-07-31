@@ -82,4 +82,25 @@
           </foreach>
         order by sort_order asc, id asc
     </select>
+
+    <select id="selectEnabledTagsByQuestionId" resultType="com.jt.learning.entity.Tag">
+        select
+            t.id,
+            t.tag_type,
+            t.parent_id,
+            t.code,
+            t.name,
+            t.description,
+            t.sort_order,
+            t.enabled,
+            t.deleted,
+            t.created_at,
+            t.updated_at
+        from tags t
+        inner join question_tags qt on qt.tag_id = t.id
+        where qt.question_id = #{questionId}
+          and t.deleted = false
+          and t.enabled = true
+        order by t.sort_order asc, t.id asc
+    </select>
 </mapper>

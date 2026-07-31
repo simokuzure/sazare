@@ -25,4 +25,21 @@
             #{updatedAt}
         )
     </insert>
+
+    <select id="selectActiveAnswersByQuestionId" resultType="com.jt.learning.entity.QuestionAnswer">
+        select
+            id,
+            question_id,
+            answer_text,
+            answer_type,
+            primary_answer,
+            sort_order,
+            deleted,
+            created_at,
+            updated_at
+        from question_answers
+        where question_id = #{questionId}
+          and deleted = false
+        order by sort_order asc, id asc
+    </select>
 </mapper>

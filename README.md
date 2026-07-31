@@ -130,6 +130,10 @@ AI纠错
 
 -   [生成题目 AI Prompt 设计](docs/ai-question-generation-prompt.md)
 
+评分答案的 Prompt 模板、JSON 输出契约和校验规则见：
+
+-   [用户答案 AI 评分 Prompt 设计](docs/ai-answer-scoring-prompt.md)
+
 ------------------------------------------------------------------------
 
 ## 标签设计

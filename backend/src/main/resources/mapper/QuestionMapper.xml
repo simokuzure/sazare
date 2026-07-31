@@ -37,4 +37,27 @@
             #{updatedAt}
         )
     </insert>
+
+    <select id="selectActiveQuestionById" resultType="com.jt.learning.entity.Question">
+        select
+            id,
+            question_type,
+            source_text,
+            context_text,
+            level,
+            difficulty,
+            grammar_point,
+            spoken,
+            business,
+            exam,
+            source_type,
+            enabled,
+            deleted,
+            created_at,
+            updated_at
+        from questions
+        where id = #{id}
+          and enabled = true
+          and deleted = false
+    </select>
 </mapper>
