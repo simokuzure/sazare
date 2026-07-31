@@ -191,6 +191,7 @@ function App() {
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0)
   const [questionGenerating, setQuestionGenerating] = useState(false)
   const [answerText, setAnswerText] = useState('')
+  const [answerSubmitted, setAnswerSubmitted] = useState(false)
   const [answerScoring, setAnswerScoring] = useState(false)
   const [answerReview, setAnswerReview] = useState<AnswerReview | null>(null)
   const [practiceNotice, setPracticeNotice] = useState<PracticeNotice | null>(null)
@@ -415,6 +416,7 @@ function App() {
       setGeneratedQuestions(questions)
       setSelectedQuestionIndex(0)
       setAnswerText('')
+      setAnswerSubmitted(false)
       setAnswerReview(null)
       setPracticeNotice({
         kind: 'info',
@@ -424,6 +426,9 @@ function App() {
     } catch (fetchError: unknown) {
       setGeneratedQuestions([])
       setSelectedQuestionIndex(0)
+      setAnswerText('')
+      setAnswerSubmitted(false)
+      setAnswerReview(null)
       setPracticeNotice({
         kind: 'error',
         title: '题目生成失败',
@@ -437,6 +442,7 @@ function App() {
   function handleSelectQuestion(index: number) {
     setSelectedQuestionIndex(index)
     setAnswerText('')
+    setAnswerSubmitted(false)
     setAnswerReview(null)
     setPracticeNotice(null)
   }
@@ -451,7 +457,9 @@ function App() {
       return
     }
 
-    if (!answerText.trim()) {
+    const submittedAnswer = answerText.trim()
+
+    if (!submittedAnswer) {
       setPracticeNotice({
         kind: 'error',
         title: '请先输入答案',
@@ -460,6 +468,8 @@ function App() {
       return
     }
 
+    setAnswerText(submittedAnswer)
+    setAnswerSubmitted(true)
     setAnswerScoring(true)
     setAnswerReview(null)
     setPracticeNotice(null)
@@ -470,7 +480,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ answerText: answerText.trim() }),
+        body: JSON.stringify({ answerText: submittedAnswer }),
       })
       const result = await readApiResponse<AnswerReview>(response)
 
@@ -493,6 +503,13 @@ function App() {
 
   function handleClearAnswer() {
     setAnswerText('')
+    setAnswerSubmitted(false)
+    setAnswerReview(null)
+    setPracticeNotice(null)
+  }
+
+  function handleEditAnswer() {
+    setAnswerSubmitted(false)
     setAnswerReview(null)
     setPracticeNotice(null)
   }
@@ -757,8 +774,10 @@ function App() {
       <section className="workspace">
         <header className="app-header">
           <div className="title-group">
-            <p className="eyebrow">Japanese Translation Practice</p>
-            <h1>日语翻译练习</h1>
+            <div className="title-row">
+              <h1>日语翻译练习</h1>
+              <StatusBadge label="后端服务" value={backendStatus} />
+            </div>
           </div>
 
           <nav className="top-nav" aria-label="主导航">
@@ -778,21 +797,8 @@ function App() {
 
         {activePage === 'practice' ? (
           <section className="page-content" aria-label="practice page">
-            <header className="page-heading">
-              <div>
-                <p className="eyebrow">首页</p>
-                <h2>问题生成与回答</h2>
-              </div>
-              <StatusBadge label="后端服务" value={backendStatus} />
-            </header>
-
             <div className="practice-grid">
               <section className="surface generator-panel" aria-label="question generator">
-                <div className="section-title">
-                  <span className="label">生成条件</span>
-                  <strong>中译日题目</strong>
-                </div>
-
                 <form className="form-grid" onSubmit={(event) => event.preventDefault()}>
                   <label>
                     <span>题目数量</span>
@@ -938,150 +944,177 @@ function App() {
                 </dl>
               </section>
 
-              <section className="surface answer-panel" aria-label="answer input">
+              <section className="surface answer-panel" aria-label={answerSubmitted ? 'answer result' : 'answer input'}>
                 <div className="section-title">
-                  <span className="label">回答</span>
-                  <strong>输入日语译文</strong>
+                  <span className="label">{answerSubmitted ? '结果' : '回答'}</span>
+                  <strong>{answerSubmitted ? '本次提交结果' : '输入日语译文'}</strong>
                 </div>
 
-                <textarea
-                  value={answerText}
-                  disabled={!selectedQuestion}
-                  placeholder={selectedQuestion ? '输入你的日语回答。' : '题目生成后，在这里输入你的日语回答。'}
-                  onChange={(event) => setAnswerText(event.target.value)}
-                />
+                {!answerSubmitted ? (
+                  <>
+                    {practiceNotice && (practiceNotice.kind === 'error' || !selectedQuestion) ? (
+                      <div className={practiceNotice.kind === 'error' ? 'notice is-error' : 'notice'}>
+                        <strong>{practiceNotice.title}</strong>
+                        <p>{practiceNotice.message}</p>
+                      </div>
+                    ) : null}
 
-                <div className="action-row">
-                  <button
-                    type="button"
-                    className="primary-button"
-                    disabled={!selectedQuestion || answerScoring}
-                    onClick={handleSubmitAnswer}
-                  >
-                    {answerScoring ? '评分中' : '提交答案'}
-                  </button>
-                  <button type="button" disabled={!selectedQuestion && !answerText} onClick={handleClearAnswer}>
-                    清空
-                  </button>
-                </div>
-              </section>
+                    <textarea
+                      value={answerText}
+                      disabled={!selectedQuestion}
+                      placeholder={selectedQuestion ? '输入你的日语回答。' : '题目生成后，在这里输入你的日语回答。'}
+                      onChange={(event) => setAnswerText(event.target.value)}
+                    />
 
-              <section className="surface result-panel" aria-label="answer result">
-                <div className="section-title">
-                  <span className="label">结果</span>
-                  <strong>评分状态</strong>
-                </div>
-
-                {practiceNotice ? (
-                  <div className={practiceNotice.kind === 'error' ? 'notice is-error' : 'notice'}>
-                    <strong>{practiceNotice.title}</strong>
-                    <p>{practiceNotice.message}</p>
-                  </div>
-                ) : (
-                  <div className="notice">
-                    <strong>等待生成</strong>
-                    <p>生成题目后这里会显示接口状态和标准答案。</p>
-                  </div>
-                )}
-
-                {answerReview ? (
-                  <div className="review-result">
-                    <div className="score-summary">
-                      <span>总分</span>
-                      <strong>{formatScore(answerReview.totalScore)}</strong>
+                    <div className="action-row">
+                      <button
+                        type="button"
+                        className="primary-button"
+                        disabled={!selectedQuestion || answerScoring}
+                        onClick={handleSubmitAnswer}
+                      >
+                        {answerScoring ? '评分中' : '提交答案'}
+                      </button>
+                      <button type="button" disabled={!selectedQuestion && !answerText} onClick={handleClearAnswer}>
+                        清空
+                      </button>
                     </div>
+                  </>
+                ) : (
+                  <div className="answer-result">
+                    {practiceNotice && (!answerReview || practiceNotice.kind === 'error') ? (
+                      <div className={practiceNotice.kind === 'error' ? 'notice is-error' : 'notice'}>
+                        <strong>{practiceNotice.title}</strong>
+                        <p>{practiceNotice.message}</p>
+                      </div>
+                    ) : null}
 
-                    <dl className="score-grid">
-                      <div>
-                        <dt>语法与词汇</dt>
-                        <dd>{answerReview.scores.grammarVocabularyScore}</dd>
+                    {answerScoring ? (
+                      <div className="notice">
+                        <strong>评分中</strong>
+                        <p>答案已提交，正在等待后端返回评分结果。</p>
                       </div>
-                      <div>
-                        <dt>自然度与流畅度</dt>
-                        <dd>{answerReview.scores.naturalFluencyScore}</dd>
-                      </div>
-                      <div>
-                        <dt>敬语与场景</dt>
-                        <dd>{answerReview.scores.scenarioAdaptationScore}</dd>
-                      </div>
-                      <div>
-                        <dt>表达完整性</dt>
-                        <dd>{answerReview.scores.informationCompletenessScore}</dd>
-                      </div>
-                    </dl>
+                    ) : null}
 
-                    <section className="review-section">
-                      <strong>总评</strong>
-                      <p>{answerReview.overallComment}</p>
+                    <section className="submitted-answer">
+                      <span className="label">你的答案</span>
+                      <p>{answerText}</p>
                     </section>
 
-                    <dl className="comment-list">
-                      <div>
-                        <dt>语法评价</dt>
-                        <dd>{answerReview.comments.grammarComment}</dd>
-                      </div>
-                      <div>
-                        <dt>词汇评价</dt>
-                        <dd>{answerReview.comments.vocabularyComment}</dd>
-                      </div>
-                      <div>
-                        <dt>自然度评价</dt>
-                        <dd>{answerReview.comments.naturalnessComment}</dd>
-                      </div>
-                      <div>
-                        <dt>场景适合度评价</dt>
-                        <dd>{answerReview.comments.scenarioComment}</dd>
-                      </div>
-                    </dl>
-
-                    <ReviewList title="错误分析" emptyText="本次没有返回具体错误。" items={answerReview.errorAnalysis}>
-                      {(item) => (
-                        <div>
-                          <span>{item.type} / {item.severity}</span>
-                          <strong>{item.original}</strong>
-                          <p>{item.issue}</p>
-                          <p>{item.suggestion}</p>
+                    {answerReview ? (
+                      <>
+                        <div className="score-summary">
+                          <span>总分</span>
+                          <strong>{formatScore(answerReview.totalScore)}</strong>
                         </div>
-                      )}
-                    </ReviewList>
 
-                    <ReviewList title="修改建议" emptyText="本次没有返回修改建议。" items={answerReview.revisionSuggestions}>
-                      {(item) => <p>{item}</p>}
-                    </ReviewList>
+                        <details className="review-detail">
+                          <summary>查看详细评价</summary>
+                          <div className="review-result">
+                            <dl className="score-grid">
+                              <div>
+                                <dt>语法与词汇</dt>
+                                <dd>{answerReview.scores.grammarVocabularyScore}</dd>
+                              </div>
+                              <div>
+                                <dt>自然度与流畅度</dt>
+                                <dd>{answerReview.scores.naturalFluencyScore}</dd>
+                              </div>
+                              <div>
+                                <dt>敬语与场景</dt>
+                                <dd>{answerReview.scores.scenarioAdaptationScore}</dd>
+                              </div>
+                              <div>
+                                <dt>表达完整性</dt>
+                                <dd>{answerReview.scores.informationCompletenessScore}</dd>
+                              </div>
+                            </dl>
 
-                    <ReviewList
-                      title="推荐表达"
-                      emptyText="本次没有返回推荐表达。"
-                      items={answerReview.recommendedExpressions}
-                    >
-                      {(item) => (
-                        <div>
-                          <span>{item.formality}</span>
-                          <strong>{item.expression}</strong>
-                          <p>{item.usage}</p>
-                          <p>{item.note}</p>
-                        </div>
-                      )}
-                    </ReviewList>
+                            <section className="review-section">
+                              <strong>总评</strong>
+                              <p>{answerReview.overallComment}</p>
+                            </section>
+
+                            <dl className="comment-list">
+                              <div>
+                                <dt>语法评价</dt>
+                                <dd>{answerReview.comments.grammarComment}</dd>
+                              </div>
+                              <div>
+                                <dt>词汇评价</dt>
+                                <dd>{answerReview.comments.vocabularyComment}</dd>
+                              </div>
+                              <div>
+                                <dt>自然度评价</dt>
+                                <dd>{answerReview.comments.naturalnessComment}</dd>
+                              </div>
+                              <div>
+                                <dt>场景适合度评价</dt>
+                                <dd>{answerReview.comments.scenarioComment}</dd>
+                              </div>
+                            </dl>
+
+                            <ReviewList title="错误分析" emptyText="本次没有返回具体错误。" items={answerReview.errorAnalysis}>
+                              {(item) => (
+                                <div>
+                                  <span>{item.type} / {item.severity}</span>
+                                  <strong>{item.original}</strong>
+                                  <p>{item.issue}</p>
+                                  <p>{item.suggestion}</p>
+                                </div>
+                              )}
+                            </ReviewList>
+
+                            <ReviewList title="修改建议" emptyText="本次没有返回修改建议。" items={answerReview.revisionSuggestions}>
+                              {(item) => <p>{item}</p>}
+                            </ReviewList>
+
+                            <ReviewList
+                              title="推荐表达"
+                              emptyText="本次没有返回推荐表达。"
+                              items={answerReview.recommendedExpressions}
+                            >
+                              {(item) => (
+                                <div>
+                                  <span>{item.formality}</span>
+                                  <strong>{item.expression}</strong>
+                                  <p>{item.usage}</p>
+                                  <p>{item.note}</p>
+                                </div>
+                              )}
+                            </ReviewList>
+                          </div>
+                        </details>
+                      </>
+                    ) : null}
+
+                    {selectedQuestion ? (
+                      <section className="answer-reference">
+                        <strong>标准答案</strong>
+                        <ol>
+                          {selectedQuestion.answers.map((answer) => (
+                            <li key={answer.id}>
+                              <span>
+                                {answer.answerType === 'STANDARD' ? '标准' : '参考'}
+                                {answer.primaryAnswer ? ' / 主答案' : ''}
+                              </span>
+                              <strong>{answer.answerText}</strong>
+                            </li>
+                          ))}
+                        </ol>
+                      </section>
+                    ) : null}
+
+                    <div className="action-row">
+                      <button type="button" className="primary-button" disabled={answerScoring} onClick={handleEditAnswer}>
+                        返回修改
+                      </button>
+                      <button type="button" disabled={answerScoring} onClick={handleClearAnswer}>
+                        清空
+                      </button>
+                    </div>
                   </div>
-                ) : null}
-
-                {selectedQuestion ? (
-                  <details className="answer-reference">
-                    <summary>查看标准答案</summary>
-                    <ol>
-                      {selectedQuestion.answers.map((answer) => (
-                        <li key={answer.id}>
-                          <span>
-                            {answer.answerType === 'STANDARD' ? '标准' : '参考'}
-                            {answer.primaryAnswer ? ' / 主答案' : ''}
-                          </span>
-                          <strong>{answer.answerText}</strong>
-                        </li>
-                      ))}
-                    </ol>
-                  </details>
-                ) : null}
+                )}
               </section>
             </div>
           </section>
