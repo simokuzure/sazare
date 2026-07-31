@@ -4,6 +4,64 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.jt.learning.mapper.QuestionMapper">
 
+    <sql id="questionColumns">
+        id,
+        question_type,
+        source_text,
+        context_text,
+        level,
+        difficulty,
+        grammar_point,
+        spoken,
+        business,
+        exam,
+        source_type,
+        enabled,
+        deleted,
+        created_at,
+        updated_at
+    </sql>
+
+    <sql id="questionFilterClause">
+        where q.deleted = false
+          and q.question_type = #{request.questionType}
+        <if test="request.level != null">
+            and q.level = #{request.level}
+        </if>
+        <if test="request.difficulty != null">
+            and q.difficulty = #{request.difficulty}
+        </if>
+        <if test="request.spoken != null">
+            and q.spoken = #{request.spoken}
+        </if>
+        <if test="request.business != null">
+            and q.business = #{request.business}
+        </if>
+        <if test="request.exam != null">
+            and q.exam = #{request.exam}
+        </if>
+        <if test="request.sourceType != null">
+            and q.source_type = #{request.sourceType}
+        </if>
+        <if test="request.enabled != null">
+            and q.enabled = #{request.enabled}
+        </if>
+        <if test="request.tagCodes != null and request.tagCodes.size() > 0">
+            and exists (
+                select 1
+                from question_tags qt
+                inner join tags t on t.id = qt.tag_id
+                where qt.question_id = q.id
+                  and t.deleted = false
+                  and t.enabled = true
+                  and t.code in
+                  <foreach collection="request.tagCodes" item="code" open="(" separator="," close=")">
+                      #{code}
+                  </foreach>
+            )
+        </if>
+    </sql>
+
     <insert id="insertQuestion" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
         insert into questions (
             question_type,
@@ -40,24 +98,81 @@
 
     <select id="selectActiveQuestionById" resultType="com.jt.learning.entity.Question">
         select
-            id,
-            question_type,
-            source_text,
-            context_text,
-            level,
-            difficulty,
-            grammar_point,
-            spoken,
-            business,
-            exam,
-            source_type,
-            enabled,
-            deleted,
-            created_at,
-            updated_at
+            <include refid="questionColumns" />
         from questions
         where id = #{id}
           and enabled = true
           and deleted = false
     </select>
+
+    <select id="selectQuestionById" resultType="com.jt.learning.entity.Question">
+        select
+            <include refid="questionColumns" />
+        from questions
+        where id = #{id}
+          and deleted = false
+    </select>
+
+    <select id="countQuestions" resultType="long">
+        select count(1)
+        from questions q
+        <include refid="questionFilterClause" />
+    </select>
+
+    <select id="selectQuestionIds" resultType="long">
+        select q.id
+        from questions q
+        <include refid="questionFilterClause" />
+        order by q.created_at desc, q.id desc
+        limit #{limit}
+        offset #{offset}
+    </select>
+
+    <select id="selectQuestionsByIds" resultType="com.jt.learning.entity.Question">
+        select
+            <include refid="questionColumns" />
+        from questions
+        where deleted = false
+          and id in
+          <foreach collection="ids" item="id" open="(" separator="," close=")">
+              #{id}
+          </foreach>
+        order by created_at desc, id desc
+    </select>
+
+    <update id="updateQuestion">
+        update questions
+        set
+            question_type = #{questionType},
+            source_text = #{sourceText},
+            context_text = #{contextText},
+            level = #{level},
+            difficulty = #{difficulty},
+            grammar_point = #{grammarPoint},
+            spoken = #{spoken},
+            business = #{business},
+            exam = #{exam},
+            updated_at = #{updatedAt}
+        where id = #{id}
+          and deleted = false
+    </update>
+
+    <update id="updateEnabled">
+        update questions
+        set
+            enabled = #{enabled},
+            updated_at = #{updatedAt}
+        where id = #{id}
+          and deleted = false
+    </update>
+
+    <update id="logicalDelete">
+        update questions
+        set
+            enabled = false,
+            deleted = true,
+            updated_at = #{updatedAt}
+        where id = #{id}
+          and deleted = false
+    </update>
 </mapper>

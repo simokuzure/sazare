@@ -42,4 +42,33 @@
           and deleted = false
         order by sort_order asc, id asc
     </select>
+
+    <select id="selectActiveAnswersByQuestionIds" resultType="com.jt.learning.entity.QuestionAnswer">
+        select
+            id,
+            question_id,
+            answer_text,
+            answer_type,
+            primary_answer,
+            sort_order,
+            deleted,
+            created_at,
+            updated_at
+        from question_answers
+        where deleted = false
+          and question_id in
+          <foreach collection="questionIds" item="questionId" open="(" separator="," close=")">
+              #{questionId}
+          </foreach>
+        order by question_id asc, sort_order asc, id asc
+    </select>
+
+    <update id="logicalDeleteByQuestionId">
+        update question_answers
+        set
+            deleted = true,
+            updated_at = current_timestamp
+        where question_id = #{questionId}
+          and deleted = false
+    </update>
 </mapper>

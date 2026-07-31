@@ -13,4 +13,9 @@
             #{tagId}
         )
     </insert>
+
+    <delete id="deleteQuestionTagsByQuestionId">
+        delete from question_tags
+        where question_id = #{questionId}
+    </delete>
 </mapper>

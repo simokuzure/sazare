@@ -548,6 +548,82 @@ GET /api/questions/{id}
 - `answers` 按 `sort_order ASC, id ASC` 排序。
 - `tags` 不返回已删除标签。
 
+### 更新题目
+
+```http
+PUT /api/questions/{id}
+```
+
+用于管理端整体更新题目主体、标签和答案。
+
+请求：
+
+```json
+{
+  "questionType": "TRANSLATION_ZH_TO_JA",
+  "sourceText": "我今天下午要去银行办理转账。",
+  "contextText": "日常生活中说明下午的计划。",
+  "level": "N4",
+  "difficulty": 3,
+  "grammarPoint": "予定を表す表現",
+  "spoken": true,
+  "business": false,
+  "exam": false,
+  "tagCodes": ["FINANCE_BANK", "FINANCE_TRANSFER", "FUNCTION_EXPRESS_PLAN"],
+  "answers": [
+    {
+      "answerText": "今日の午後、銀行へ振り込みに行きます。",
+      "answerType": "STANDARD",
+      "primaryAnswer": true,
+      "sortOrder": 0
+    },
+    {
+      "answerText": "今日の午後、銀行に振り込みをしに行きます。",
+      "answerType": "REFERENCE",
+      "primaryAnswer": false,
+      "sortOrder": 1
+    }
+  ]
+}
+```
+
+响应：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "id": 1,
+    "questionType": "TRANSLATION_ZH_TO_JA",
+    "sourceText": "我今天下午要去银行办理转账。",
+    "contextText": "日常生活中说明下午的计划。",
+    "level": "N4",
+    "difficulty": 3,
+    "grammarPoint": "予定を表す表現",
+    "spoken": true,
+    "business": false,
+    "exam": false,
+    "sourceType": "AI",
+    "enabled": true,
+    "tags": [],
+    "answers": [],
+    "createdAt": "2026-07-27T19:30:00",
+    "updatedAt": "2026-07-27T19:40:00"
+  }
+}
+```
+
+实现要求：
+
+- `id` 不存在或题目已删除时返回 `40002`。
+- 采用整体更新：题目主体、标签关联、答案列表在同一事务内更新。
+- 不允许客户端修改 `sourceType`、`enabled`、`deleted`。
+- 更新时保留原 `sourceType` 和 `enabled` 状态。
+- 标签关联先删除后重建。
+- 旧答案采用逻辑删除，新答案重新插入。
+- 校验规则与人工创建题目一致。
+
 ### 更新题目启用状态
 
 ```http

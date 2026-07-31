@@ -10,4 +10,6 @@ public interface QuestionTagMapper {
             @Param("questionId") Long questionId,
             @Param("tagId") Long tagId
     );
+
+    int deleteQuestionTagsByQuestionId(@Param("questionId") Long questionId);
 }

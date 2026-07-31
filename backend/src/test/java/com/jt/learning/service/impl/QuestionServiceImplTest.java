@@ -2,6 +2,12 @@ package com.jt.learning.service.impl;
 
 import com.jt.learning.dto.AiAnswerScoringRequest;
 import com.jt.learning.dto.AiQuestionGenerationRequest;
+import com.jt.learning.dto.QuestionAnswerRequest;
+import com.jt.learning.dto.QuestionCreateRequest;
+import com.jt.learning.dto.QuestionEnabledRequest;
+import com.jt.learning.dto.QuestionQueryRequest;
+import com.jt.learning.dto.QuestionTagRow;
+import com.jt.learning.dto.QuestionUpdateRequest;
 import com.jt.learning.entity.Question;
 import com.jt.learning.entity.QuestionAnswer;
 import com.jt.learning.entity.Tag;
@@ -17,6 +23,7 @@ import com.jt.learning.mapper.UserMapper;
 import com.jt.learning.service.AiAnswerScoringClient;
 import com.jt.learning.service.AiQuestionClient;
 import com.jt.learning.vo.AnswerReviewVO;
+import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.QuestionVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -256,6 +263,132 @@ class QuestionServiceImplTest {
     }
 
     @Test
+    void createQuestionShouldSaveManualQuestionWithTagsAndAnswers() {
+        Tag sceneTag = tag(1L, "SCENE", "FINANCE_BANK", "银行");
+        Tag functionTag = tag(2L, "FUNCTION", "FUNCTION_EXPRESS_PLAN", "表达计划");
+        when(tagMapper.selectEnabledTagsByAnyCodes(anyList())).thenReturn(List.of(sceneTag, functionTag));
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(100L);
+            return 1;
+        });
+        when(questionAnswerMapper.insertQuestionAnswer(any())).thenAnswer(invocation -> {
+            QuestionAnswer answer = invocation.getArgument(0);
+            answer.setId(200L + answer.getSortOrder());
+            return 1;
+        });
+
+        QuestionVO question = questionService.createQuestion(createRequest());
+
+        assertThat(question.id()).isEqualTo(100L);
+        assertThat(question.sourceType()).isEqualTo("MANUAL");
+        assertThat(question.tags()).extracting("code")
+                .containsExactly("FINANCE_BANK", "FUNCTION_EXPRESS_PLAN");
+        assertThat(question.answers()).extracting("answerType")
+                .containsExactly("STANDARD", "REFERENCE");
+
+        ArgumentCaptor<Question> questionCaptor = ArgumentCaptor.forClass(Question.class);
+        verify(questionMapper).insertQuestion(questionCaptor.capture());
+        assertThat(questionCaptor.getValue().getSourceText()).isEqualTo("我今天下午要去银行办理转账。");
+        assertThat(questionCaptor.getValue().getEnabled()).isTrue();
+        verify(questionTagMapper).insertQuestionTag(100L, 1L);
+        verify(questionTagMapper).insertQuestionTag(100L, 2L);
+    }
+
+    @Test
+    void createQuestionShouldRejectTagsWithoutSceneTag() {
+        Tag functionTag = tag(2L, "FUNCTION", "FUNCTION_EXPRESS_PLAN", "表达计划");
+        when(tagMapper.selectEnabledTagsByAnyCodes(anyList())).thenReturn(List.of(functionTag));
+
+        assertThatThrownBy(() -> questionService.createQuestion(createRequestWithoutSceneTag()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("场景标签");
+
+        verify(questionMapper, never()).insertQuestion(any());
+    }
+
+    @Test
+    void listQuestionsShouldReturnPagedQuestionsWithTagsAndAnswers() {
+        Question question = question(100L);
+        QuestionAnswer answer = answer(200L, "今日の午後、銀行へ振り込みに行きます。");
+        QuestionTagRow tag = tagRow(100L, 1L, "SCENE", "FINANCE_BANK", "银行");
+        when(questionMapper.countQuestions(any())).thenReturn(1L);
+        when(questionMapper.selectQuestionIds(any(), eq(20), eq(0L))).thenReturn(List.of(100L));
+        when(questionMapper.selectQuestionsByIds(List.of(100L))).thenReturn(List.of(question));
+        when(tagMapper.selectEnabledTagsByQuestionIds(List.of(100L))).thenReturn(List.of(tag));
+        when(questionAnswerMapper.selectActiveAnswersByQuestionIds(List.of(100L))).thenReturn(List.of(answer));
+
+        PageVO<QuestionVO> page = questionService.listQuestions(new QuestionQueryRequest(
+                null,
+                "N4",
+                null,
+                List.of("FINANCE_BANK,FUNCTION_EXPRESS_PLAN"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+
+        assertThat(page.total()).isEqualTo(1);
+        assertThat(page.page()).isEqualTo(1);
+        assertThat(page.size()).isEqualTo(20);
+        assertThat(page.items()).hasSize(1);
+        assertThat(page.items().getFirst().tags()).extracting("code").containsExactly("FINANCE_BANK");
+        assertThat(page.items().getFirst().answers()).extracting("answerText")
+                .containsExactly("今日の午後、銀行へ振り込みに行きます。");
+
+        ArgumentCaptor<QuestionQueryRequest> requestCaptor = ArgumentCaptor.forClass(QuestionQueryRequest.class);
+        verify(questionMapper).countQuestions(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().tagCodes())
+                .containsExactly("FINANCE_BANK", "FUNCTION_EXPRESS_PLAN");
+    }
+
+    @Test
+    void updateQuestionShouldReplaceAnswersAndTags() {
+        Question existingQuestion = question(100L);
+        existingQuestion.setSourceType("AI");
+        Tag sceneTag = tag(1L, "SCENE", "FINANCE_BANK", "银行");
+        when(questionMapper.selectQuestionById(100L)).thenReturn(existingQuestion);
+        when(tagMapper.selectEnabledTagsByAnyCodes(anyList())).thenReturn(List.of(sceneTag));
+        when(questionMapper.updateQuestion(any())).thenReturn(1);
+        when(questionAnswerMapper.insertQuestionAnswer(any())).thenAnswer(invocation -> {
+            QuestionAnswer answer = invocation.getArgument(0);
+            answer.setId(200L);
+            return 1;
+        });
+
+        QuestionVO question = questionService.updateQuestion(100L, updateRequest());
+
+        assertThat(question.id()).isEqualTo(100L);
+        assertThat(question.sourceType()).isEqualTo("AI");
+        assertThat(question.tags()).extracting("code").containsExactly("FINANCE_BANK");
+        verify(questionAnswerMapper).logicalDeleteByQuestionId(100L);
+        verify(questionTagMapper).deleteQuestionTagsByQuestionId(100L);
+        verify(questionTagMapper).insertQuestionTag(100L, 1L);
+    }
+
+    @Test
+    void updateQuestionEnabledShouldRejectDeletedQuestion() {
+        when(questionMapper.updateEnabled(eq(100L), eq(false), any(LocalDateTime.class))).thenReturn(0);
+
+        assertThatThrownBy(() -> questionService.updateQuestionEnabled(100L, new QuestionEnabledRequest(false)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("题目不存在或已删除");
+    }
+
+    @Test
+    void deleteQuestionShouldLogicalDeleteQuestion() {
+        when(questionMapper.logicalDelete(eq(100L), any(LocalDateTime.class))).thenReturn(1);
+
+        questionService.deleteQuestion(100L);
+
+        verify(questionMapper).logicalDelete(eq(100L), any(LocalDateTime.class));
+    }
+
+    @Test
     void submitAnswerShouldSaveReviewedResultWithCalculatedTotalScore() {
         Question question = question(100L);
         QuestionAnswer answer = answer(200L, "今日の午後、銀行へ振り込みに行きます。");
@@ -356,6 +489,77 @@ class QuestionServiceImplTest {
                 List.of("FUNCTION_PROPOSE_PLAN"),
                 List.of(),
                 "偏口语"
+        );
+    }
+
+    private QuestionCreateRequest createRequest() {
+        return new QuestionCreateRequest(
+                "TRANSLATION_ZH_TO_JA",
+                "我今天下午要去银行办理转账。",
+                "日常生活中说明下午的计划。",
+                "N4",
+                3,
+                "予定を表す表現",
+                true,
+                false,
+                false,
+                List.of("FINANCE_BANK", "FUNCTION_EXPRESS_PLAN"),
+                List.of(
+                        new QuestionAnswerRequest(
+                                "今日の午後、銀行へ振り込みに行きます。",
+                                "STANDARD",
+                                true,
+                                0
+                        ),
+                        new QuestionAnswerRequest(
+                                "今日の午後、銀行に振り込みをしに行きます。",
+                                "REFERENCE",
+                                false,
+                                1
+                        )
+                )
+        );
+    }
+
+    private QuestionUpdateRequest updateRequest() {
+        return new QuestionUpdateRequest(
+                "TRANSLATION_ZH_TO_JA",
+                "我今天下午要去银行办理转账。",
+                "日常生活中说明下午的计划。",
+                "N4",
+                3,
+                "予定を表す表現",
+                true,
+                false,
+                false,
+                List.of("FINANCE_BANK"),
+                List.of(new QuestionAnswerRequest(
+                        "今日の午後、銀行へ振り込みに行きます。",
+                        "STANDARD",
+                        true,
+                        0
+                ))
+        );
+    }
+
+    private QuestionCreateRequest createRequestWithoutSceneTag() {
+        return new QuestionCreateRequest(
+                "TRANSLATION_ZH_TO_JA",
+                "我今天下午要去银行办理转账。",
+                "日常生活中说明下午的计划。",
+                "N4",
+                3,
+                "予定を表す表現",
+                true,
+                false,
+                false,
+                List.of("FUNCTION_EXPRESS_PLAN"),
+                List.of(new QuestionAnswerRequest(
+                        "今日の午後、銀行へ振り込みに行きます。",
+                        "STANDARD",
+                        true,
+                        0
+                ))
         );
     }
 
@@ -482,6 +686,18 @@ class QuestionServiceImplTest {
         tag.setSortOrder(id.intValue());
         tag.setEnabled(true);
         tag.setDeleted(false);
+        return tag;
+    }
+
+    private QuestionTagRow tagRow(Long questionId, Long id, String tagType, String code, String name) {
+        QuestionTagRow tag = new QuestionTagRow();
+        tag.setQuestionId(questionId);
+        tag.setId(id);
+        tag.setTagType(tagType);
+        tag.setCode(code);
+        tag.setName(name);
+        tag.setDescription(name + "标签");
+        tag.setSortOrder(id.intValue());
         return tag;
     }
 }

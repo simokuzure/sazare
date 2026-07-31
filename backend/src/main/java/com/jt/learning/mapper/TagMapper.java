@@ -1,5 +1,6 @@
 package com.jt.learning.mapper;
 
+import com.jt.learning.dto.QuestionTagRow;
 import com.jt.learning.entity.Tag;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -30,5 +31,9 @@ public interface TagMapper {
             @Param("codes") List<String> codes
     );
 
+    List<Tag> selectEnabledTagsByAnyCodes(@Param("codes") List<String> codes);
+
     List<Tag> selectEnabledTagsByQuestionId(@Param("questionId") Long questionId);
+
+    List<QuestionTagRow> selectEnabledTagsByQuestionIds(@Param("questionIds") List<Long> questionIds);
 }

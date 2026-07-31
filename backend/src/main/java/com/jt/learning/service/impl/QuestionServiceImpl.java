@@ -12,6 +12,12 @@ import com.jt.learning.dto.AiQuestionAnswerDTO;
 import com.jt.learning.dto.AiQuestionGenerationRequest;
 import com.jt.learning.dto.AiQuestionGenerationResponseDTO;
 import com.jt.learning.dto.AiQuestionTagOptionDTO;
+import com.jt.learning.dto.QuestionAnswerRequest;
+import com.jt.learning.dto.QuestionCreateRequest;
+import com.jt.learning.dto.QuestionEnabledRequest;
+import com.jt.learning.dto.QuestionQueryRequest;
+import com.jt.learning.dto.QuestionTagRow;
+import com.jt.learning.dto.QuestionUpdateRequest;
 import com.jt.learning.entity.Question;
 import com.jt.learning.entity.QuestionAnswer;
 import com.jt.learning.entity.Tag;
@@ -34,6 +40,7 @@ import com.jt.learning.vo.AnswerRecommendedExpressionVO;
 import com.jt.learning.vo.AnswerReviewCommentsVO;
 import com.jt.learning.vo.AnswerReviewVO;
 import com.jt.learning.vo.AnswerScoresVO;
+import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.QuestionAnswerVO;
 import com.jt.learning.vo.QuestionVO;
 import com.jt.learning.vo.TagVO;
@@ -60,6 +67,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     private static final String QUESTION_TYPE = "TRANSLATION_ZH_TO_JA";
     private static final String SOURCE_TYPE_AI = "AI";
+    private static final String SOURCE_TYPE_MANUAL = "MANUAL";
     private static final String TAG_TYPE_SCENE = "SCENE";
     private static final String TAG_TYPE_FUNCTION = "FUNCTION";
     private static final String ANSWER_TYPE_STANDARD = "STANDARD";
@@ -152,6 +160,151 @@ public class QuestionServiceImpl implements QuestionService {
     }
 
     @Override
+    @Transactional
+    public QuestionVO createQuestion(QuestionCreateRequest request) {
+        validateQuestionContent(
+                request.questionType(),
+                request.sourceText(),
+                request.contextText(),
+                request.grammarPoint()
+        );
+        List<Tag> tags = loadQuestionTags(request.tagCodes());
+        validateSelectedTags(tags);
+        List<AiQuestionAnswerDTO> answers = toAnswerDTOs(request.answers());
+        validateAnswers(answers, "题目");
+
+        LocalDateTime now = LocalDateTime.now();
+        Question question = new Question();
+        question.setQuestionType(QUESTION_TYPE);
+        question.setSourceText(request.sourceText().trim());
+        question.setContextText(request.contextText().trim());
+        question.setLevel(request.level().trim());
+        question.setDifficulty(request.difficulty());
+        question.setGrammarPoint(request.grammarPoint().trim());
+        question.setSpoken(request.spoken());
+        question.setBusiness(request.business());
+        question.setExam(request.exam());
+        question.setSourceType(SOURCE_TYPE_MANUAL);
+        question.setEnabled(true);
+        question.setDeleted(false);
+        question.setCreatedAt(now);
+        question.setUpdatedAt(now);
+        questionMapper.insertQuestion(question);
+
+        List<QuestionAnswer> savedAnswers = saveAnswers(question.getId(), answers, now);
+        saveQuestionTags(question.getId(), tags);
+        return toQuestionVO(question, tags, savedAnswers);
+    }
+
+    @Override
+    public PageVO<QuestionVO> listQuestions(QuestionQueryRequest request) {
+        QuestionQueryRequest normalizedRequest = normalizeQueryRequest(request);
+        long total = questionMapper.countQuestions(normalizedRequest);
+        if (total == 0) {
+            return new PageVO<>(List.of(), normalizedRequest.page(), normalizedRequest.size(), 0);
+        }
+
+        long offset = (long) (normalizedRequest.page() - 1) * normalizedRequest.size();
+        List<Long> questionIds = questionMapper.selectQuestionIds(normalizedRequest, normalizedRequest.size(), offset);
+        if (questionIds.isEmpty()) {
+            return new PageVO<>(List.of(), normalizedRequest.page(), normalizedRequest.size(), total);
+        }
+
+        List<Question> questions = questionMapper.selectQuestionsByIds(questionIds);
+        Map<Long, List<QuestionTagRow>> tagsByQuestionId = tagMapper.selectEnabledTagsByQuestionIds(questionIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        QuestionTagRow::getQuestionId,
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+        Map<Long, List<QuestionAnswer>> answersByQuestionId = questionAnswerMapper.selectActiveAnswersByQuestionIds(questionIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        QuestionAnswer::getQuestionId,
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+
+        List<QuestionVO> items = questions.stream()
+                .map(question -> toQuestionVOFromRows(
+                        question,
+                        tagsByQuestionId.getOrDefault(question.getId(), List.of()),
+                        answersByQuestionId.getOrDefault(question.getId(), List.of())
+                ))
+                .toList();
+        return new PageVO<>(items, normalizedRequest.page(), normalizedRequest.size(), total);
+    }
+
+    @Override
+    public QuestionVO getQuestion(Long id) {
+        Question question = loadExistingQuestion(id);
+        List<Tag> tags = tagMapper.selectEnabledTagsByQuestionId(id);
+        List<QuestionAnswer> answers = questionAnswerMapper.selectActiveAnswersByQuestionId(id);
+        return toQuestionVO(question, tags, answers);
+    }
+
+    @Override
+    @Transactional
+    public QuestionVO updateQuestion(Long id, QuestionUpdateRequest request) {
+        Question existingQuestion = loadExistingQuestion(id);
+        validateQuestionContent(
+                request.questionType(),
+                request.sourceText(),
+                request.contextText(),
+                request.grammarPoint()
+        );
+        List<Tag> tags = loadQuestionTags(request.tagCodes());
+        validateSelectedTags(tags);
+        List<AiQuestionAnswerDTO> answers = toAnswerDTOs(request.answers());
+        validateAnswers(answers, "题目");
+
+        Question question = new Question();
+        question.setId(id);
+        question.setQuestionType(QUESTION_TYPE);
+        question.setSourceText(request.sourceText().trim());
+        question.setContextText(request.contextText().trim());
+        question.setLevel(request.level().trim());
+        question.setDifficulty(request.difficulty());
+        question.setGrammarPoint(request.grammarPoint().trim());
+        question.setSpoken(request.spoken());
+        question.setBusiness(request.business());
+        question.setExam(request.exam());
+        question.setSourceType(existingQuestion.getSourceType());
+        question.setEnabled(existingQuestion.getEnabled());
+        question.setDeleted(false);
+        question.setCreatedAt(existingQuestion.getCreatedAt());
+        question.setUpdatedAt(LocalDateTime.now());
+        if (questionMapper.updateQuestion(question) == 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或已删除");
+        }
+
+        questionAnswerMapper.logicalDeleteByQuestionId(id);
+        questionTagMapper.deleteQuestionTagsByQuestionId(id);
+        List<QuestionAnswer> savedAnswers = saveAnswers(id, answers, question.getUpdatedAt());
+        saveQuestionTags(id, tags);
+        return toQuestionVO(question, tags, savedAnswers);
+    }
+
+    @Override
+    @Transactional
+    public void updateQuestionEnabled(Long id, QuestionEnabledRequest request) {
+        int updatedRows = questionMapper.updateEnabled(id, request.enabled(), LocalDateTime.now());
+        if (updatedRows == 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或已删除");
+        }
+    }
+
+    @Override
+    @Transactional
+    public void deleteQuestion(Long id) {
+        int updatedRows = questionMapper.logicalDelete(id, LocalDateTime.now());
+        if (updatedRows == 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或已删除");
+        }
+    }
+
+    @Override
     @Transactional(noRollbackFor = BusinessException.class)
     public AnswerReviewVO submitAnswer(Long questionId, AiAnswerScoringRequest request) {
         Question question = questionMapper.selectActiveQuestionById(questionId);
@@ -225,6 +378,109 @@ public class QuestionServiceImpl implements QuestionService {
         userAnswerMapper.updateFailed(userAnswer.getId(), updatedAt);
         userAnswer.setAnswerStatus(ANSWER_STATUS_FAILED);
         userAnswer.setUpdatedAt(updatedAt);
+    }
+
+    private QuestionQueryRequest normalizeQueryRequest(QuestionQueryRequest request) {
+        return new QuestionQueryRequest(
+                request.questionType(),
+                request.level(),
+                request.difficulty(),
+                normalizeQueryTagCodes(request.tagCodes()),
+                request.spoken(),
+                request.business(),
+                request.exam(),
+                request.sourceType(),
+                request.enabled(),
+                request.page(),
+                request.size()
+        );
+    }
+
+    private List<String> normalizeQueryTagCodes(List<String> tagCodes) {
+        if (tagCodes == null || tagCodes.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> normalizedCodes = tagCodes.stream()
+                .flatMap(tagCode -> List.of(tagCode.split(",")).stream())
+                .map(String::trim)
+                .collect(Collectors.toCollection(LinkedHashSet::new))
+                .stream()
+                .toList();
+        if (normalizedCodes.stream().anyMatch(String::isBlank)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "tagCodes 不能包含空值");
+        }
+        return normalizedCodes;
+    }
+
+    private Question loadExistingQuestion(Long id) {
+        Question question = questionMapper.selectQuestionById(id);
+        if (question == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或已删除");
+        }
+        return question;
+    }
+
+    private void validateQuestionContent(
+            String questionType,
+            String sourceText,
+            String contextText,
+            String grammarPoint
+    ) {
+        if (!QUESTION_TYPE.equals(questionType)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "questionType 不合法");
+        }
+        validateRequiredText(sourceText, "sourceText 不能为空");
+        if (!CHINESE_PATTERN.matcher(sourceText).matches()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "sourceText 必须包含中文");
+        }
+        validateRequiredText(contextText, "contextText 不能为空");
+        validateRequiredText(grammarPoint, "grammarPoint 不能为空");
+    }
+
+    private List<Tag> loadQuestionTags(List<String> tagCodes) {
+        List<String> normalizedCodes = normalizeCodes(tagCodes);
+        if (normalizedCodes.isEmpty()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "tagCodes 不能为空");
+        }
+
+        List<Tag> tags = tagMapper.selectEnabledTagsByAnyCodes(normalizedCodes);
+        Map<String, Tag> tagMap = tags.stream()
+                .collect(Collectors.toMap(Tag::getCode, tag -> tag, (left, right) -> left, LinkedHashMap::new));
+        List<String> missingCodes = normalizedCodes.stream()
+                .filter(code -> !tagMap.containsKey(code))
+                .toList();
+        if (!missingCodes.isEmpty()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "标签 code 不存在或未启用: " + missingCodes);
+        }
+        return normalizedCodes.stream()
+                .map(tagMap::get)
+                .toList();
+    }
+
+    private void validateSelectedTags(List<Tag> tags) {
+        boolean hasSceneTag = tags.stream()
+                .anyMatch(tag -> TAG_TYPE_SCENE.equals(tag.getTagType()));
+        if (!hasSceneTag) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "tagCodes 至少需要 1 个场景标签");
+        }
+    }
+
+    private List<AiQuestionAnswerDTO> toAnswerDTOs(List<QuestionAnswerRequest> requests) {
+        return requests.stream()
+                .map(request -> new AiQuestionAnswerDTO(
+                        request.answerText(),
+                        request.answerType(),
+                        request.primaryAnswer(),
+                        request.sortOrder()
+                ))
+                .toList();
+    }
+
+    private void saveQuestionTags(Long questionId, List<Tag> tags) {
+        for (Tag tag : tags) {
+            questionTagMapper.insertQuestionTag(questionId, tag.getId());
+        }
     }
 
     private AiAnswerScoringResponseDTO parseAiAnswerScoringResponse(String aiContent) {
@@ -635,7 +891,44 @@ public class QuestionServiceImpl implements QuestionService {
         );
     }
 
+    private QuestionVO toQuestionVOFromRows(
+            Question question,
+            List<QuestionTagRow> tags,
+            List<QuestionAnswer> answers
+    ) {
+        return new QuestionVO(
+                question.getId(),
+                question.getQuestionType(),
+                question.getSourceText(),
+                question.getContextText(),
+                question.getLevel(),
+                question.getDifficulty(),
+                question.getGrammarPoint(),
+                question.getSpoken(),
+                question.getBusiness(),
+                question.getExam(),
+                question.getSourceType(),
+                question.getEnabled(),
+                tags.stream().map(this::toTagVO).toList(),
+                answers.stream().map(this::toAnswerVO).toList(),
+                question.getCreatedAt(),
+                question.getUpdatedAt()
+        );
+    }
+
     private TagVO toTagVO(Tag tag) {
+        return new TagVO(
+                tag.getId(),
+                tag.getTagType(),
+                tag.getParentId(),
+                tag.getCode(),
+                tag.getName(),
+                tag.getDescription(),
+                tag.getSortOrder()
+        );
+    }
+
+    private TagVO toTagVO(QuestionTagRow tag) {
         return new TagVO(
                 tag.getId(),
                 tag.getTagType(),
