@@ -19,7 +19,6 @@
 }
 
 .title-group,
-.page-heading,
 .section-title {
   min-width: 0;
 }
@@ -30,8 +29,7 @@
   gap: 14px;
 }
 
-.title-group h1,
-.page-heading h2 {
+.title-group h1 {
   margin: 0;
   line-height: 1.15;
 }
@@ -40,11 +38,6 @@
   font-size: 32px;
 }
 
-.page-heading h2 {
-  font-size: 26px;
-}
-
-.eyebrow,
 .label {
   margin: 0;
   color: #64748b;
@@ -101,15 +94,7 @@ button:disabled {
   gap: 18px;
 }
 
-.page-heading {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.surface,
-.status-panel {
+.surface {
   border: 1px solid #d8dee8;
   border-radius: 8px;
   background: #ffffff;
@@ -137,19 +122,6 @@ button:disabled {
 
 .status-badge strong {
   font-size: 14px;
-}
-
-.status-panel {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-  padding: 20px;
-}
-
-.status-panel strong {
-  display: block;
-  margin-top: 4px;
-  font-size: 18px;
 }
 
 .practice-grid {
@@ -236,7 +208,15 @@ button:disabled {
 }
 
 .question-filter-bar {
-  grid-template-columns: repeat(4, minmax(120px, 1fr)) minmax(130px, 160px);
+  grid-template-columns:
+    minmax(112px, 1fr)
+    minmax(112px, 1fr)
+    minmax(112px, 1fr)
+    minmax(112px, 1fr)
+    minmax(160px, 1.2fr)
+    minmax(110px, 0.8fr);
+  overflow-x: auto;
+  padding-bottom: 4px;
 }
 
 .form-grid label,
@@ -247,6 +227,14 @@ button:disabled {
   gap: 6px;
   color: #475569;
   font-size: 14px;
+}
+
+.question-filter-bar label {
+  min-width: 0;
+}
+
+.question-filter-bar label span {
+  white-space: nowrap;
 }
 
 select,
@@ -615,13 +603,6 @@ textarea:focus {
   gap: 18px;
 }
 
-.question-management-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
-  gap: 18px;
-  align-items: start;
-}
-
 .question-edit-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -756,8 +737,7 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 860px) {
-  .app-header,
-  .page-heading {
+  .app-header {
     align-items: stretch;
     flex-direction: column;
   }
@@ -770,9 +750,7 @@ tbody tr:last-child td {
     width: auto;
   }
 
-  .status-panel,
-  .practice-grid,
-  .question-management-grid {
+  .practice-grid {
     grid-template-columns: 1fr;
   }
 
@@ -781,10 +759,6 @@ tbody tr:last-child td {
       "generator"
       "question"
       "answer";
-  }
-
-  .question-filter-bar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .generator-panel .form-grid {
@@ -811,10 +785,6 @@ tbody tr:last-child td {
     gap: 10px;
   }
 
-  .page-heading h2 {
-    font-size: 24px;
-  }
-
   .top-nav {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -830,7 +800,6 @@ tbody tr:last-child td {
 
   .form-grid,
   .filter-bar,
-  .question-filter-bar,
   .question-edit-form {
     grid-template-columns: 1fr;
   }
