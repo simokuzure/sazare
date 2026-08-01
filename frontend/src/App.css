@@ -169,6 +169,7 @@ button:disabled {
 
 .form-grid,
 .filter-bar,
+.answer-record-filter-bar,
 .question-filter-bar {
   display: grid;
   gap: 16px;
@@ -219,8 +220,21 @@ button:disabled {
   padding-bottom: 4px;
 }
 
+.answer-record-filter-bar {
+  grid-template-columns:
+    minmax(112px, 1fr)
+    minmax(112px, 1fr)
+    minmax(112px, 1fr)
+    minmax(112px, 1fr)
+    minmax(112px, 1fr)
+    minmax(110px, 0.8fr);
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
 .form-grid label,
 .filter-bar label,
+.answer-record-filter-bar label,
 .question-filter-bar label,
 .question-edit-form label {
   display: grid;
@@ -229,10 +243,12 @@ button:disabled {
   font-size: 14px;
 }
 
+.answer-record-filter-bar label,
 .question-filter-bar label {
   min-width: 0;
 }
 
+.answer-record-filter-bar label span,
 .question-filter-bar label span {
   white-space: nowrap;
 }
@@ -597,6 +613,7 @@ textarea:focus {
 }
 
 .question-management-panel,
+.answer-records-panel,
 .question-detail-panel,
 .question-form-panel {
   display: grid;
@@ -616,6 +633,16 @@ textarea:focus {
 
 .question-table {
   min-width: 1060px;
+}
+
+.answer-record-table {
+  min-width: 1280px;
+}
+
+.answer-record-source,
+.answer-record-answer,
+.answer-record-comment {
+  max-width: 260px;
 }
 
 .table-actions {
@@ -800,6 +827,8 @@ tbody tr:last-child td {
 
   .form-grid,
   .filter-bar,
+  .answer-record-filter-bar,
+  .question-filter-bar,
   .question-edit-form {
     grid-template-columns: 1fr;
   }

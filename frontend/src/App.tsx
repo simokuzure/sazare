@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchHealth } from './api/client'
+import AnswerRecordsPage from './pages/AnswerRecordsPage'
 import StatusBadge from './components/StatusBadge'
 import PracticePage from './pages/PracticePage'
 import QuestionManagementPage from './pages/QuestionManagementPage'
@@ -8,10 +9,11 @@ import TagManagementPage from './pages/TagManagementPage'
 import type { HealthResponse } from './types/api'
 import './App.css'
 
-type PageKey = 'practice' | 'tags' | 'questions' | 'reviews'
+type PageKey = 'practice' | 'answerRecords' | 'tags' | 'questions' | 'reviews'
 
 const NAV_ITEMS: { key: PageKey; label: string }[] = [
   { key: 'practice', label: '练习' },
+  { key: 'answerRecords', label: '答题记录' },
   { key: 'tags', label: '标签管理' },
   { key: 'questions', label: '问题管理' },
   { key: 'reviews', label: '错题复习' },
@@ -60,6 +62,7 @@ function App() {
         </header>
 
         {activePage === 'practice' ? <PracticePage /> : null}
+        {activePage === 'answerRecords' ? <AnswerRecordsPage /> : null}
         {activePage === 'tags' ? <TagManagementPage /> : null}
         {activePage === 'questions' ? <QuestionManagementPage /> : null}
         {activePage === 'reviews' ? <ReviewPage /> : null}

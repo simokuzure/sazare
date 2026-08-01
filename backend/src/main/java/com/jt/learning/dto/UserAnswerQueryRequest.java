@@ -1,0 +1,71 @@
+package com.jt.learning.dto;
+
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
+
+import java.math.BigDecimal;
+
+public record UserAnswerQueryRequest(
+        @Pattern(regexp = "SUBMITTED|REVIEWED|FAILED", message = "answerStatus 只能是 SUBMITTED、REVIEWED、FAILED")
+        String answerStatus,
+
+        @Positive(message = "questionId 必须大于 0")
+        Long questionId,
+
+        @Pattern(regexp = "N5|N4|N3|N2|N1", message = "level 只能是 N5、N4、N3、N2、N1")
+        String level,
+
+        @DecimalMin(value = "0", message = "minTotalScore 必须大于等于 0")
+        @DecimalMax(value = "100", message = "minTotalScore 必须小于等于 100")
+        BigDecimal minTotalScore,
+
+        @DecimalMin(value = "0", message = "maxTotalScore 必须大于等于 0")
+        @DecimalMax(value = "100", message = "maxTotalScore 必须小于等于 100")
+        BigDecimal maxTotalScore,
+
+        @Min(value = 1, message = "page 必须大于等于 1")
+        Integer page,
+
+        @Min(value = 1, message = "size 必须在 1 到 100 之间")
+        @Max(value = 100, message = "size 必须在 1 到 100 之间")
+        Integer size
+) {
+    public UserAnswerQueryRequest {
+        answerStatus = answerStatus == null || answerStatus.isBlank() ? null : answerStatus.trim();
+        level = level == null || level.isBlank() ? null : level.trim();
+        page = page == null ? 1 : page;
+        size = size == null ? 20 : size;
+    }
+
+    public String getAnswerStatus() {
+        return answerStatus;
+    }
+
+    public Long getQuestionId() {
+        return questionId;
+    }
+
+    public String getLevel() {
+        return level;
+    }
+
+    public BigDecimal getMinTotalScore() {
+        return minTotalScore;
+    }
+
+    public BigDecimal getMaxTotalScore() {
+        return maxTotalScore;
+    }
+
+    public Integer getPage() {
+        return page;
+    }
+
+    public Integer getSize() {
+        return size;
+    }
+}

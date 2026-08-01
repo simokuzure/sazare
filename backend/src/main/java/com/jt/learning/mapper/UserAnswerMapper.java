@@ -1,11 +1,14 @@
 package com.jt.learning.mapper;
 
+import com.jt.learning.dto.UserAnswerListItemRow;
+import com.jt.learning.dto.UserAnswerQueryRequest;
 import com.jt.learning.entity.UserAnswer;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Mapper
 public interface UserAnswerMapper {
@@ -26,5 +29,17 @@ public interface UserAnswerMapper {
     int updateFailed(
             @Param("id") Long id,
             @Param("updatedAt") LocalDateTime updatedAt
+    );
+
+    long countUserAnswers(
+            @Param("userId") Long userId,
+            @Param("request") UserAnswerQueryRequest request
+    );
+
+    List<UserAnswerListItemRow> selectUserAnswerList(
+            @Param("userId") Long userId,
+            @Param("request") UserAnswerQueryRequest request,
+            @Param("limit") int limit,
+            @Param("offset") long offset
     );
 }

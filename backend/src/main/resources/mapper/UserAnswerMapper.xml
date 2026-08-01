@@ -4,6 +4,46 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.jt.learning.mapper.UserAnswerMapper">
 
+    <sql id="userAnswerListColumns">
+        ua.id,
+        ua.question_id,
+        q.question_type,
+        q.source_text,
+        q.level,
+        q.difficulty,
+        ua.answer_text,
+        ua.answer_status,
+        ua.grammar_vocabulary_score,
+        ua.natural_fluency_score,
+        ua.scenario_adaptation_score,
+        ua.information_completeness_score,
+        ua.total_score,
+        ua.ai_overall_comment as overall_comment,
+        ua.created_at,
+        ua.updated_at
+    </sql>
+
+    <sql id="userAnswerFilterClause">
+        where ua.user_id = #{userId}
+          and ua.deleted = false
+          and q.deleted = false
+        <if test="request.answerStatus != null">
+            and ua.answer_status = #{request.answerStatus}
+        </if>
+        <if test="request.questionId != null">
+            and ua.question_id = #{request.questionId}
+        </if>
+        <if test="request.level != null">
+            and q.level = #{request.level}
+        </if>
+        <if test="request.minTotalScore != null">
+            and ua.total_score &gt;= #{request.minTotalScore}
+        </if>
+        <if test="request.maxTotalScore != null">
+            and ua.total_score &lt;= #{request.maxTotalScore}
+        </if>
+    </sql>
+
     <insert id="insertUserAnswer" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
         insert into user_answers (
             user_id,
@@ -45,4 +85,22 @@
         where id = #{id}
           and deleted = false
     </update>
+
+    <select id="countUserAnswers" resultType="long">
+        select count(1)
+        from user_answers ua
+        inner join questions q on q.id = ua.question_id
+        <include refid="userAnswerFilterClause" />
+    </select>
+
+    <select id="selectUserAnswerList" resultType="com.jt.learning.dto.UserAnswerListItemRow">
+        select
+            <include refid="userAnswerListColumns" />
+        from user_answers ua
+        inner join questions q on q.id = ua.question_id
+        <include refid="userAnswerFilterClause" />
+        order by ua.created_at desc, ua.id desc
+        limit #{limit}
+        offset #{offset}
+    </select>
 </mapper>
