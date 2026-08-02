@@ -1,4 +1,6 @@
 import type { AnswerScores } from './review'
+import type { QuestionAnswer } from './question'
+import type { Tag } from './tag'
 
 export type AnswerStatus = '' | 'SUBMITTED' | 'REVIEWED' | 'FAILED'
 
@@ -25,7 +27,14 @@ export type UserAnswerRecord = {
     [Key in keyof AnswerScores]: AnswerScores[Key] | null
   }
   totalScore: number | null
-  overallComment: string | null
   createdAt: string
   updatedAt: string
+}
+
+export type UserAnswerDetail = UserAnswerRecord & {
+  contextText: string
+  grammarPoint: string
+  tags: Tag[]
+  answers: QuestionAnswer[]
+  overallComment: string | null
 }

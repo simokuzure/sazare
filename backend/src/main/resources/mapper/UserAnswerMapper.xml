@@ -18,6 +18,26 @@
         ua.scenario_adaptation_score,
         ua.information_completeness_score,
         ua.total_score,
+        ua.created_at,
+        ua.updated_at
+    </sql>
+
+    <sql id="userAnswerDetailColumns">
+        ua.id,
+        ua.question_id,
+        q.question_type,
+        q.source_text,
+        q.context_text,
+        q.level,
+        q.difficulty,
+        q.grammar_point,
+        ua.answer_text,
+        ua.answer_status,
+        ua.grammar_vocabulary_score,
+        ua.natural_fluency_score,
+        ua.scenario_adaptation_score,
+        ua.information_completeness_score,
+        ua.total_score,
         ua.ai_overall_comment as overall_comment,
         ua.created_at,
         ua.updated_at
@@ -102,5 +122,16 @@
         order by ua.created_at desc, ua.id desc
         limit #{limit}
         offset #{offset}
+    </select>
+
+    <select id="selectUserAnswerDetail" resultType="com.jt.learning.dto.UserAnswerDetailRow">
+        select
+            <include refid="userAnswerDetailColumns" />
+        from user_answers ua
+        inner join questions q on q.id = ua.question_id
+        where ua.id = #{id}
+          and ua.user_id = #{userId}
+          and ua.deleted = false
+          and q.deleted = false
     </select>
 </mapper>

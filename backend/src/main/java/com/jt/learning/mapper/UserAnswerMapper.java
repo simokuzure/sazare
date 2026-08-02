@@ -1,5 +1,6 @@
 package com.jt.learning.mapper;
 
+import com.jt.learning.dto.UserAnswerDetailRow;
 import com.jt.learning.dto.UserAnswerListItemRow;
 import com.jt.learning.dto.UserAnswerQueryRequest;
 import com.jt.learning.entity.UserAnswer;
@@ -41,5 +42,10 @@ public interface UserAnswerMapper {
             @Param("request") UserAnswerQueryRequest request,
             @Param("limit") int limit,
             @Param("offset") long offset
+    );
+
+    UserAnswerDetailRow selectUserAnswerDetail(
+            @Param("userId") Long userId,
+            @Param("id") Long id
     );
 }

@@ -1,6 +1,6 @@
 import { readApiResponse } from './client'
 import type { PageData } from '../types/api'
-import type { UserAnswerFilterState, UserAnswerRecord } from '../types/userAnswer'
+import type { UserAnswerDetail, UserAnswerFilterState, UserAnswerRecord } from '../types/userAnswer'
 
 export async function fetchUserAnswers(
   filters: UserAnswerFilterState,
@@ -30,4 +30,13 @@ export async function fetchUserAnswers(
   const response = await fetch(`/api/user-answers?${searchParams.toString()}`, { signal })
   const result = await readApiResponse<PageData<UserAnswerRecord>>(response)
   return result.data ?? { items: [], page: filters.page, size: filters.size, total: 0 }
+}
+
+export async function fetchUserAnswerDetail(id: number, signal?: AbortSignal): Promise<UserAnswerDetail> {
+  const response = await fetch(`/api/user-answers/${id}`, { signal })
+  const result = await readApiResponse<UserAnswerDetail>(response)
+  if (!result.data) {
+    throw new Error('后端没有返回答题记录详情')
+  }
+  return result.data
 }

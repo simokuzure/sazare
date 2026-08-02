@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 @Getter
 @Setter
-public class UserAnswerListItemRow {
+public class UserAnswerDetailRow {
 
     private Long id;
 
@@ -18,9 +18,13 @@ public class UserAnswerListItemRow {
 
     private String sourceText;
 
+    private String contextText;
+
     private String level;
 
     private Integer difficulty;
+
+    private String grammarPoint;
 
     private String answerText;
 
@@ -35,6 +39,8 @@ public class UserAnswerListItemRow {
     private Integer informationCompletenessScore;
 
     private BigDecimal totalScore;
+
+    private String overallComment;
 
     private LocalDateTime createdAt;
 

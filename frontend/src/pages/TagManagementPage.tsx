@@ -85,15 +85,6 @@ export default function TagManagementPage() {
                   <span>仅启用</span>
                 </label>
 
-                <label>
-                  <span>每页数量</span>
-                  <select value={size} onChange={(event) => setSize(Number(event.target.value))}>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                </label>
               </form>
 
               {tagError ? <div className="error-message">{tagError}</div> : null}
@@ -130,9 +121,20 @@ export default function TagManagementPage() {
               </div>
 
               <div className="pagination-bar">
-                <span>
-                  {tagLoading ? '加载中' : `第 ${page} / ${totalPages} 页 · ${firstItemNo}-${lastItemNo} / ${total}`}
-                </span>
+                <div className="pagination-summary">
+                  <span>
+                    {tagLoading ? '加载中' : `第 ${page} / ${totalPages} 页 · ${firstItemNo}-${lastItemNo} / ${total}`}
+                  </span>
+                  <label className="page-size-field">
+                    <span>每页数量</span>
+                    <select value={size} onChange={(event) => setSize(Number(event.target.value))}>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </label>
+                </div>
                 <div className="pagination-actions">
                   <button
                     type="button"

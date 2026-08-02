@@ -381,15 +381,6 @@ export default function QuestionManagementPage() {
                   />
                 </label>
 
-                <label>
-                  <span>每页数量</span>
-                  <select value={questionFilters.size} onChange={(event) => updateQuestionFilters({ size: Number(event.target.value) })}>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                </label>
               </form>
 
               {questionError ? <div className="error-message">{questionError}</div> : null}
@@ -410,11 +401,11 @@ export default function QuestionManagementPage() {
                     {questions.map((question) => (
                       <tr key={question.id}>
                         <td>{question.id}</td>
-                        <td>{question.sourceText}</td>
+                        <td className="question-text-cell" title={question.sourceText}>{question.sourceText}</td>
                         <td>{question.level} / {question.difficulty}</td>
                         <td>{question.sourceType === 'AI' ? 'AI' : '人工'}</td>
                         <td>{question.enabled ? '启用' : '停用'}</td>
-                        <td>
+                        <td className="question-tags-cell">
                           <span className="tag-chip-row">
                             {question.tags.slice(0, 3).map((tag) => (
                               <span key={tag.id}>{tag.name}</span>
@@ -422,7 +413,7 @@ export default function QuestionManagementPage() {
                             {question.tags.length > 3 ? <span>+{question.tags.length - 3}</span> : null}
                           </span>
                         </td>
-                        <td>
+                        <td className="question-actions-cell">
                           <div className="table-actions">
                             <button
                               type="button"
@@ -460,11 +451,22 @@ export default function QuestionManagementPage() {
               </div>
 
               <div className="pagination-bar">
-                <span>
-                  {questionLoading
-                    ? '加载中'
-                    : `第 ${questionFilters.page} / ${questionTotalPages} 页 · ${questionFirstItemNo}-${questionLastItemNo} / ${questionTotal}`}
-                </span>
+                <div className="pagination-summary">
+                  <span>
+                    {questionLoading
+                      ? '加载中'
+                      : `第 ${questionFilters.page} / ${questionTotalPages} 页 · ${questionFirstItemNo}-${questionLastItemNo} / ${questionTotal}`}
+                  </span>
+                  <label className="page-size-field">
+                    <span>每页数量</span>
+                    <select value={questionFilters.size} onChange={(event) => updateQuestionFilters({ size: Number(event.target.value) })}>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </label>
+                </div>
                 <div className="pagination-actions">
                   <button
                     type="button"
