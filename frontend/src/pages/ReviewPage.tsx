@@ -3,11 +3,12 @@ import { getErrorMessage } from '../api/client'
 import { fetchUserErrorTypes } from '../api/userErrorApi'
 import type { UserErrorType, UserErrorTypeStatus } from '../types/userError'
 
-const PAGE_SIZE = 20
+const INITIAL_PAGE_SIZE = 20
 
 export default function ReviewPage() {
   const [status, setStatus] = useState<UserErrorTypeStatus>('ACTIVE')
   const [page, setPage] = useState(1)
+  const [size, setSize] = useState(INITIAL_PAGE_SIZE)
   const [data, setData] = useState<{ items: UserErrorType[]; total: number }>({ items: [], total: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -19,7 +20,7 @@ export default function ReviewPage() {
       setLoading(true)
       setError(null)
       try {
-        const result = await fetchUserErrorTypes({ status, page, size: PAGE_SIZE }, controller.signal)
+        const result = await fetchUserErrorTypes({ status, page, size }, controller.signal)
         setData({ items: result.items, total: result.total })
       } catch (fetchError: unknown) {
         if (fetchError instanceof DOMException && fetchError.name === 'AbortError') return
@@ -31,12 +32,19 @@ export default function ReviewPage() {
     }
     loadUserErrorTypes()
     return () => controller.abort()
-  }, [page, reloadToken, status])
+  }, [page, reloadToken, size, status])
 
-  const totalPages = Math.max(1, Math.ceil(data.total / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(data.total / size))
+  const firstItemNo = data.total === 0 ? 0 : (page - 1) * size + 1
+  const lastItemNo = Math.min(page * size, data.total)
 
   function handleStatusChange(nextStatus: UserErrorTypeStatus) {
     setStatus(nextStatus)
+    setPage(1)
+  }
+
+  function handleSizeChange(nextSize: number) {
+    setSize(nextSize)
     setPage(1)
   }
 
@@ -74,12 +82,25 @@ export default function ReviewPage() {
           </div>
         ) : null}
 
-        <div className="pagination-row">
-          <span>共 {data.total} 条</span>
+        <div className="pagination-bar">
+          <div className="pagination-summary">
+            <span>
+              {loading ? '加载中' : `第 ${page} / ${totalPages} 页 · ${firstItemNo}-${lastItemNo} / ${data.total}`}
+            </span>
+            <label className="page-size-field">
+              <span>每页数量</span>
+              <select value={size} onChange={(event) => handleSizeChange(Number(event.target.value))}>
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </label>
+          </div>
           <div className="pagination-actions">
             <button type="button" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)}>上一页</button>
-            <span>{page} / {totalPages}</span>
             <button type="button" disabled={page >= totalPages || loading} onClick={() => setPage((value) => value + 1)}>下一页</button>
+            <button type="button" disabled={loading} onClick={() => setReloadToken((value) => value + 1)}>刷新</button>
           </div>
         </div>
       </section>

@@ -26,8 +26,8 @@ export default function PracticePage() {
   const [questionCount, setQuestionCount] = useState('1')
   const [level, setLevel] = useState('')
   const [difficulty, setDifficulty] = useState('3')
+  const [sceneParentId, setSceneParentId] = useState('')
   const [sceneTagCode, setSceneTagCode] = useState('')
-  const [functionTagCode, setFunctionTagCode] = useState('')
   const [extraRequirements, setExtraRequirements] = useState('')
   const [generatedQuestions, setGeneratedQuestions] = useState<Question[]>([])
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0)
@@ -51,8 +51,7 @@ export default function PracticePage() {
       setPracticeTagsLoading(true)
       setPracticeTagsError(null)
       try {
-        const result = await fetchTags({ enabledOnly: true, page: 1, size: 100 }, controller.signal)
-        setPracticeTags(result.items)
+        setPracticeTags(await fetchAllSceneTags(controller.signal))
       } catch (fetchError: unknown) {
         if (fetchError instanceof DOMException && fetchError.name === 'AbortError') return
         setPracticeTags([])
@@ -66,8 +65,12 @@ export default function PracticePage() {
     return () => controller.abort()
   }, [])
 
-  const sceneTags = useMemo(() => practiceTags.filter((tag) => tag.tagType === 'SCENE'), [practiceTags])
-  const functionTags = useMemo(() => practiceTags.filter((tag) => tag.tagType === 'FUNCTION'), [practiceTags])
+  const sceneParentTags = useMemo(() => practiceTags.filter((tag) => tag.parentId === null), [practiceTags])
+  const sceneChildTags = useMemo(() => practiceTags.filter((tag) => tag.parentId !== null), [practiceTags])
+  const selectedSceneChildTags = useMemo(
+    () => sceneParentId ? sceneChildTags.filter((tag) => tag.parentId === Number(sceneParentId)) : [],
+    [sceneChildTags, sceneParentId],
+  )
   const selectedQuestion = generatedQuestions[selectedQuestionIndex] ?? null
   const selectedErrorCount = errorCandidates.filter((candidate) => candidate.selected && !candidate.saved).length
 
@@ -232,7 +235,6 @@ export default function PracticePage() {
     if (level) payload.level = level
     if (difficulty) payload.difficulty = Number(difficulty)
     if (sceneTagCode) payload.sceneTagCodes = [sceneTagCode]
-    if (functionTagCode) payload.functionTagCodes = [functionTagCode]
     if (generatedQuestions.length > 0) payload.excludedSourceTexts = generatedQuestions.map((question) => question.sourceText)
     if (extraRequirements.trim()) payload.extraRequirements = extraRequirements.trim()
     return payload
@@ -246,8 +248,8 @@ export default function PracticePage() {
             <label><span>题目数量</span><select value={questionCount} onChange={(event) => setQuestionCount(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
             <label><span>JLPT 等级</span><select value={level} onChange={(event) => setLevel(event.target.value)}><option value="">默认 N3</option>{['N5', 'N4', 'N3', 'N2', 'N1'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
             <label><span>难度</span><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-            <label><span>场景标签</span><select value={sceneTagCode} onChange={(event) => setSceneTagCode(event.target.value)}><option value="">{practiceTagsLoading ? '加载中' : '不限场景'}</option>{sceneTags.map((tag) => <option key={tag.id} value={tag.code}>{tag.name}</option>)}</select></label>
-            <label><span>功能标签</span><select value={functionTagCode} onChange={(event) => setFunctionTagCode(event.target.value)}><option value="">{practiceTagsLoading ? '加载中' : '不限功能'}</option>{functionTags.map((tag) => <option key={tag.id} value={tag.code}>{tag.name}</option>)}</select></label>
+            <label><span>场景一级</span><select value={sceneParentId} disabled={practiceTagsLoading} onChange={(event) => { setSceneParentId(event.target.value); setSceneTagCode('') }}><option value="">{practiceTagsLoading ? '加载中' : '不限场景'}</option>{sceneParentTags.map((tag) => <option key={tag.id} value={tag.id}>{tag.name}</option>)}</select></label>
+            <label><span>场景二级</span><select value={sceneTagCode} disabled={practiceTagsLoading || !sceneParentId} onChange={(event) => setSceneTagCode(event.target.value)}><option value="">{practiceTagsLoading ? '加载中' : sceneParentId ? '不限场景' : '请先选择一级场景'}</option>{selectedSceneChildTags.map((tag) => <option key={tag.id} value={tag.code}>{tag.name}</option>)}</select></label>
             <label className="wide-field"><span>补充要求</span><input value={extraRequirements} maxLength={500} placeholder="例如：使用敬语、指定场景或语法点" onChange={(event) => setExtraRequirements(event.target.value)} /></label>
             <button type="button" className="primary-button" disabled={questionGenerating} onClick={handleGenerateQuestion}>{questionGenerating ? '生成中' : '生成题目'}</button>
           </form>
@@ -324,6 +326,23 @@ export default function PracticePage() {
       </div>
     </section>
   )
+}
+
+async function fetchAllSceneTags(signal: AbortSignal): Promise<Tag[]> {
+  const pageSize = 100
+  const firstPage = await fetchTags({ tagType: 'SCENE', enabledOnly: true, page: 1, size: pageSize }, signal)
+  const totalPages = Math.ceil(firstPage.total / pageSize)
+  if (totalPages <= 1) return firstPage.items
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) => fetchTags({
+      tagType: 'SCENE',
+      enabledOnly: true,
+      page: index + 2,
+      size: pageSize,
+    }, signal)),
+  )
+  return [firstPage, ...remainingPages].flatMap((page) => page.items)
 }
 
 function ErrorConfirmationModal({ review, candidates, userErrorTypes, userErrorTypesLoading, notice, confirming, selectedCount, onUpdate, onConfirm, onClose }: {

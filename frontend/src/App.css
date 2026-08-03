@@ -170,6 +170,7 @@ button:disabled {
 .form-grid,
 .filter-bar,
 .answer-record-filter-bar,
+.error-type-filter-bar,
 .question-filter-bar {
   display: grid;
   gap: 16px;
@@ -182,13 +183,13 @@ button:disabled {
 
 .generator-panel .form-grid {
   grid-template-columns:
-    minmax(110px, 0.65fr)
-    minmax(130px, 0.8fr)
-    minmax(130px, 0.8fr)
-    minmax(150px, 1fr)
-    minmax(150px, 1fr)
-    minmax(220px, 1.2fr)
-    minmax(120px, 0.7fr);
+    minmax(74px, 0.6fr)
+    minmax(96px, 0.72fr)
+    minmax(74px, 0.6fr)
+    minmax(94px, 0.82fr)
+    minmax(94px, 0.82fr)
+    minmax(170px, 1.5fr)
+    minmax(96px, 0.72fr);
   gap: 12px;
 }
 
@@ -230,9 +231,19 @@ button:disabled {
   padding-bottom: 4px;
 }
 
+.error-type-filter-bar {
+  grid-template-columns:
+    minmax(130px, 1fr)
+    minmax(130px, 1fr)
+    minmax(130px, 1fr);
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
 .form-grid label,
 .filter-bar label,
 .answer-record-filter-bar label,
+.error-type-filter-bar label,
 .question-filter-bar label,
 .question-edit-form label {
   display: grid;
@@ -242,11 +253,13 @@ button:disabled {
 }
 
 .answer-record-filter-bar label,
+.error-type-filter-bar label,
 .question-filter-bar label {
   min-width: 0;
 }
 
 .answer-record-filter-bar label span,
+.error-type-filter-bar label span,
 .question-filter-bar label span {
   white-space: nowrap;
 }
@@ -784,7 +797,7 @@ textarea:focus {
 
 .score-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin: 0;
 }
@@ -895,6 +908,7 @@ textarea:focus {
 
 .question-management-panel,
 .answer-records-panel,
+.error-type-management-panel,
 .question-detail-panel,
 .question-form-panel {
   display: grid;
@@ -951,6 +965,10 @@ textarea:focus {
 
 .answer-record-table {
   min-width: 1280px;
+}
+
+.error-type-table {
+  min-width: 980px;
 }
 
 .answer-record-source,
@@ -1221,6 +1239,7 @@ tbody tr:last-child td {
   .form-grid,
   .filter-bar,
   .answer-record-filter-bar,
+  .error-type-filter-bar,
   .question-filter-bar,
   .question-edit-form {
     grid-template-columns: 1fr;
@@ -1252,6 +1271,7 @@ tbody tr:last-child td {
   }
 
   .score-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
 }

@@ -42,4 +42,48 @@
           and enabled = true
           and deleted = false
     </select>
+
+    <select id="countErrorTypes" resultType="long">
+        select count(1)
+        from error_types
+        where deleted = false
+        <if test="request.typeLevel != null">
+          and type_level = #{request.typeLevel}
+        </if>
+        <if test="request.parentId != null">
+          and parent_id = #{request.parentId}
+        </if>
+        <if test="request.enabled != null">
+          and enabled = #{request.enabled}
+        </if>
+    </select>
+
+    <select id="selectErrorTypeList" resultType="com.jt.learning.entity.ErrorType">
+        select
+            id,
+            parent_id,
+            type_level,
+            code,
+            name,
+            description,
+            sort_order,
+            enabled,
+            deleted,
+            created_at,
+            updated_at
+        from error_types
+        where deleted = false
+        <if test="request.typeLevel != null">
+          and type_level = #{request.typeLevel}
+        </if>
+        <if test="request.parentId != null">
+          and parent_id = #{request.parentId}
+        </if>
+        <if test="request.enabled != null">
+          and enabled = #{request.enabled}
+        </if>
+        order by type_level asc, parent_id nulls first, sort_order asc, id asc
+        limit #{limit}
+        offset #{offset}
+    </select>
 </mapper>
