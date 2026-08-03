@@ -1,18 +1,27 @@
 package com.jt.learning.service.impl;
 
 import com.jt.learning.dto.UserAnswerDetailRow;
+import com.jt.learning.dto.UserAnswerErrorConfirmItemRequest;
+import com.jt.learning.dto.UserAnswerErrorConfirmRequest;
 import com.jt.learning.dto.UserAnswerListItemRow;
 import com.jt.learning.dto.UserAnswerQueryRequest;
 import com.jt.learning.entity.QuestionAnswer;
+import com.jt.learning.entity.ErrorType;
 import com.jt.learning.entity.Tag;
 import com.jt.learning.entity.User;
+import com.jt.learning.entity.UserAnswer;
+import com.jt.learning.entity.UserErrorType;
 import com.jt.learning.exception.BusinessException;
 import com.jt.learning.mapper.QuestionAnswerMapper;
+import com.jt.learning.mapper.ErrorTypeMapper;
 import com.jt.learning.mapper.TagMapper;
+import com.jt.learning.mapper.UserAnswerErrorMapper;
 import com.jt.learning.mapper.UserAnswerMapper;
+import com.jt.learning.mapper.UserErrorTypeMapper;
 import com.jt.learning.mapper.UserMapper;
 import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.UserAnswerDetailVO;
+import com.jt.learning.vo.UserAnswerErrorVO;
 import com.jt.learning.vo.UserAnswerListItemVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +46,9 @@ class UserAnswerServiceImplTest {
     private UserAnswerMapper userAnswerMapper;
     private TagMapper tagMapper;
     private QuestionAnswerMapper questionAnswerMapper;
+    private ErrorTypeMapper errorTypeMapper;
+    private UserErrorTypeMapper userErrorTypeMapper;
+    private UserAnswerErrorMapper userAnswerErrorMapper;
     private UserAnswerServiceImpl userAnswerService;
 
     @BeforeEach
@@ -45,7 +57,18 @@ class UserAnswerServiceImplTest {
         userAnswerMapper = mock(UserAnswerMapper.class);
         tagMapper = mock(TagMapper.class);
         questionAnswerMapper = mock(QuestionAnswerMapper.class);
-        userAnswerService = new UserAnswerServiceImpl(userMapper, userAnswerMapper, tagMapper, questionAnswerMapper);
+        errorTypeMapper = mock(ErrorTypeMapper.class);
+        userErrorTypeMapper = mock(UserErrorTypeMapper.class);
+        userAnswerErrorMapper = mock(UserAnswerErrorMapper.class);
+        userAnswerService = new UserAnswerServiceImpl(
+                userMapper,
+                userAnswerMapper,
+                tagMapper,
+                questionAnswerMapper,
+                errorTypeMapper,
+                userErrorTypeMapper,
+                userAnswerErrorMapper
+        );
     }
 
     @Test
@@ -223,6 +246,115 @@ class UserAnswerServiceImplTest {
         verify(userAnswerMapper, never()).selectUserAnswerDetail(any(), any());
     }
 
+    @Test
+    void confirmUserAnswerErrorsShouldCreateUserErrorTypeAndErrorRecord() {
+        User user = localUser();
+        UserAnswer answer = reviewedUserAnswer();
+        ErrorType errorType = enabledLeafErrorType(9L);
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
+        when(errorTypeMapper.selectEnabledLeafById(9L)).thenReturn(errorType);
+        when(userErrorTypeMapper.insertUserErrorType(any())).thenAnswer(invocation -> {
+            UserErrorType userErrorType = invocation.getArgument(0);
+            userErrorType.setId(20L);
+            return 1;
+        });
+        when(userAnswerErrorMapper.insertUserAnswerError(any())).thenAnswer(invocation -> {
+            com.jt.learning.entity.UserAnswerError error = invocation.getArgument(0);
+            error.setId(30L);
+            return 1;
+        });
+
+        List<UserAnswerErrorVO> errors = userAnswerService.confirmUserAnswerErrors(
+                10L,
+                new UserAnswerErrorConfirmRequest(List.of(new UserAnswerErrorConfirmItemRequest(
+                        "NEW_USER_ERROR_TYPE",
+                        9L,
+                        null,
+                        "移动场所的助词",
+                        "表示移动场所时，散步使用を而不是で。",
+                        "公園で散歩します",
+                        "表示移动场所时助词使用错误。",
+                        "公園を散歩します。",
+                        "MEDIUM",
+                        0
+                )))
+        );
+
+        assertThat(errors).singleElement()
+                .extracting(UserAnswerErrorVO::id, UserAnswerErrorVO::errorTypeId, UserAnswerErrorVO::userErrorTypeId)
+                .containsExactly(30L, 9L, 20L);
+        ArgumentCaptor<com.jt.learning.entity.UserAnswerError> errorCaptor = ArgumentCaptor.forClass(
+                com.jt.learning.entity.UserAnswerError.class
+        );
+        verify(userAnswerErrorMapper).insertUserAnswerError(errorCaptor.capture());
+        assertThat(errorCaptor.getValue().getUserId()).isEqualTo(1L);
+        assertThat(errorCaptor.getValue().getQuestionId()).isEqualTo(100L);
+    }
+
+    @Test
+    void confirmUserAnswerErrorsShouldUseExistingUserErrorType() {
+        User user = localUser();
+        UserAnswer answer = reviewedUserAnswer();
+        UserErrorType userErrorType = new UserErrorType();
+        userErrorType.setId(20L);
+        userErrorType.setUserId(1L);
+        userErrorType.setErrorTypeId(9L);
+        userErrorType.setStatus("ACTIVE");
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
+        when(userErrorTypeMapper.selectActiveByIdAndUserId(20L, 1L)).thenReturn(userErrorType);
+        when(errorTypeMapper.selectEnabledLeafById(9L)).thenReturn(enabledLeafErrorType(9L));
+        when(userAnswerErrorMapper.insertUserAnswerError(any())).thenReturn(1);
+
+        userAnswerService.confirmUserAnswerErrors(
+                10L,
+                new UserAnswerErrorConfirmRequest(List.of(new UserAnswerErrorConfirmItemRequest(
+                        "EXISTING_USER_ERROR_TYPE",
+                        null,
+                        20L,
+                        null,
+                        null,
+                        "公園で散歩します",
+                        "表示移动场所时助词使用错误。",
+                        "公園を散歩します。",
+                        "MEDIUM",
+                        0
+                )))
+        );
+
+        verify(userErrorTypeMapper).selectActiveByIdAndUserId(20L, 1L);
+        verify(userErrorTypeMapper, never()).insertUserErrorType(any());
+    }
+
+    @Test
+    void confirmUserAnswerErrorsShouldRejectUnreviewedAnswer() {
+        User user = localUser();
+        UserAnswer answer = reviewedUserAnswer();
+        answer.setAnswerStatus("SUBMITTED");
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
+
+        assertThatThrownBy(() -> userAnswerService.confirmUserAnswerErrors(
+                10L,
+                new UserAnswerErrorConfirmRequest(List.of(new UserAnswerErrorConfirmItemRequest(
+                        "EXISTING_USER_ERROR_TYPE",
+                        null,
+                        20L,
+                        null,
+                        null,
+                        "公園で散歩します",
+                        "表示移动场所时助词使用错误。",
+                        "公園を散歩します。",
+                        "MEDIUM",
+                        0
+                )))
+        )).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("仅已评分的作答");
+
+        verify(userAnswerErrorMapper, never()).insertUserAnswerError(any());
+    }
+
     private User localUser() {
         User user = new User();
         user.setId(1L);
@@ -275,6 +407,29 @@ class UserAnswerServiceImplTest {
         row.setCreatedAt(LocalDateTime.of(2026, 8, 1, 10, 30));
         row.setUpdatedAt(LocalDateTime.of(2026, 8, 1, 10, 30, 5));
         return row;
+    }
+
+    private UserAnswer reviewedUserAnswer() {
+        UserAnswer answer = new UserAnswer();
+        answer.setId(10L);
+        answer.setUserId(1L);
+        answer.setQuestionId(100L);
+        answer.setAnswerText("明日の午後、公園で散歩します");
+        answer.setAnswerStatus("REVIEWED");
+        answer.setDeleted(false);
+        return answer;
+    }
+
+    private ErrorType enabledLeafErrorType(Long id) {
+        ErrorType errorType = new ErrorType();
+        errorType.setId(id);
+        errorType.setParentId(1L);
+        errorType.setTypeLevel(2);
+        errorType.setCode("PARTICLE");
+        errorType.setName("助词错误");
+        errorType.setEnabled(true);
+        errorType.setDeleted(false);
+        return errorType;
     }
 
     private Tag sceneTag() {

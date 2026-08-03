@@ -48,4 +48,9 @@ public interface UserAnswerMapper {
             @Param("userId") Long userId,
             @Param("id") Long id
     );
+
+    UserAnswer selectActiveUserAnswerById(
+            @Param("userId") Long userId,
+            @Param("id") Long id
+    );
 }

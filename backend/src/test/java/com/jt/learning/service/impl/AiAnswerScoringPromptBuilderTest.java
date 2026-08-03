@@ -1,6 +1,7 @@
 package com.jt.learning.service.impl;
 
 import com.jt.learning.dto.AiAnswerScoringRequest;
+import com.jt.learning.dto.AiErrorTypeOptionDTO;
 import com.jt.learning.dto.AiQuestionTagOptionDTO;
 import com.jt.learning.entity.Question;
 import com.jt.learning.entity.QuestionAnswer;
@@ -17,44 +18,51 @@ class AiAnswerScoringPromptBuilderTest {
     private final AiAnswerScoringPromptBuilder promptBuilder = new AiAnswerScoringPromptBuilder(new ObjectMapper());
 
     @Test
-    void buildShouldIncludeQuestionAnswersTagsAndUserAnswer() {
+    void buildShouldIncludeQuestionAnswersTagsErrorTypesAndUserAnswer() {
         Question question = new Question();
         question.setQuestionType("TRANSLATION_ZH_TO_JA");
-        question.setSourceText("我今天下午要去银行办理转账。");
-        question.setContextText("日常生活中说明下午的计划。");
+        question.setSourceText("明天下午我要去公园散步。");
+        question.setContextText("朋友之间的日常对话。");
         question.setLevel("N4");
         question.setDifficulty(3);
-        question.setGrammarPoint("予定を表す表現");
+        question.setGrammarPoint("助词");
         question.setSpoken(true);
         question.setBusiness(false);
         question.setExam(false);
 
         QuestionAnswer standardAnswer = new QuestionAnswer();
-        standardAnswer.setAnswerText("今日の午後、銀行へ振り込みに行きます。");
+        standardAnswer.setAnswerText("明日の午後、公園を散歩します。");
         standardAnswer.setAnswerType("STANDARD");
         standardAnswer.setPrimaryAnswer(true);
         standardAnswer.setSortOrder(0);
 
-        List<AiQuestionTagOptionDTO> tagOptions = List.of(
-                new AiQuestionTagOptionDTO("FINANCE_BANK", "银行", "金融场景标签")
-        );
-
         AiQuestionPrompt prompt = promptBuilder.build(
                 question,
                 List.of(standardAnswer),
-                tagOptions,
-                new AiAnswerScoringRequest("今日の午後、銀行に送金をしに行きます。")
+                List.of(new AiQuestionTagOptionDTO("DAILY_LIFE", "日常生活", "日常场景")),
+                List.of(new AiErrorTypeOptionDTO(
+                        7L,
+                        "PARTICLE",
+                        "助词错误",
+                        "助词选择或用法不正确",
+                        "GRAMMAR_SYNTAX",
+                        "语法与句法"
+                )),
+                new AiAnswerScoringRequest("明日の午後、公園で散歩します。")
         );
 
         assertThat(prompt.systemPrompt())
-                .contains("日语学习评分助手")
-                .contains("TRANSLATION_ZH_TO_JA");
+                .contains("errorTypeCode")
+                .contains("TRANSLATION_ZH_TO_JA")
+                .contains("grammarPoint 仅是学习参考")
+                .contains("日常口语中自然省略的主语")
+                .contains("不得使用“助词错误”");
         assertThat(prompt.userPrompt())
-                .contains("中文原文：我今天下午要去银行办理转账。")
-                .contains("FINANCE_BANK")
-                .contains("今日の午後、銀行へ振り込みに行きます。")
-                .contains("今日の午後、銀行に送金をしに行きます。")
-                .contains("grammarVocabularyScore")
-                .contains("recommendedExpressions");
+                .contains("DAILY_LIFE")
+                .contains("PARTICLE")
+                .contains("公園で散歩します")
+                .contains("suggestedUserErrorTypeDescription")
+                .contains("赶上交通工具时误用を而非に")
+                .contains("grammarVocabularyScore");
     }
 }

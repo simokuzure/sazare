@@ -13,11 +13,16 @@ export type AnswerReviewComments = {
 }
 
 export type AnswerErrorAnalysis = {
-  type: 'GRAMMAR' | 'VOCABULARY' | 'NATURALNESS' | 'HONORIFIC' | 'SCENARIO' | 'COMPLETENESS'
+  type: string
+  errorTypeId: number
+  errorTypeCode: string
+  errorTypeName: string
   original: string
   issue: string
   suggestion: string
   severity: 'LOW' | 'MEDIUM' | 'HIGH'
+  suggestedUserErrorTypeName: string
+  suggestedUserErrorTypeDescription: string
 }
 
 export type AnswerRecommendedExpression = {

@@ -37,29 +37,31 @@ public class MockAiAnswerScoringClient implements AiAnswerScoringClient {
                 "informationCompletenessScore", 86
         ));
         review.put("totalScore", 81.50);
-        review.put("overallComment", "整体意思基本准确，语法和用词可以再自然一些。");
+        review.put("overallComment", "整体意思基本传达，但部分表达可以更贴近日语习惯。");
         review.put("comments", Map.of(
-                "grammarComment", "句子结构基本正确，助词使用需要继续注意。",
-                "vocabularyComment", "核心词汇能表达原意，但部分搭配不够自然。",
-                "naturalnessComment", "表达可以理解，不过和日语母语者常用说法仍有距离。",
-                "scenarioComment", "语气基本符合题目场景，敬体表达还可以更稳定。"
+                "grammarComment", "语法结构基本正确。",
+                "vocabularyComment", "词汇选择能够表达核心意思。",
+                "naturalnessComment", "部分表达略显直译，可以更自然。",
+                "scenarioComment", "语体与题目场景基本匹配。"
         ));
         review.put("errorAnalysis", List.of(Map.of(
-                "type", "NATURALNESS",
+                "errorTypeCode", "UNNATURAL_EXPRESSION",
                 "original", request.answerText().trim(),
-                "issue", "表达能传达大意，但整体不够像自然日语。",
-                "suggestion", "参考标准答案调整助词和动词搭配。",
-                "severity", "MEDIUM"
+                "issue", "表达不符合日语常见说法。",
+                "suggestion", "根据语境改用更自然的日语表达。",
+                "severity", "MEDIUM",
+                "suggestedUserErrorTypeName", "不自然表达",
+                "suggestedUserErrorTypeDescription", "使用符合日语习惯的表达，避免逐字翻译造成不自然的说法。"
         )));
         review.put("revisionSuggestions", List.of(
-                "先确认中文原文中的时间、动作和对象是否完整保留。",
-                "优先使用标准答案中的自然搭配，再替换成自己的表达。"
+                "检查句子是否受中文语序影响。",
+                "结合场景选择更自然的日语表达。"
         ));
         review.put("recommendedExpressions", List.of(Map.of(
                 "expression", standardAnswers.getFirst().getAnswerText(),
-                "usage", "适合本题语境的基础推荐表达。",
+                "usage", "可用于本题相近语境。",
                 "formality", "POLITE",
-                "note", "可以作为当前题目的优先记忆表达。"
+                "note", "根据说话对象调整礼貌程度。"
         )));
 
         try {

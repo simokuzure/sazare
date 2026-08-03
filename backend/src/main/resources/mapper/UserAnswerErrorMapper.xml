@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jt.learning.mapper.UserAnswerErrorMapper">
+
+    <insert id="insertUserAnswerError" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        insert into user_answer_errors (
+            user_answer_id,
+            user_id,
+            question_id,
+            error_type_id,
+            user_error_type_id,
+            original_text,
+            issue,
+            suggestion,
+            severity,
+            sort_order,
+            created_at,
+            updated_at
+        ) values (
+            #{userAnswerId},
+            #{userId},
+            #{questionId},
+            #{errorTypeId},
+            #{userErrorTypeId},
+            #{originalText},
+            #{issue},
+            #{suggestion},
+            #{severity},
+            #{sortOrder},
+            #{createdAt},
+            #{updatedAt}
+        )
+    </insert>
+</mapper>

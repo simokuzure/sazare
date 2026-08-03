@@ -1,10 +1,12 @@
 package com.jt.learning.dto;
 
 public record AiAnswerErrorAnalysisDTO(
-        String type,
+        String errorTypeCode,
         String original,
         String issue,
         String suggestion,
-        String severity
+        String severity,
+        String suggestedUserErrorTypeName,
+        String suggestedUserErrorTypeDescription
 ) {
 }

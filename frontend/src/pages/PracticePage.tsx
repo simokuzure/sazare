@@ -1,12 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getErrorMessage } from '../api/client'
+import { confirmUserAnswerErrors, fetchUserErrorTypes } from '../api/userErrorApi'
 import { generateQuestions, submitQuestionAnswer } from '../api/questionApi'
 import { fetchTags } from '../api/tagApi'
 import ReviewList from '../components/ReviewList'
 import type { PracticeNotice } from '../types/api'
 import type { Tag } from '../types/tag'
 import type { AiQuestionGenerationPayload, Question } from '../types/question'
-import type { AnswerReview } from '../types/review'
+import type { AnswerErrorAnalysis, AnswerReview } from '../types/review'
+import type { UserAnswerErrorConfirmation, UserErrorType } from '../types/userError'
+
+type ErrorCandidateState = {
+  selected: boolean
+  saved: boolean
+  mode: 'NEW_USER_ERROR_TYPE' | 'EXISTING_USER_ERROR_TYPE'
+  userErrorTypeName: string
+  userErrorTypeDescription: string
+  userErrorTypeId: string
+}
 
 export default function PracticePage() {
   const [practiceTags, setPracticeTags] = useState<Tag[]>([])
@@ -26,67 +37,58 @@ export default function PracticePage() {
   const [answerScoring, setAnswerScoring] = useState(false)
   const [answerReview, setAnswerReview] = useState<AnswerReview | null>(null)
   const [practiceNotice, setPracticeNotice] = useState<PracticeNotice | null>(null)
+  const [errorCandidates, setErrorCandidates] = useState<ErrorCandidateState[]>([])
+  const [userErrorTypes, setUserErrorTypes] = useState<UserErrorType[]>([])
+  const [userErrorTypesLoading, setUserErrorTypesLoading] = useState(false)
+  const [errorConfirmationNotice, setErrorConfirmationNotice] = useState<PracticeNotice | null>(null)
+  const [errorConfirming, setErrorConfirming] = useState(false)
+  const [errorConfirmationOpen, setErrorConfirmationOpen] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
 
-    async function fetchPracticeTags() {
+    async function loadPracticeTags() {
       setPracticeTagsLoading(true)
       setPracticeTagsError(null)
-
       try {
         const result = await fetchTags({ enabledOnly: true, page: 1, size: 100 }, controller.signal)
-
         setPracticeTags(result.items)
       } catch (fetchError: unknown) {
-        if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
-          return
-        }
+        if (fetchError instanceof DOMException && fetchError.name === 'AbortError') return
         setPracticeTags([])
-        setPracticeTagsError(fetchError instanceof Error ? fetchError.message : '请求失败')
+        setPracticeTagsError(getErrorMessage(fetchError))
       } finally {
         setPracticeTagsLoading(false)
       }
     }
 
-    fetchPracticeTags()
-
-    return () => {
-      controller.abort()
-    }
+    loadPracticeTags()
+    return () => controller.abort()
   }, [])
 
   const sceneTags = useMemo(() => practiceTags.filter((tag) => tag.tagType === 'SCENE'), [practiceTags])
   const functionTags = useMemo(() => practiceTags.filter((tag) => tag.tagType === 'FUNCTION'), [practiceTags])
   const selectedQuestion = generatedQuestions[selectedQuestionIndex] ?? null
+  const selectedErrorCount = errorCandidates.filter((candidate) => candidate.selected && !candidate.saved).length
 
   async function handleGenerateQuestion() {
     setQuestionGenerating(true)
     setPracticeNotice(null)
-
     try {
       const questions = await generateQuestions(buildAiQuestionGenerationPayload())
       setGeneratedQuestions(questions)
       setSelectedQuestionIndex(0)
-      setAnswerText('')
-      setAnswerSubmitted(false)
-      setAnswerReview(null)
+      clearAnswerResult()
       setPracticeNotice({
         kind: 'info',
-        title: questions.length > 0 ? '题目已生成' : '没有返回题目',
-        message: questions.length > 0 ? `已生成 ${questions.length} 道题。` : '后端没有返回可展示的题目。',
+        title: questions.length > 0 ? '题目已生成' : '未生成题目',
+        message: questions.length > 0 ? `已生成 ${questions.length} 道题目。` : '请调整生成条件后重试。',
       })
     } catch (fetchError: unknown) {
       setGeneratedQuestions([])
       setSelectedQuestionIndex(0)
-      setAnswerText('')
-      setAnswerSubmitted(false)
-      setAnswerReview(null)
-      setPracticeNotice({
-        kind: 'error',
-        title: '题目生成失败',
-        message: getErrorMessage(fetchError),
-      })
+      clearAnswerResult()
+      setPracticeNotice({ kind: 'error', title: '生成失败', message: getErrorMessage(fetchError) })
     } finally {
       setQuestionGenerating(false)
     }
@@ -94,30 +96,19 @@ export default function PracticePage() {
 
   function handleSelectQuestion(index: number) {
     setSelectedQuestionIndex(index)
-    setAnswerText('')
-    setAnswerSubmitted(false)
-    setAnswerReview(null)
+    clearAnswerResult()
     setPracticeNotice(null)
   }
 
   async function handleSubmitAnswer() {
     if (!selectedQuestion) {
-      setPracticeNotice({
-        kind: 'error',
-        title: '请先生成题目',
-        message: '生成题目后再填写日语回答。',
-      })
+      setPracticeNotice({ kind: 'error', title: '请先选择题目', message: '生成题目后再提交作答。' })
       return
     }
 
     const submittedAnswer = answerText.trim()
-
     if (!submittedAnswer) {
-      setPracticeNotice({
-        kind: 'error',
-        title: '请先输入答案',
-        message: '提交前需要填写日语回答。',
-      })
+      setPracticeNotice({ kind: 'error', title: '请填写答案', message: '输入日语答案后再提交。' })
       return
     }
 
@@ -125,393 +116,272 @@ export default function PracticePage() {
     setAnswerSubmitted(true)
     setAnswerScoring(true)
     setAnswerReview(null)
+    setErrorCandidates([])
+    setErrorConfirmationNotice(null)
     setPracticeNotice(null)
 
     try {
       const review = await submitQuestionAnswer(selectedQuestion.id, submittedAnswer)
-
       setAnswerReview(review)
+      if (review?.errorAnalysis.length) setErrorCandidates(review.errorAnalysis.map(toErrorCandidateState))
       setPracticeNotice({
         kind: 'info',
         title: '评分完成',
-        message: review ? `本次总分 ${formatScore(review.totalScore)}。` : '后端没有返回评分结果。',
+        message: review ? `本次总分：${formatScore(review.totalScore)}` : '未获得评分结果。',
       })
     } catch (fetchError: unknown) {
-      setPracticeNotice({
-        kind: 'error',
-        title: '评分失败',
-        message: getErrorMessage(fetchError),
-      })
+      setPracticeNotice({ kind: 'error', title: '评分失败', message: getErrorMessage(fetchError) })
     } finally {
       setAnswerScoring(false)
     }
   }
 
+  async function loadActiveUserErrorTypes() {
+    setUserErrorTypesLoading(true)
+    try {
+      const result = await fetchUserErrorTypes({ status: 'ACTIVE', page: 1, size: 100 })
+      setUserErrorTypes(result.items)
+    } catch (fetchError: unknown) {
+      setUserErrorTypes([])
+      setErrorConfirmationNotice({ kind: 'error', title: '无法加载已有类型', message: getErrorMessage(fetchError) })
+    } finally {
+      setUserErrorTypesLoading(false)
+    }
+  }
+
+  async function handleConfirmErrors() {
+    if (!answerReview) return
+    const selectedItems = answerReview.errorAnalysis
+      .map((analysis, index) => ({ analysis, candidate: errorCandidates[index], index }))
+      .filter(({ candidate }) => candidate?.selected && !candidate.saved)
+
+    if (selectedItems.length === 0) return
+
+    const payload: UserAnswerErrorConfirmation[] = []
+    for (const { analysis, candidate, index } of selectedItems) {
+      if (candidate.mode === 'NEW_USER_ERROR_TYPE') {
+        if (!candidate.userErrorTypeName.trim() || !candidate.userErrorTypeDescription.trim()) {
+          setErrorConfirmationNotice({ kind: 'error', title: '请补充用户错误类型', message: '新建类型需要名称和说明。' })
+          return
+        }
+        payload.push(toNewErrorConfirmation(analysis, candidate, index))
+      } else {
+        if (!candidate.userErrorTypeId) {
+          setErrorConfirmationNotice({ kind: 'error', title: '请选择已有类型', message: '追加记录前请选择对应的用户错误类型。' })
+          return
+        }
+        payload.push(toExistingErrorConfirmation(analysis, candidate, index))
+      }
+    }
+
+    setErrorConfirming(true)
+    setErrorConfirmationNotice(null)
+    try {
+      await confirmUserAnswerErrors(answerReview.userAnswerId, { errors: payload })
+      const confirmedIndexes = new Set(selectedItems.map(({ index }) => index))
+      setErrorCandidates((items) => items.map((item, index) => (
+        confirmedIndexes.has(index) ? { ...item, selected: false, saved: true } : item
+      )))
+      setErrorConfirmationNotice({ kind: 'info', title: '错误已记录', message: `已确认 ${selectedItems.length} 条错误。` })
+      void loadActiveUserErrorTypes()
+      setErrorConfirmationOpen(false)
+    } catch (fetchError: unknown) {
+      setErrorConfirmationNotice({ kind: 'error', title: '记录失败', message: getErrorMessage(fetchError) })
+    } finally {
+      setErrorConfirming(false)
+    }
+  }
+
+  function updateErrorCandidate(index: number, patch: Partial<ErrorCandidateState>) {
+    setErrorCandidates((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item))
+    setErrorConfirmationNotice(null)
+  }
+
+  function handleOpenErrorConfirmation() {
+    setErrorConfirmationNotice(null)
+    setErrorConfirmationOpen(true)
+    void loadActiveUserErrorTypes()
+  }
+
   function handleClearAnswer() {
-    setAnswerText('')
-    setAnswerSubmitted(false)
-    setAnswerReview(null)
+    clearAnswerResult()
     setPracticeNotice(null)
   }
 
   function handleEditAnswer() {
     setAnswerSubmitted(false)
     setAnswerReview(null)
+    setErrorCandidates([])
+    setErrorConfirmationNotice(null)
+    setErrorConfirmationOpen(false)
     setPracticeNotice(null)
+  }
+
+  function clearAnswerResult() {
+    setAnswerText('')
+    setAnswerSubmitted(false)
+    setAnswerReview(null)
+    setErrorCandidates([])
+    setErrorConfirmationNotice(null)
+    setErrorConfirmationOpen(false)
   }
 
   function buildAiQuestionGenerationPayload() {
     const payload: AiQuestionGenerationPayload = {}
-
-    if (questionCount) {
-      payload.questionCount = Number(questionCount)
-    }
-    if (level) {
-      payload.level = level
-    }
-    if (difficulty) {
-      payload.difficulty = Number(difficulty)
-    }
-    if (sceneTagCode) {
-      payload.sceneTagCodes = [sceneTagCode]
-    }
-    if (functionTagCode) {
-      payload.functionTagCodes = [functionTagCode]
-    }
-    if (generatedQuestions.length > 0) {
-      payload.excludedSourceTexts = generatedQuestions.map((question) => question.sourceText)
-    }
-    if (extraRequirements.trim()) {
-      payload.extraRequirements = extraRequirements.trim()
-    }
-
+    if (questionCount) payload.questionCount = Number(questionCount)
+    if (level) payload.level = level
+    if (difficulty) payload.difficulty = Number(difficulty)
+    if (sceneTagCode) payload.sceneTagCodes = [sceneTagCode]
+    if (functionTagCode) payload.functionTagCodes = [functionTagCode]
+    if (generatedQuestions.length > 0) payload.excludedSourceTexts = generatedQuestions.map((question) => question.sourceText)
+    if (extraRequirements.trim()) payload.extraRequirements = extraRequirements.trim()
     return payload
   }
 
   return (
-          <section className="page-content" aria-label="practice page">
-            <div className="practice-grid">
-              <section className="surface generator-panel" aria-label="question generator">
-                <form className="form-grid" onSubmit={(event) => event.preventDefault()}>
-                  <label>
-                    <span>题目数量</span>
-                    <select value={questionCount} onChange={(event) => setQuestionCount(event.target.value)}>
-                      <option value="1">1</option>
-                      <option value="2">2</option>
-                      <option value="3">3</option>
-                      <option value="4">4</option>
-                      <option value="5">5</option>
-                    </select>
-                  </label>
+    <section className="page-content" aria-label="练习">
+      <div className="practice-grid">
+        <section className="surface generator-panel" aria-label="题目生成">
+          <form className="form-grid" onSubmit={(event) => event.preventDefault()}>
+            <label><span>题目数量</span><select value={questionCount} onChange={(event) => setQuestionCount(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+            <label><span>JLPT 等级</span><select value={level} onChange={(event) => setLevel(event.target.value)}><option value="">默认 N3</option>{['N5', 'N4', 'N3', 'N2', 'N1'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label><span>难度</span><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+            <label><span>场景标签</span><select value={sceneTagCode} onChange={(event) => setSceneTagCode(event.target.value)}><option value="">{practiceTagsLoading ? '加载中' : '不限场景'}</option>{sceneTags.map((tag) => <option key={tag.id} value={tag.code}>{tag.name}</option>)}</select></label>
+            <label><span>功能标签</span><select value={functionTagCode} onChange={(event) => setFunctionTagCode(event.target.value)}><option value="">{practiceTagsLoading ? '加载中' : '不限功能'}</option>{functionTags.map((tag) => <option key={tag.id} value={tag.code}>{tag.name}</option>)}</select></label>
+            <label className="wide-field"><span>补充要求</span><input value={extraRequirements} maxLength={500} placeholder="例如：使用敬语、指定场景或语法点" onChange={(event) => setExtraRequirements(event.target.value)} /></label>
+            <button type="button" className="primary-button" disabled={questionGenerating} onClick={handleGenerateQuestion}>{questionGenerating ? '生成中' : '生成题目'}</button>
+          </form>
+          {practiceTagsError ? <div className="error-message">标签加载失败：{practiceTagsError}</div> : null}
+        </section>
 
-                  <label>
-                    <span>JLPT 等级</span>
-                    <select value={level} onChange={(event) => setLevel(event.target.value)}>
-                      <option value="">默认 N3</option>
-                      <option value="N5">N5</option>
-                      <option value="N4">N4</option>
-                      <option value="N3">N3</option>
-                      <option value="N2">N2</option>
-                      <option value="N1">N1</option>
-                    </select>
-                  </label>
+        <section className="surface question-panel" aria-label="题目预览">
+          <div className="section-title"><span className="label">题目预览</span><strong>{selectedQuestion ? `题目 #${selectedQuestion.id}` : '尚未选择题目'}</strong></div>
+          {generatedQuestions.length > 1 ? <div className="question-selector" aria-label="题目选择">{generatedQuestions.map((question, index) => <button key={question.id} type="button" className={selectedQuestionIndex === index ? 'is-selected' : ''} onClick={() => handleSelectQuestion(index)}>{index + 1}</button>)}</div> : null}
+          <dl className="question-details">
+            <div><dt>中文原文</dt><dd>{selectedQuestion?.sourceText ?? '暂无题目'}</dd></div>
+            <div><dt>语境</dt><dd>{selectedQuestion?.contextText ?? '暂无'}</dd></div>
+            <div><dt>语法点</dt><dd>{selectedQuestion?.grammarPoint ?? '暂无'}</dd></div>
+            <div><dt>标签</dt><dd>{selectedQuestion ? <span className="tag-chip-row">{selectedQuestion.tags.map((tag) => <span key={tag.id}>{tag.name}</span>)}</span> : '暂无'}</dd></div>
+            <div><dt>难度</dt><dd>{selectedQuestion ? `${selectedQuestion.level} / ${selectedQuestion.difficulty}` : '暂无'}</dd></div>
+          </dl>
+        </section>
 
-                  <label>
-                    <span>难度</span>
-                    <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>
-                      <option value="1">1 - 入门</option>
-                      <option value="2">2 - 简单</option>
-                      <option value="3">3 - 标准</option>
-                      <option value="4">4 - 较难</option>
-                      <option value="5">5 - 挑战</option>
-                    </select>
-                  </label>
-
-                  <label>
-                    <span>场景标签</span>
-                    <select value={sceneTagCode} onChange={(event) => setSceneTagCode(event.target.value)}>
-                      <option value="">{practiceTagsLoading ? '标签加载中' : '不限制场景'}</option>
-                      {sceneTags.map((tag) => (
-                        <option key={tag.id} value={tag.code}>
-                          {tag.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label>
-                    <span>功能标签</span>
-                    <select value={functionTagCode} onChange={(event) => setFunctionTagCode(event.target.value)}>
-                      <option value="">{practiceTagsLoading ? '标签加载中' : '不限制功能'}</option>
-                      {functionTags.map((tag) => (
-                        <option key={tag.id} value={tag.code}>
-                          {tag.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="wide-field">
-                    <span>额外要求</span>
-                    <input
-                      value={extraRequirements}
-                      maxLength={500}
-                      placeholder="例如：偏口语、商务场景、考试表达"
-                      onChange={(event) => setExtraRequirements(event.target.value)}
-                    />
-                  </label>
-
-                  <button
-                    type="button"
-                    className="primary-button"
-                    disabled={questionGenerating}
-                    onClick={handleGenerateQuestion}
-                  >
-                    {questionGenerating ? '生成中' : '生成题目'}
-                  </button>
-                </form>
-
-                {practiceTagsError ? <div className="error-message">标签加载失败：{practiceTagsError}</div> : null}
-              </section>
-
-              <section className="surface question-panel" aria-label="question preview">
-                <div className="section-title">
-                  <span className="label">题目展示</span>
-                  <strong>{selectedQuestion ? `题目 #${selectedQuestion.id}` : '等待生成题目'}</strong>
-                </div>
-
-                {generatedQuestions.length > 1 ? (
-                  <div className="question-selector" aria-label="generated questions">
-                    {generatedQuestions.map((question, index) => (
-                      <button
-                        key={question.id}
-                        type="button"
-                        className={selectedQuestionIndex === index ? 'is-selected' : ''}
-                        onClick={() => handleSelectQuestion(index)}
-                      >
-                        {index + 1}
-                      </button>
-                    ))}
-                  </div>
+        <section className="surface answer-panel" aria-label={answerSubmitted ? '评分结果' : '答案输入'}>
+          <div className="section-title"><span className="label">{answerSubmitted ? '评分结果' : '作答'}</span><strong>{answerSubmitted ? '本次作答结果' : '输入日语答案'}</strong></div>
+          {!answerSubmitted ? (
+            <>
+              {practiceNotice && (practiceNotice.kind === 'error' || !selectedQuestion) ? <Notice notice={practiceNotice} /> : null}
+              <textarea value={answerText} disabled={!selectedQuestion} placeholder={selectedQuestion ? '请输入日语答案' : '生成题目后即可作答'} onChange={(event) => setAnswerText(event.target.value)} />
+              <div className="action-row"><button type="button" className="primary-button" disabled={!selectedQuestion || answerScoring} onClick={handleSubmitAnswer}>{answerScoring ? '评分中' : '提交答案'}</button><button type="button" disabled={!selectedQuestion && !answerText} onClick={handleClearAnswer}>清空</button></div>
+            </>
+          ) : (
+            <div className="answer-result">
+              {practiceNotice && (!answerReview || practiceNotice.kind === 'error') ? <Notice notice={practiceNotice} /> : null}
+              {answerScoring ? <div className="notice"><strong>评分中</strong><p>正在分析本次作答。</p></div> : null}
+              <section className="submitted-answer"><span className="label">你的答案</span><p>{answerText}</p></section>
+              {answerReview ? <>
+                <div className="score-summary"><span>总分</span><strong>{formatScore(answerReview.totalScore)}</strong></div>
+                {errorConfirmationOpen ? (
+                  <ErrorConfirmationModal
+                    review={answerReview}
+                    candidates={errorCandidates}
+                    userErrorTypes={userErrorTypes}
+                    userErrorTypesLoading={userErrorTypesLoading}
+                    notice={errorConfirmationNotice}
+                    confirming={errorConfirming}
+                    selectedCount={selectedErrorCount}
+                    onUpdate={updateErrorCandidate}
+                    onConfirm={handleConfirmErrors}
+                    onClose={() => setErrorConfirmationOpen(false)}
+                  />
                 ) : null}
-
-                <dl className="question-details">
-                  <div>
-                    <dt>中文原文</dt>
-                    <dd>{selectedQuestion?.sourceText ?? '待生成'}</dd>
-                  </div>
-                  <div>
-                    <dt>语境</dt>
-                    <dd>{selectedQuestion?.contextText ?? '待后端返回'}</dd>
-                  </div>
-                  <div>
-                    <dt>语法点</dt>
-                    <dd>{selectedQuestion?.grammarPoint ?? '待后端返回'}</dd>
-                  </div>
-                  <div>
-                    <dt>标签</dt>
-                    <dd>
-                      {selectedQuestion ? (
-                        <span className="tag-chip-row">
-                          {selectedQuestion.tags.map((tag) => (
-                            <span key={tag.id}>{tag.name}</span>
-                          ))}
-                        </span>
-                      ) : (
-                        '待后端返回'
-                      )}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>难度</dt>
-                    <dd>
-                      {selectedQuestion
-                        ? `${selectedQuestion.level} / ${selectedQuestion.difficulty}`
-                        : '待后端返回'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>来源</dt>
-                    <dd>{selectedQuestion ? selectedQuestion.sourceType : '待后端返回'}</dd>
-                  </div>
-                </dl>
-              </section>
-
-              <section className="surface answer-panel" aria-label={answerSubmitted ? 'answer result' : 'answer input'}>
-                <div className="section-title">
-                  <span className="label">{answerSubmitted ? '结果' : '回答'}</span>
-                  <strong>{answerSubmitted ? '本次提交结果' : '输入日语译文'}</strong>
-                </div>
-
-                {!answerSubmitted ? (
-                  <>
-                    {practiceNotice && (practiceNotice.kind === 'error' || !selectedQuestion) ? (
-                      <div className={practiceNotice.kind === 'error' ? 'notice is-error' : 'notice'}>
-                        <strong>{practiceNotice.title}</strong>
-                        <p>{practiceNotice.message}</p>
-                      </div>
-                    ) : null}
-
-                    <textarea
-                      value={answerText}
-                      disabled={!selectedQuestion}
-                      placeholder={selectedQuestion ? '输入你的日语回答。' : '题目生成后，在这里输入你的日语回答。'}
-                      onChange={(event) => setAnswerText(event.target.value)}
-                    />
-
-                    <div className="action-row">
+                <details className="review-detail"><summary>详细评分说明</summary><div className="review-result">
+                  <dl className="score-grid"><div><dt>语法与词汇</dt><dd>{answerReview.scores.grammarVocabularyScore}</dd></div><div><dt>自然流畅度</dt><dd>{answerReview.scores.naturalFluencyScore}</dd></div><div><dt>场景适配度</dt><dd>{answerReview.scores.scenarioAdaptationScore}</dd></div><div><dt>信息完整性</dt><dd>{answerReview.scores.informationCompletenessScore}</dd></div></dl>
+                  <section className="review-section"><strong>总评</strong><p>{answerReview.overallComment}</p></section>
+                  <dl className="comment-list"><div><dt>语法</dt><dd>{answerReview.comments.grammarComment}</dd></div><div><dt>词汇</dt><dd>{answerReview.comments.vocabularyComment}</dd></div><div><dt>自然度</dt><dd>{answerReview.comments.naturalnessComment}</dd></div><div><dt>场景</dt><dd>{answerReview.comments.scenarioComment}</dd></div></dl>
+                  <ReviewList title="候选错误" emptyText="本次未发现明确错误。" items={answerReview.errorAnalysis}>{(item) => <div><span>{item.errorTypeName} / {item.severity}</span><strong>{item.original}</strong><p>{item.issue}</p><p>{item.suggestion}</p></div>}</ReviewList>
+                  {answerReview.errorAnalysis.length > 0 ? (
+                    <div className="error-record-action">
+                      <span>{errorCandidates.filter((candidate) => candidate.saved).length} / {answerReview.errorAnalysis.length} 条错误已记录</span>
                       <button
                         type="button"
                         className="primary-button"
-                        disabled={!selectedQuestion || answerScoring}
-                        onClick={handleSubmitAnswer}
+                        disabled={errorCandidates.every((candidate) => candidate.saved)}
+                        onClick={handleOpenErrorConfirmation}
                       >
-                        {answerScoring ? '评分中' : '提交答案'}
-                      </button>
-                      <button type="button" disabled={!selectedQuestion && !answerText} onClick={handleClearAnswer}>
-                        清空
+                        记录错误
                       </button>
                     </div>
-                  </>
-                ) : (
-                  <div className="answer-result">
-                    {practiceNotice && (!answerReview || practiceNotice.kind === 'error') ? (
-                      <div className={practiceNotice.kind === 'error' ? 'notice is-error' : 'notice'}>
-                        <strong>{practiceNotice.title}</strong>
-                        <p>{practiceNotice.message}</p>
-                      </div>
-                    ) : null}
-
-                    {answerScoring ? (
-                      <div className="notice">
-                        <strong>评分中</strong>
-                        <p>答案已提交，正在等待后端返回评分结果。</p>
-                      </div>
-                    ) : null}
-
-                    <section className="submitted-answer">
-                      <span className="label">你的答案</span>
-                      <p>{answerText}</p>
-                    </section>
-
-                    {answerReview ? (
-                      <>
-                        <div className="score-summary">
-                          <span>总分</span>
-                          <strong>{formatScore(answerReview.totalScore)}</strong>
-                        </div>
-
-                        <details className="review-detail">
-                          <summary>查看详细评价</summary>
-                          <div className="review-result">
-                            <dl className="score-grid">
-                              <div>
-                                <dt>语法与词汇</dt>
-                                <dd>{answerReview.scores.grammarVocabularyScore}</dd>
-                              </div>
-                              <div>
-                                <dt>自然度与流畅度</dt>
-                                <dd>{answerReview.scores.naturalFluencyScore}</dd>
-                              </div>
-                              <div>
-                                <dt>敬语与场景</dt>
-                                <dd>{answerReview.scores.scenarioAdaptationScore}</dd>
-                              </div>
-                              <div>
-                                <dt>表达完整性</dt>
-                                <dd>{answerReview.scores.informationCompletenessScore}</dd>
-                              </div>
-                            </dl>
-
-                            <section className="review-section">
-                              <strong>总评</strong>
-                              <p>{answerReview.overallComment}</p>
-                            </section>
-
-                            <dl className="comment-list">
-                              <div>
-                                <dt>语法评价</dt>
-                                <dd>{answerReview.comments.grammarComment}</dd>
-                              </div>
-                              <div>
-                                <dt>词汇评价</dt>
-                                <dd>{answerReview.comments.vocabularyComment}</dd>
-                              </div>
-                              <div>
-                                <dt>自然度评价</dt>
-                                <dd>{answerReview.comments.naturalnessComment}</dd>
-                              </div>
-                              <div>
-                                <dt>场景适合度评价</dt>
-                                <dd>{answerReview.comments.scenarioComment}</dd>
-                              </div>
-                            </dl>
-
-                            <ReviewList title="错误分析" emptyText="本次没有返回具体错误。" items={answerReview.errorAnalysis}>
-                              {(item) => (
-                                <div>
-                                  <span>{item.type} / {item.severity}</span>
-                                  <strong>{item.original}</strong>
-                                  <p>{item.issue}</p>
-                                  <p>{item.suggestion}</p>
-                                </div>
-                              )}
-                            </ReviewList>
-
-                            <ReviewList title="修改建议" emptyText="本次没有返回修改建议。" items={answerReview.revisionSuggestions}>
-                              {(item) => <p>{item}</p>}
-                            </ReviewList>
-
-                            <ReviewList
-                              title="推荐表达"
-                              emptyText="本次没有返回推荐表达。"
-                              items={answerReview.recommendedExpressions}
-                            >
-                              {(item) => (
-                                <div>
-                                  <span>{item.formality}</span>
-                                  <strong>{item.expression}</strong>
-                                  <p>{item.usage}</p>
-                                  <p>{item.note}</p>
-                                </div>
-                              )}
-                            </ReviewList>
-                          </div>
-                        </details>
-                      </>
-                    ) : null}
-
-                    {selectedQuestion ? (
-                      <section className="answer-reference">
-                        <strong>标准答案</strong>
-                        <ol>
-                          {selectedQuestion.answers.map((answer) => (
-                            <li key={answer.id}>
-                              <span>
-                                {answer.answerType === 'STANDARD' ? '标准' : '参考'}
-                                {answer.primaryAnswer ? ' / 主答案' : ''}
-                              </span>
-                              <strong>{answer.answerText}</strong>
-                            </li>
-                          ))}
-                        </ol>
-                      </section>
-                    ) : null}
-
-                    <div className="action-row">
-                      <button type="button" className="primary-button" disabled={answerScoring} onClick={handleEditAnswer}>
-                        返回修改
-                      </button>
-                      <button type="button" disabled={answerScoring} onClick={handleClearAnswer}>
-                        清空
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </section>
+                  ) : null}
+                  <ReviewList title="修改建议" emptyText="本次没有额外修改建议。" items={answerReview.revisionSuggestions}>{(item) => <p>{item}</p>}</ReviewList>
+                  <ReviewList title="推荐表达" emptyText="本次没有推荐表达。" items={answerReview.recommendedExpressions}>{(item) => <div><span>{item.formality}</span><strong>{item.expression}</strong><p>{item.usage}</p><p>{item.note}</p></div>}</ReviewList>
+                </div></details>
+              </> : null}
+              <div className="action-row"><button type="button" className="primary-button" disabled={answerScoring || errorConfirming} onClick={handleEditAnswer}>修改答案</button><button type="button" disabled={answerScoring || errorConfirming} onClick={handleClearAnswer}>清空</button></div>
             </div>
-          </section>
+          )}
+        </section>
+      </div>
+    </section>
   )
+}
+
+function ErrorConfirmationModal({ review, candidates, userErrorTypes, userErrorTypesLoading, notice, confirming, selectedCount, onUpdate, onConfirm, onClose }: {
+  review: AnswerReview
+  candidates: ErrorCandidateState[]
+  userErrorTypes: UserErrorType[]
+  userErrorTypesLoading: boolean
+  notice: PracticeNotice | null
+  confirming: boolean
+  selectedCount: number
+  onUpdate: (index: number, patch: Partial<ErrorCandidateState>) => void
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  if (review.errorAnalysis.length === 0) return null
+
+  return <div className="modal-backdrop" role="presentation">
+    <section className="error-confirmation error-confirmation-modal" role="dialog" aria-modal="true" aria-label="记录错误">
+      <header className="modal-header">
+        <div className="section-title"><span className="label">候选错误</span><strong>确认要记录的错误</strong></div>
+        <button type="button" className="modal-close" aria-label="关闭" disabled={confirming} onClick={onClose}>×</button>
+      </header>
+      <div className="error-confirmation-body">
+        <div className="error-confirmation-intro"><span className="candidate-count">已选 {selectedCount} 项</span><p className="error-confirmation-hint">AI 分析仅作候选；勾选并确认后才会写入错题复习。</p></div>
+        {notice ? <Notice notice={notice} /> : null}
+        {review.errorAnalysis.map((analysis, index) => {
+          const candidate = candidates[index]
+          if (!candidate) return null
+          const availableTypes = userErrorTypes
+          return <article key={`${analysis.errorTypeCode}-${index}`} className={candidate.selected ? 'candidate-error-item is-selected' : 'candidate-error-item'}>
+            <div className="candidate-error-header"><label className="candidate-select"><input type="checkbox" checked={candidate.selected || candidate.saved} disabled={candidate.saved || confirming} onChange={(event) => onUpdate(index, { selected: event.target.checked })} /><span>{candidate.saved ? '已记录' : '记录此错误'}</span></label><span>{analysis.errorTypeName} / {analysis.severity}</span></div>
+            <div className="candidate-error-content"><strong>{analysis.original}</strong><p>{analysis.issue}</p><p>{analysis.suggestion}</p></div>
+            {candidate.selected && !candidate.saved ? <div className="candidate-error-controls">
+              <div className="choice-grid" role="radiogroup" aria-label="记录方式"><label><input type="radio" name={`mode-${index}`} checked={candidate.mode === 'NEW_USER_ERROR_TYPE'} onChange={() => onUpdate(index, { mode: 'NEW_USER_ERROR_TYPE' })} />新建用户错误类型</label><label><input type="radio" name={`mode-${index}`} disabled={availableTypes.length === 0 || userErrorTypesLoading} checked={candidate.mode === 'EXISTING_USER_ERROR_TYPE'} onChange={() => onUpdate(index, { mode: 'EXISTING_USER_ERROR_TYPE', userErrorTypeId: '' })} />追加到已有类型</label></div>
+              {candidate.mode === 'NEW_USER_ERROR_TYPE' ? <div className="error-confirmation-fields"><label><span>类型名称</span><input value={candidate.userErrorTypeName} maxLength={128} onChange={(event) => onUpdate(index, { userErrorTypeName: event.target.value })} /></label><label><span>类型说明</span><textarea value={candidate.userErrorTypeDescription} maxLength={255} onChange={(event) => onUpdate(index, { userErrorTypeDescription: event.target.value })} /></label></div> : <label className="existing-error-type-select"><span>错误记录列表</span><select value={candidate.userErrorTypeId} onChange={(event) => onUpdate(index, { userErrorTypeId: event.target.value })}><option value="">请选择要追加的错误记录</option>{availableTypes.map((item) => <option key={item.id} value={item.id}>{item.name}（{item.errorTypeName}）</option>)}</select></label>}
+            </div> : null}
+          </article>
+        })}
+      </div>
+      <footer className="error-confirmation-footer"><button type="button" className="primary-button" disabled={selectedCount === 0 || confirming} onClick={onConfirm}>{confirming ? '记录中' : `确认记录 ${selectedCount} 项`}</button></footer>
+    </section>
+  </div>
+}
+
+function Notice({ notice }: { notice: PracticeNotice }) {
+  return <div className={notice.kind === 'error' ? 'notice is-error' : 'notice'}><strong>{notice.title}</strong><p>{notice.message}</p></div>
+}
+
+function toErrorCandidateState(analysis: AnswerErrorAnalysis): ErrorCandidateState {
+  return { selected: false, saved: false, mode: 'NEW_USER_ERROR_TYPE', userErrorTypeName: analysis.suggestedUserErrorTypeName, userErrorTypeDescription: analysis.suggestedUserErrorTypeDescription, userErrorTypeId: '' }
+}
+
+function toNewErrorConfirmation(analysis: AnswerErrorAnalysis, candidate: ErrorCandidateState, sortOrder: number): UserAnswerErrorConfirmation {
+  return { mode: 'NEW_USER_ERROR_TYPE', errorTypeId: analysis.errorTypeId, userErrorTypeName: candidate.userErrorTypeName.trim(), userErrorTypeDescription: candidate.userErrorTypeDescription.trim(), originalText: analysis.original, issue: analysis.issue, suggestion: analysis.suggestion, severity: analysis.severity, sortOrder }
+}
+
+function toExistingErrorConfirmation(analysis: AnswerErrorAnalysis, candidate: ErrorCandidateState, sortOrder: number): UserAnswerErrorConfirmation {
+  return { mode: 'EXISTING_USER_ERROR_TYPE', userErrorTypeId: Number(candidate.userErrorTypeId), originalText: analysis.original, issue: analysis.issue, suggestion: analysis.suggestion, severity: analysis.severity, sortOrder }
 }
 
 function formatScore(score: number) {

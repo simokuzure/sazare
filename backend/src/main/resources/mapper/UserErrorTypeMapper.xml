@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jt.learning.mapper.UserErrorTypeMapper">
+
+    <insert id="insertUserErrorType" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        insert into user_error_types (
+            user_id,
+            error_type_id,
+            name,
+            description,
+            status,
+            created_at,
+            updated_at
+        ) values (
+            #{userId},
+            #{errorTypeId},
+            #{name},
+            #{description},
+            #{status},
+            #{createdAt},
+            #{updatedAt}
+        )
+    </insert>
+
+    <select id="selectActiveByIdAndUserId" resultType="com.jt.learning.entity.UserErrorType">
+        select
+            id,
+            user_id,
+            error_type_id,
+            name,
+            description,
+            status,
+            created_at,
+            updated_at
+        from user_error_types
+        where id = #{id}
+          and user_id = #{userId}
+          and status = 'ACTIVE'
+    </select>
+
+    <select id="selectByUserIdAndErrorTypeIdAndName" resultType="com.jt.learning.entity.UserErrorType">
+        select
+            id,
+            user_id,
+            error_type_id,
+            name,
+            description,
+            status,
+            created_at,
+            updated_at
+        from user_error_types
+        where user_id = #{userId}
+          and error_type_id = #{errorTypeId}
+          and name = #{name}
+    </select>
+
+    <select id="countUserErrorTypes" resultType="long">
+        select count(1)
+        from user_error_types
+        where user_id = #{userId}
+          and status = #{status}
+    </select>
+
+    <select id="selectUserErrorTypeList" resultType="com.jt.learning.dto.UserErrorTypeListItemRow">
+        select
+            uet.id,
+            uet.error_type_id,
+            et.code as error_type_code,
+            et.name as error_type_name,
+            uet.name,
+            uet.description,
+            uet.status,
+            uet.created_at,
+            uet.updated_at
+        from user_error_types uet
+        inner join error_types et on et.id = uet.error_type_id
+        where uet.user_id = #{userId}
+          and uet.status = #{status}
+        order by uet.updated_at desc, uet.id desc
+        limit #{limit}
+        offset #{offset}
+    </select>
+</mapper>

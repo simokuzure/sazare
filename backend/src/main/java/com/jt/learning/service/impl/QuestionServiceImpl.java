@@ -1,6 +1,7 @@
 package com.jt.learning.service.impl;
 
 import com.jt.learning.dto.AiAnswerErrorAnalysisDTO;
+import com.jt.learning.dto.AiErrorTypeOptionDTO;
 import com.jt.learning.dto.AiAnswerRecommendedExpressionDTO;
 import com.jt.learning.dto.AiAnswerReviewCommentsDTO;
 import com.jt.learning.dto.AiAnswerReviewDTO;
@@ -26,6 +27,7 @@ import com.jt.learning.entity.UserAnswer;
 import com.jt.learning.exception.BusinessException;
 import com.jt.learning.exception.ErrorCode;
 import com.jt.learning.mapper.QuestionAnswerMapper;
+import com.jt.learning.mapper.ErrorTypeMapper;
 import com.jt.learning.mapper.QuestionMapper;
 import com.jt.learning.mapper.QuestionTagMapper;
 import com.jt.learning.mapper.TagMapper;
@@ -78,14 +80,6 @@ public class QuestionServiceImpl implements QuestionService {
     private static final String ANSWER_STATUS_FAILED = "FAILED";
 
     private static final Set<String> VALID_ANSWER_TYPES = Set.of(ANSWER_TYPE_STANDARD, ANSWER_TYPE_REFERENCE);
-    private static final Set<String> VALID_ERROR_TYPES = Set.of(
-            "GRAMMAR",
-            "VOCABULARY",
-            "NATURALNESS",
-            "HONORIFIC",
-            "SCENARIO",
-            "COMPLETENESS"
-    );
     private static final Set<String> VALID_ERROR_SEVERITIES = Set.of("LOW", "MEDIUM", "HIGH");
     private static final Set<String> VALID_FORMALITIES = Set.of("CASUAL", "NEUTRAL", "POLITE", "BUSINESS");
     private static final Pattern CHINESE_PATTERN = Pattern.compile(".*[\\u4e00-\\u9fff].*");
@@ -97,6 +91,7 @@ public class QuestionServiceImpl implements QuestionService {
     private final QuestionTagMapper questionTagMapper;
     private final UserMapper userMapper;
     private final UserAnswerMapper userAnswerMapper;
+    private final ErrorTypeMapper errorTypeMapper;
     private final AiQuestionPromptBuilder promptBuilder;
     private final AiQuestionClient aiQuestionClient;
     private final AiAnswerScoringPromptBuilder answerScoringPromptBuilder;
@@ -110,6 +105,7 @@ public class QuestionServiceImpl implements QuestionService {
             QuestionTagMapper questionTagMapper,
             UserMapper userMapper,
             UserAnswerMapper userAnswerMapper,
+            ErrorTypeMapper errorTypeMapper,
             AiQuestionPromptBuilder promptBuilder,
             AiQuestionClient aiQuestionClient,
             AiAnswerScoringPromptBuilder answerScoringPromptBuilder,
@@ -122,6 +118,7 @@ public class QuestionServiceImpl implements QuestionService {
         this.questionTagMapper = questionTagMapper;
         this.userMapper = userMapper;
         this.userAnswerMapper = userAnswerMapper;
+        this.errorTypeMapper = errorTypeMapper;
         this.promptBuilder = promptBuilder;
         this.aiQuestionClient = aiQuestionClient;
         this.answerScoringPromptBuilder = answerScoringPromptBuilder;
@@ -324,14 +321,26 @@ public class QuestionServiceImpl implements QuestionService {
 
         List<Tag> tags = tagMapper.selectEnabledTagsByQuestionId(questionId);
         List<AiQuestionTagOptionDTO> tagOptions = toTagOptions(tags);
+        List<AiErrorTypeOptionDTO> errorTypeOptions = errorTypeMapper.selectEnabledLeafOptions();
+        if (errorTypeOptions.isEmpty()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "没有可用的二级错误类型");
+        }
+        Map<String, AiErrorTypeOptionDTO> errorTypesByCode = errorTypeOptions.stream()
+                .collect(Collectors.toMap(AiErrorTypeOptionDTO::code, option -> option));
         UserAnswer userAnswer = saveSubmittedAnswer(user.getId(), questionId, request.answerText().trim());
 
         try {
-            AiQuestionPrompt prompt = answerScoringPromptBuilder.build(question, standardAnswers, tagOptions, request);
+            AiQuestionPrompt prompt = answerScoringPromptBuilder.build(
+                    question,
+                    standardAnswers,
+                    tagOptions,
+                    errorTypeOptions,
+                    request
+            );
             AiAnswerScoringResponseDTO aiResponse = parseAiAnswerScoringResponse(
                     aiAnswerScoringClient.scoreAnswer(prompt, request, question, standardAnswers, tagOptions)
             );
-            AiAnswerReviewDTO review = validateAnswerReview(aiResponse);
+            AiAnswerReviewDTO review = validateAnswerReview(aiResponse, errorTypesByCode, userAnswer.getAnswerText());
             BigDecimal totalScore = calculateTotalScore(review.scores());
             LocalDateTime updatedAt = LocalDateTime.now();
             userAnswerMapper.updateReviewed(
@@ -352,7 +361,7 @@ public class QuestionServiceImpl implements QuestionService {
             userAnswer.setTotalScore(totalScore);
             userAnswer.setAiOverallComment(review.overallComment().trim());
             userAnswer.setUpdatedAt(updatedAt);
-            return toAnswerReviewVO(userAnswer, review);
+            return toAnswerReviewVO(userAnswer, review, errorTypesByCode);
         } catch (BusinessException exception) {
             markAnswerReviewFailed(userAnswer);
             throw exception;
@@ -511,7 +520,11 @@ public class QuestionServiceImpl implements QuestionService {
         }
     }
 
-    private AiAnswerReviewDTO validateAnswerReview(AiAnswerScoringResponseDTO aiResponse) {
+    private AiAnswerReviewDTO validateAnswerReview(
+            AiAnswerScoringResponseDTO aiResponse,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode,
+            String answerText
+    ) {
         if (aiResponse.review() == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 review 不能为空");
         }
@@ -525,7 +538,7 @@ public class QuestionServiceImpl implements QuestionService {
         }
         validateRequiredText(review.overallComment(), "AI 评分 overallComment 不能为空");
         validateComments(review.comments());
-        validateErrorAnalysis(review.errorAnalysis());
+        validateErrorAnalysis(review.errorAnalysis(), errorTypesByCode, answerText);
         validateRevisionSuggestions(review.revisionSuggestions());
         validateRecommendedExpressions(review.recommendedExpressions());
         return review;
@@ -557,22 +570,48 @@ public class QuestionServiceImpl implements QuestionService {
         validateRequiredText(comments.scenarioComment(), "AI 评分 scenarioComment 不能为空");
     }
 
-    private void validateErrorAnalysis(List<AiAnswerErrorAnalysisDTO> errorAnalysis) {
+    private void validateErrorAnalysis(
+            List<AiAnswerErrorAnalysisDTO> errorAnalysis,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode,
+            String answerText
+    ) {
         if (errorAnalysis == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis 不能为空");
         }
+        Set<String> errorKeys = new LinkedHashSet<>();
         for (AiAnswerErrorAnalysisDTO error : errorAnalysis) {
             if (error == null) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis 项不能为空");
             }
-            if (!VALID_ERROR_TYPES.contains(error.type())) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis.type 不合法");
+            if (!errorTypesByCode.containsKey(error.errorTypeCode())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis.errorTypeCode 不合法");
             }
             validateRequiredText(error.original(), "AI 评分 errorAnalysis.original 不能为空");
+            if (!answerText.contains(error.original().trim())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis.original 不属于用户答案");
+            }
             validateRequiredText(error.issue(), "AI 评分 errorAnalysis.issue 不能为空");
             validateRequiredText(error.suggestion(), "AI 评分 errorAnalysis.suggestion 不能为空");
             if (!VALID_ERROR_SEVERITIES.contains(error.severity())) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis.severity 不合法");
+            }
+            validateRequiredText(
+                    error.suggestedUserErrorTypeName(),
+                    "AI 评分 errorAnalysis.suggestedUserErrorTypeName 不能为空"
+            );
+            validateRequiredText(
+                    error.suggestedUserErrorTypeDescription(),
+                    "AI 评分 errorAnalysis.suggestedUserErrorTypeDescription 不能为空"
+            );
+            if (error.suggestedUserErrorTypeName().trim().length() > 128) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分建议的用户错误类型名称过长");
+            }
+            if (error.suggestedUserErrorTypeDescription().trim().length() > 255) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分建议的用户错误类型说明过长");
+            }
+            String errorKey = error.errorTypeCode() + "\u0000" + error.original().trim();
+            if (!errorKeys.add(errorKey)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis 存在重复错误");
             }
         }
     }
@@ -940,7 +979,11 @@ public class QuestionServiceImpl implements QuestionService {
         );
     }
 
-    private AnswerReviewVO toAnswerReviewVO(UserAnswer userAnswer, AiAnswerReviewDTO review) {
+    private AnswerReviewVO toAnswerReviewVO(
+            UserAnswer userAnswer,
+            AiAnswerReviewDTO review,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode
+    ) {
         return new AnswerReviewVO(
                 userAnswer.getId(),
                 userAnswer.getQuestionId(),
@@ -950,7 +993,9 @@ public class QuestionServiceImpl implements QuestionService {
                 userAnswer.getTotalScore(),
                 userAnswer.getAiOverallComment(),
                 toAnswerReviewCommentsVO(review.comments()),
-                review.errorAnalysis().stream().map(this::toAnswerErrorAnalysisVO).toList(),
+                review.errorAnalysis().stream()
+                        .map(error -> toAnswerErrorAnalysisVO(error, errorTypesByCode))
+                        .toList(),
                 review.revisionSuggestions().stream().map(String::trim).toList(),
                 review.recommendedExpressions().stream().map(this::toAnswerRecommendedExpressionVO).toList(),
                 userAnswer.getCreatedAt(),
@@ -976,13 +1021,22 @@ public class QuestionServiceImpl implements QuestionService {
         );
     }
 
-    private AnswerErrorAnalysisVO toAnswerErrorAnalysisVO(AiAnswerErrorAnalysisDTO error) {
+    private AnswerErrorAnalysisVO toAnswerErrorAnalysisVO(
+            AiAnswerErrorAnalysisDTO error,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode
+    ) {
+        AiErrorTypeOptionDTO errorType = errorTypesByCode.get(error.errorTypeCode());
         return new AnswerErrorAnalysisVO(
-                error.type(),
+                errorType.code(),
+                errorType.id(),
+                errorType.code(),
+                errorType.name(),
                 error.original().trim(),
                 error.issue().trim(),
                 error.suggestion().trim(),
-                error.severity()
+                error.severity(),
+                error.suggestedUserErrorTypeName().trim(),
+                error.suggestedUserErrorTypeDescription().trim()
         );
     }
 

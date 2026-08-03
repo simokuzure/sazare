@@ -1,6 +1,7 @@
 package com.jt.learning.service.impl;
 
 import com.jt.learning.dto.AiAnswerScoringRequest;
+import com.jt.learning.dto.AiErrorTypeOptionDTO;
 import com.jt.learning.dto.AiQuestionGenerationRequest;
 import com.jt.learning.dto.QuestionAnswerRequest;
 import com.jt.learning.dto.QuestionCreateRequest;
@@ -15,6 +16,7 @@ import com.jt.learning.entity.User;
 import com.jt.learning.entity.UserAnswer;
 import com.jt.learning.exception.BusinessException;
 import com.jt.learning.mapper.QuestionAnswerMapper;
+import com.jt.learning.mapper.ErrorTypeMapper;
 import com.jt.learning.mapper.QuestionMapper;
 import com.jt.learning.mapper.QuestionTagMapper;
 import com.jt.learning.mapper.TagMapper;
@@ -53,6 +55,7 @@ class QuestionServiceImplTest {
     private QuestionTagMapper questionTagMapper;
     private UserMapper userMapper;
     private UserAnswerMapper userAnswerMapper;
+    private ErrorTypeMapper errorTypeMapper;
     private AiQuestionClient aiQuestionClient;
     private AiAnswerScoringClient aiAnswerScoringClient;
     private QuestionServiceImpl questionService;
@@ -65,10 +68,12 @@ class QuestionServiceImplTest {
         questionTagMapper = mock(QuestionTagMapper.class);
         userMapper = mock(UserMapper.class);
         userAnswerMapper = mock(UserAnswerMapper.class);
+        errorTypeMapper = mock(ErrorTypeMapper.class);
         aiQuestionClient = mock(AiQuestionClient.class);
         aiAnswerScoringClient = mock(AiAnswerScoringClient.class);
 
         ObjectMapper objectMapper = new ObjectMapper();
+        when(errorTypeMapper.selectEnabledLeafOptions()).thenReturn(List.of(errorTypeOption()));
         questionService = new QuestionServiceImpl(
                 tagMapper,
                 questionMapper,
@@ -76,6 +81,7 @@ class QuestionServiceImplTest {
                 questionTagMapper,
                 userMapper,
                 userAnswerMapper,
+                errorTypeMapper,
                 new AiQuestionPromptBuilder(objectMapper),
                 aiQuestionClient,
                 new AiAnswerScoringPromptBuilder(objectMapper),
@@ -612,11 +618,13 @@ class QuestionServiceImplTest {
                     },
                     "errorAnalysis": [
                       {
-                        "type": "NATURALNESS",
+                        "errorTypeCode": "UNNATURAL_EXPRESSION",
                         "original": "今日の午後、銀行に送金をしに行きます。",
                         "issue": "表达能传达大意，但整体不够像自然日语。",
                         "suggestion": "参考标准答案调整助词和动词搭配。",
-                        "severity": "MEDIUM"
+                        "severity": "MEDIUM",
+                        "suggestedUserErrorTypeName": "不自然表达",
+                        "suggestedUserErrorTypeDescription": "使用符合日语习惯的表达。"
                       }
                     ],
                     "revisionSuggestions": [
@@ -687,6 +695,17 @@ class QuestionServiceImplTest {
         tag.setEnabled(true);
         tag.setDeleted(false);
         return tag;
+    }
+
+    private AiErrorTypeOptionDTO errorTypeOption() {
+        return new AiErrorTypeOptionDTO(
+                9L,
+                "UNNATURAL_EXPRESSION",
+                "不自然表达",
+                "表达不符合日语习惯",
+                "LEXICAL_EXPRESSION",
+                "词汇与表达"
+        );
     }
 
     private QuestionTagRow tagRow(Long questionId, Long id, String tagType, String code, String name) {

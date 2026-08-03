@@ -134,4 +134,26 @@
           and ua.deleted = false
           and q.deleted = false
     </select>
+
+    <select id="selectActiveUserAnswerById" resultType="com.jt.learning.entity.UserAnswer">
+        select
+            id,
+            user_id,
+            question_id,
+            answer_text,
+            answer_status,
+            grammar_vocabulary_score,
+            natural_fluency_score,
+            scenario_adaptation_score,
+            information_completeness_score,
+            total_score,
+            ai_overall_comment,
+            deleted,
+            created_at,
+            updated_at
+        from user_answers
+        where id = #{id}
+          and user_id = #{userId}
+          and deleted = false
+    </select>
 </mapper>

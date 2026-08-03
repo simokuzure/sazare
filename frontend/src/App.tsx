@@ -61,7 +61,9 @@ function App() {
           </nav>
         </header>
 
-        {activePage === 'practice' ? <PracticePage /> : null}
+        <div hidden={activePage !== 'practice'}>
+          <PracticePage />
+        </div>
         {activePage === 'answerRecords' ? <AnswerRecordsPage /> : null}
         {activePage === 'tags' ? <TagManagementPage /> : null}
         {activePage === 'questions' ? <QuestionManagementPage /> : null}
