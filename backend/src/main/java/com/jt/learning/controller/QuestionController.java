@@ -91,6 +91,39 @@ public class QuestionController {
         return ApiResponse.success(questionService.listQuestions(request));
     }
 
+    @GetMapping("/random")
+    public ApiResponse<QuestionVO> getRandomQuestion(
+            @Pattern(regexp = "TRANSLATION_ZH_TO_JA", message = "questionType 蜿ｪ閭ｽ譏ｯ TRANSLATION_ZH_TO_JA")
+            @RequestParam(defaultValue = "TRANSLATION_ZH_TO_JA") String questionType,
+            @Pattern(regexp = "N5|N4|N3|N2|N1", message = "level 蜿ｪ閭ｽ譏ｯ N5縲¨4縲¨3縲¨2縲¨1")
+            @RequestParam(required = false) String level,
+            @Min(value = 1, message = "difficulty 蠢・｡ｻ蝨ｨ 1 蛻ｰ 5 荵矩龍")
+            @Max(value = 5, message = "difficulty 蠢・｡ｻ蝨ｨ 1 蛻ｰ 5 荵矩龍")
+            @RequestParam(required = false) Integer difficulty,
+            @RequestParam(required = false) List<String> tagCodes,
+            @RequestParam(required = false) Boolean spoken,
+            @RequestParam(required = false) Boolean business,
+            @RequestParam(required = false) Boolean exam,
+            @Pattern(regexp = "AI|MANUAL", message = "sourceType 蜿ｪ閭ｽ譏ｯ AI 謌・MANUAL")
+            @RequestParam(required = false) String sourceType,
+            @RequestParam(defaultValue = "true") Boolean enabled
+    ) {
+        QuestionQueryRequest request = new QuestionQueryRequest(
+                questionType,
+                level,
+                difficulty,
+                tagCodes,
+                spoken,
+                business,
+                exam,
+                sourceType,
+                enabled,
+                1,
+                1
+        );
+        return ApiResponse.success(questionService.getRandomQuestion(request));
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<QuestionVO> getQuestion(
             @Positive(message = "id 必须大于 0") @PathVariable Long id

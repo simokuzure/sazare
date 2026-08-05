@@ -53,6 +53,12 @@ export type QuestionFilterState = {
   size: number
 }
 
+export type RandomQuestionFilter = {
+  level: string
+  difficulty: string
+  tagCodes: string[]
+}
+
 export type AiQuestionGenerationPayload = {
   questionCount?: number
   level?: string

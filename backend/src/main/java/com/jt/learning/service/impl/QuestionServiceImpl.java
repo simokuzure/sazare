@@ -207,6 +207,23 @@ public class QuestionServiceImpl implements QuestionService {
             return new PageVO<>(List.of(), normalizedRequest.page(), normalizedRequest.size(), total);
         }
 
+        List<QuestionVO> items = loadQuestionVOs(questionIds);
+        return new PageVO<>(items, normalizedRequest.page(), normalizedRequest.size(), total);
+    }
+
+    @Override
+    public QuestionVO getRandomQuestion(QuestionQueryRequest request) {
+        QuestionQueryRequest normalizedRequest = normalizeQueryRequest(request);
+        Long questionId = questionMapper.selectRandomQuestionId(normalizedRequest);
+        if (questionId == null) {
+            return null;
+        }
+
+        List<QuestionVO> questions = loadQuestionVOs(List.of(questionId));
+        return questions.isEmpty() ? null : questions.getFirst();
+    }
+
+    private List<QuestionVO> loadQuestionVOs(List<Long> questionIds) {
         List<Question> questions = questionMapper.selectQuestionsByIds(questionIds);
         Map<Long, List<QuestionTagRow>> tagsByQuestionId = tagMapper.selectEnabledTagsByQuestionIds(questionIds)
                 .stream()
@@ -230,7 +247,7 @@ public class QuestionServiceImpl implements QuestionService {
                         answersByQuestionId.getOrDefault(question.getId(), List.of())
                 ))
                 .toList();
-        return new PageVO<>(items, normalizedRequest.page(), normalizedRequest.size(), total);
+        return items;
     }
 
     @Override

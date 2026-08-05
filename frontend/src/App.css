@@ -183,13 +183,14 @@ button:disabled {
 
 .generator-panel .form-grid {
   grid-template-columns:
-    minmax(74px, 0.6fr)
-    minmax(96px, 0.72fr)
-    minmax(74px, 0.6fr)
+    minmax(64px, 0.5fr)
+    minmax(82px, 0.58fr)
+    minmax(64px, 0.5fr)
     minmax(94px, 0.82fr)
     minmax(94px, 0.82fr)
-    minmax(170px, 1.5fr)
-    minmax(96px, 0.72fr);
+    minmax(150px, 1.3fr)
+    minmax(88px, 0.68fr)
+    minmax(88px, 0.68fr);
   gap: 12px;
 }
 
@@ -197,7 +198,7 @@ button:disabled {
   grid-column: auto;
 }
 
-.generator-panel .primary-button {
+.generator-panel button {
   width: 100%;
 }
 

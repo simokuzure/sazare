@@ -353,6 +353,66 @@ class QuestionServiceImplTest {
     }
 
     @Test
+    void getRandomQuestionShouldReturnQuestionWithTagsAndAnswers() {
+        Question question = question(100L);
+        QuestionAnswer answer = answer(200L, "今日の午後、銀行へ振り込みに行きます。");
+        QuestionTagRow tag = tagRow(100L, 1L, "SCENE", "FINANCE_BANK", "银行");
+        when(questionMapper.selectRandomQuestionId(any())).thenReturn(100L);
+        when(questionMapper.selectQuestionsByIds(List.of(100L))).thenReturn(List.of(question));
+        when(tagMapper.selectEnabledTagsByQuestionIds(List.of(100L))).thenReturn(List.of(tag));
+        when(questionAnswerMapper.selectActiveAnswersByQuestionIds(List.of(100L))).thenReturn(List.of(answer));
+
+        QuestionVO result = questionService.getRandomQuestion(new QuestionQueryRequest(
+                null,
+                "N4",
+                null,
+                List.of("FINANCE_BANK,FUNCTION_EXPRESS_PLAN"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+
+        assertThat(result).isNotNull();
+        assertThat(result.id()).isEqualTo(100L);
+        assertThat(result.tags()).extracting("code").containsExactly("FINANCE_BANK");
+        assertThat(result.answers()).extracting("answerText")
+                .containsExactly("今日の午後、銀行へ振り込みに行きます。");
+
+        ArgumentCaptor<QuestionQueryRequest> requestCaptor = ArgumentCaptor.forClass(QuestionQueryRequest.class);
+        verify(questionMapper).selectRandomQuestionId(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().tagCodes())
+                .containsExactly("FINANCE_BANK", "FUNCTION_EXPRESS_PLAN");
+    }
+
+    @Test
+    void getRandomQuestionShouldReturnNullWhenNoQuestionMatched() {
+        when(questionMapper.selectRandomQuestionId(any())).thenReturn(null);
+
+        QuestionVO result = questionService.getRandomQuestion(new QuestionQueryRequest(
+                null,
+                "N1",
+                5,
+                List.of("UNKNOWN_SCENE"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+
+        assertThat(result).isNull();
+        verify(questionMapper, never()).selectQuestionsByIds(anyList());
+        verify(tagMapper, never()).selectEnabledTagsByQuestionIds(anyList());
+        verify(questionAnswerMapper, never()).selectActiveAnswersByQuestionIds(anyList());
+    }
+
+    @Test
     void updateQuestionShouldReplaceAnswersAndTags() {
         Question existingQuestion = question(100L);
         existingQuestion.setSourceType("AI");

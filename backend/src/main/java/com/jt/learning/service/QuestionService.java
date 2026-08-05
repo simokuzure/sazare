@@ -20,6 +20,8 @@ public interface QuestionService {
 
     PageVO<QuestionVO> listQuestions(QuestionQueryRequest request);
 
+    QuestionVO getRandomQuestion(QuestionQueryRequest request);
+
     QuestionVO getQuestion(Long id);
 
     QuestionVO updateQuestion(Long id, QuestionUpdateRequest request);

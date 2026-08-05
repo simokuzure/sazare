@@ -25,6 +25,8 @@ public interface QuestionMapper {
             @Param("offset") long offset
     );
 
+    Long selectRandomQuestionId(@Param("request") QuestionQueryRequest request);
+
     List<Question> selectQuestionsByIds(@Param("ids") List<Long> ids);
 
     int updateQuestion(Question question);

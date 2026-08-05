@@ -128,6 +128,14 @@
         offset #{offset}
     </select>
 
+    <select id="selectRandomQuestionId" resultType="long">
+        select q.id
+        from questions q
+        <include refid="questionFilterClause" />
+        order by random()
+        limit 1
+    </select>
+
     <select id="selectQuestionsByIds" resultType="com.jt.learning.entity.Question">
         select
             <include refid="questionColumns" />

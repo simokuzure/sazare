@@ -1,7 +1,7 @@
 import { readApiResponse } from './client'
 import type { PageData } from '../types/api'
 import type { AnswerReview } from '../types/review'
-import type { AiQuestionGenerationPayload, Question, QuestionFilterState, QuestionPayload } from '../types/question'
+import type { AiQuestionGenerationPayload, Question, QuestionFilterState, QuestionPayload, RandomQuestionFilter } from '../types/question'
 
 export function parseCodeList(value: string) {
   return value
@@ -60,6 +60,25 @@ export async function fetchQuestions(filters: QuestionFilterState, signal?: Abor
   const response = await fetch(`/api/questions?${searchParams.toString()}`, { signal })
   const result = await readApiResponse<PageData<Question>>(response)
   return result.data ?? { items: [], page: filters.page, size: filters.size, total: 0 }
+}
+
+export async function fetchRandomQuestion(filters: RandomQuestionFilter): Promise<Question | null> {
+  const searchParams = new URLSearchParams({
+    questionType: 'TRANSLATION_ZH_TO_JA',
+  })
+  if (filters.level) {
+    searchParams.set('level', filters.level)
+  }
+  if (filters.difficulty) {
+    searchParams.set('difficulty', filters.difficulty)
+  }
+  if (filters.tagCodes.length > 0) {
+    searchParams.set('tagCodes', filters.tagCodes.join(','))
+  }
+
+  const response = await fetch(`/api/questions/random?${searchParams.toString()}`)
+  const result = await readApiResponse<Question>(response)
+  return result.data
 }
 
 export async function fetchQuestion(questionId: number): Promise<Question | null> {

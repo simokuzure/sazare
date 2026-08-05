@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getErrorMessage } from '../api/client'
 import { confirmUserAnswerErrors, fetchUserErrorTypes } from '../api/userErrorApi'
-import { generateQuestions, submitQuestionAnswer } from '../api/questionApi'
+import { fetchRandomQuestion, generateQuestions, submitQuestionAnswer } from '../api/questionApi'
 import { fetchTags } from '../api/tagApi'
 import ReviewList from '../components/ReviewList'
 import type { PracticeNotice } from '../types/api'
 import type { Tag } from '../types/tag'
-import type { AiQuestionGenerationPayload, Question } from '../types/question'
+import type { AiQuestionGenerationPayload, Question, RandomQuestionFilter } from '../types/question'
 import type { AnswerErrorAnalysis, AnswerReview } from '../types/review'
 import type { UserAnswerErrorConfirmation, UserErrorType } from '../types/userError'
 
@@ -17,6 +17,28 @@ type ErrorCandidateState = {
   userErrorTypeName: string
   userErrorTypeDescription: string
   userErrorTypeId: string
+}
+
+type AnswerSessionState = {
+  answerText: string
+  answerSubmitted: boolean
+  answerScoring: boolean
+  answerReview: AnswerReview | null
+  answerNotice: PracticeNotice | null
+  errorCandidates: ErrorCandidateState[]
+  errorConfirmationNotice: PracticeNotice | null
+  errorConfirmationOpen: boolean
+}
+
+const EMPTY_ANSWER_SESSION: AnswerSessionState = {
+  answerText: '',
+  answerSubmitted: false,
+  answerScoring: false,
+  answerReview: null,
+  answerNotice: null,
+  errorCandidates: [],
+  errorConfirmationNotice: null,
+  errorConfirmationOpen: false,
 }
 
 export default function PracticePage() {
@@ -32,17 +54,12 @@ export default function PracticePage() {
   const [generatedQuestions, setGeneratedQuestions] = useState<Question[]>([])
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0)
   const [questionGenerating, setQuestionGenerating] = useState(false)
-  const [answerText, setAnswerText] = useState('')
-  const [answerSubmitted, setAnswerSubmitted] = useState(false)
-  const [answerScoring, setAnswerScoring] = useState(false)
-  const [answerReview, setAnswerReview] = useState<AnswerReview | null>(null)
+  const [questionRandomizing, setQuestionRandomizing] = useState(false)
+  const [answerSessions, setAnswerSessions] = useState<Record<number, AnswerSessionState>>({})
   const [practiceNotice, setPracticeNotice] = useState<PracticeNotice | null>(null)
-  const [errorCandidates, setErrorCandidates] = useState<ErrorCandidateState[]>([])
   const [userErrorTypes, setUserErrorTypes] = useState<UserErrorType[]>([])
   const [userErrorTypesLoading, setUserErrorTypesLoading] = useState(false)
-  const [errorConfirmationNotice, setErrorConfirmationNotice] = useState<PracticeNotice | null>(null)
   const [errorConfirming, setErrorConfirming] = useState(false)
-  const [errorConfirmationOpen, setErrorConfirmationOpen] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -72,7 +89,21 @@ export default function PracticePage() {
     [sceneChildTags, sceneParentId],
   )
   const selectedQuestion = generatedQuestions[selectedQuestionIndex] ?? null
+  const selectedQuestionId = selectedQuestion?.id ?? null
+  const answerSession = selectedQuestionId ? answerSessions[selectedQuestionId] ?? EMPTY_ANSWER_SESSION : EMPTY_ANSWER_SESSION
+  const {
+    answerText,
+    answerSubmitted,
+    answerScoring,
+    answerReview,
+    answerNotice,
+    errorCandidates,
+    errorConfirmationNotice,
+    errorConfirmationOpen,
+  } = answerSession
+  const answerInputNotice = answerNotice ?? practiceNotice
   const selectedErrorCount = errorCandidates.filter((candidate) => candidate.selected && !candidate.saved).length
+  const questionLoading = questionGenerating || questionRandomizing
 
   async function handleGenerateQuestion() {
     setQuestionGenerating(true)
@@ -81,7 +112,7 @@ export default function PracticePage() {
       const questions = await generateQuestions(buildAiQuestionGenerationPayload())
       setGeneratedQuestions(questions)
       setSelectedQuestionIndex(0)
-      clearAnswerResult()
+      setAnswerSessions({})
       setPracticeNotice({
         kind: 'info',
         title: questions.length > 0 ? '题目已生成' : '未生成题目',
@@ -90,17 +121,60 @@ export default function PracticePage() {
     } catch (fetchError: unknown) {
       setGeneratedQuestions([])
       setSelectedQuestionIndex(0)
-      clearAnswerResult()
+      setAnswerSessions({})
       setPracticeNotice({ kind: 'error', title: '生成失败', message: getErrorMessage(fetchError) })
     } finally {
       setQuestionGenerating(false)
     }
   }
 
+  async function handleRandomQuestion() {
+    const filters = buildRandomQuestionFilter()
+    if (sceneParentId && !sceneTagCode && filters.tagCodes.length === 0) {
+      setGeneratedQuestions([])
+      setSelectedQuestionIndex(0)
+      setAnswerSessions({})
+      setPracticeNotice({ kind: 'info', title: '未找到题目', message: '当前一级场景下没有可用二级场景，请调整筛选条件。' })
+      return
+    }
+
+    setQuestionRandomizing(true)
+    setPracticeNotice(null)
+    try {
+      const question = await fetchRandomQuestion(filters)
+      setGeneratedQuestions(question ? [question] : [])
+      setSelectedQuestionIndex(0)
+      setAnswerSessions({})
+      setPracticeNotice({
+        kind: 'info',
+        title: question ? '题目已抽取' : '未找到题目',
+        message: question ? `已随机抽取题目 #${question.id}。` : '当前筛选条件下没有可用题目。',
+      })
+    } catch (fetchError: unknown) {
+      setGeneratedQuestions([])
+      setSelectedQuestionIndex(0)
+      setAnswerSessions({})
+      setPracticeNotice({ kind: 'error', title: '抽题失败', message: getErrorMessage(fetchError) })
+    } finally {
+      setQuestionRandomizing(false)
+    }
+  }
+
   function handleSelectQuestion(index: number) {
     setSelectedQuestionIndex(index)
-    clearAnswerResult()
     setPracticeNotice(null)
+  }
+
+  function updateAnswerSession(questionId: number, updater: (session: AnswerSessionState) => AnswerSessionState) {
+    setAnswerSessions((sessions) => ({
+      ...sessions,
+      [questionId]: updater(sessions[questionId] ?? EMPTY_ANSWER_SESSION),
+    }))
+  }
+
+  function updateSelectedAnswerSession(updater: (session: AnswerSessionState) => AnswerSessionState) {
+    if (selectedQuestionId === null) return
+    updateAnswerSession(selectedQuestionId, updater)
   }
 
   async function handleSubmitAnswer() {
@@ -111,31 +185,46 @@ export default function PracticePage() {
 
     const submittedAnswer = answerText.trim()
     if (!submittedAnswer) {
-      setPracticeNotice({ kind: 'error', title: '请填写答案', message: '输入日语答案后再提交。' })
+      updateSelectedAnswerSession((session) => ({
+        ...session,
+        answerNotice: { kind: 'error', title: '请填写答案', message: '输入日语答案后再提交。' },
+      }))
       return
     }
 
-    setAnswerText(submittedAnswer)
-    setAnswerSubmitted(true)
-    setAnswerScoring(true)
-    setAnswerReview(null)
-    setErrorCandidates([])
-    setErrorConfirmationNotice(null)
+    const questionId = selectedQuestion.id
+    updateAnswerSession(questionId, (session) => ({
+      ...session,
+      answerText: submittedAnswer,
+      answerSubmitted: true,
+      answerScoring: true,
+      answerReview: null,
+      answerNotice: null,
+      errorCandidates: [],
+      errorConfirmationNotice: null,
+      errorConfirmationOpen: false,
+    }))
     setPracticeNotice(null)
 
     try {
-      const review = await submitQuestionAnswer(selectedQuestion.id, submittedAnswer)
-      setAnswerReview(review)
-      if (review?.errorAnalysis.length) setErrorCandidates(review.errorAnalysis.map(toErrorCandidateState))
-      setPracticeNotice({
-        kind: 'info',
-        title: '评分完成',
-        message: review ? `本次总分：${formatScore(review.totalScore)}` : '未获得评分结果。',
-      })
+      const review = await submitQuestionAnswer(questionId, submittedAnswer)
+      updateAnswerSession(questionId, (session) => ({
+        ...session,
+        answerReview: review,
+        answerNotice: {
+          kind: 'info',
+          title: '评分完成',
+          message: review ? `本次总分：${formatScore(review.totalScore)}` : '未获得评分结果。',
+        },
+        errorCandidates: review?.errorAnalysis.length ? review.errorAnalysis.map(toErrorCandidateState) : [],
+      }))
     } catch (fetchError: unknown) {
-      setPracticeNotice({ kind: 'error', title: '评分失败', message: getErrorMessage(fetchError) })
+      updateAnswerSession(questionId, (session) => ({
+        ...session,
+        answerNotice: { kind: 'error', title: '评分失败', message: getErrorMessage(fetchError) },
+      }))
     } finally {
-      setAnswerScoring(false)
+      updateAnswerSession(questionId, (session) => ({ ...session, answerScoring: false }))
     }
   }
 
@@ -146,14 +235,17 @@ export default function PracticePage() {
       setUserErrorTypes(result.items)
     } catch (fetchError: unknown) {
       setUserErrorTypes([])
-      setErrorConfirmationNotice({ kind: 'error', title: '无法加载已有类型', message: getErrorMessage(fetchError) })
+      updateSelectedAnswerSession((session) => ({
+        ...session,
+        errorConfirmationNotice: { kind: 'error', title: '无法加载已有类型', message: getErrorMessage(fetchError) },
+      }))
     } finally {
       setUserErrorTypesLoading(false)
     }
   }
 
   async function handleConfirmErrors() {
-    if (!answerReview) return
+    if (!answerReview || selectedQuestionId === null) return
     const selectedItems = answerReview.errorAnalysis
       .map((analysis, index) => ({ analysis, candidate: errorCandidates[index], index }))
       .filter(({ candidate }) => candidate?.selected && !candidate.saved)
@@ -164,69 +256,84 @@ export default function PracticePage() {
     for (const { analysis, candidate, index } of selectedItems) {
       if (candidate.mode === 'NEW_USER_ERROR_TYPE') {
         if (!candidate.userErrorTypeName.trim() || !candidate.userErrorTypeDescription.trim()) {
-          setErrorConfirmationNotice({ kind: 'error', title: '请补充用户错误类型', message: '新建类型需要名称和说明。' })
+          updateSelectedAnswerSession((session) => ({
+            ...session,
+            errorConfirmationNotice: { kind: 'error', title: '请补充用户错误类型', message: '新建类型需要名称和说明。' },
+          }))
           return
         }
         payload.push(toNewErrorConfirmation(analysis, candidate, index))
       } else {
         if (!candidate.userErrorTypeId) {
-          setErrorConfirmationNotice({ kind: 'error', title: '请选择已有类型', message: '追加记录前请选择对应的用户错误类型。' })
+          updateSelectedAnswerSession((session) => ({
+            ...session,
+            errorConfirmationNotice: { kind: 'error', title: '请选择已有类型', message: '追加记录前请选择对应的用户错误类型。' },
+          }))
           return
         }
         payload.push(toExistingErrorConfirmation(analysis, candidate, index))
       }
     }
 
+    const questionId = selectedQuestionId
     setErrorConfirming(true)
-    setErrorConfirmationNotice(null)
+    updateAnswerSession(questionId, (session) => ({ ...session, errorConfirmationNotice: null }))
     try {
       await confirmUserAnswerErrors(answerReview.userAnswerId, { errors: payload })
       const confirmedIndexes = new Set(selectedItems.map(({ index }) => index))
-      setErrorCandidates((items) => items.map((item, index) => (
-        confirmedIndexes.has(index) ? { ...item, selected: false, saved: true } : item
-      )))
-      setErrorConfirmationNotice({ kind: 'info', title: '错误已记录', message: `已确认 ${selectedItems.length} 条错误。` })
+      updateAnswerSession(questionId, (session) => ({
+        ...session,
+        errorCandidates: session.errorCandidates.map((item, index) => (
+          confirmedIndexes.has(index) ? { ...item, selected: false, saved: true } : item
+        )),
+        errorConfirmationNotice: { kind: 'info', title: '错误已记录', message: `已确认 ${selectedItems.length} 条错误。` },
+        errorConfirmationOpen: false,
+      }))
       void loadActiveUserErrorTypes()
-      setErrorConfirmationOpen(false)
     } catch (fetchError: unknown) {
-      setErrorConfirmationNotice({ kind: 'error', title: '记录失败', message: getErrorMessage(fetchError) })
+      updateAnswerSession(questionId, (session) => ({
+        ...session,
+        errorConfirmationNotice: { kind: 'error', title: '记录失败', message: getErrorMessage(fetchError) },
+      }))
     } finally {
       setErrorConfirming(false)
     }
   }
 
   function updateErrorCandidate(index: number, patch: Partial<ErrorCandidateState>) {
-    setErrorCandidates((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item))
-    setErrorConfirmationNotice(null)
+    updateSelectedAnswerSession((session) => ({
+      ...session,
+      errorCandidates: session.errorCandidates.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item),
+      errorConfirmationNotice: null,
+    }))
   }
 
   function handleOpenErrorConfirmation() {
-    setErrorConfirmationNotice(null)
-    setErrorConfirmationOpen(true)
+    updateSelectedAnswerSession((session) => ({
+      ...session,
+      errorConfirmationNotice: null,
+      errorConfirmationOpen: true,
+    }))
     void loadActiveUserErrorTypes()
   }
 
   function handleClearAnswer() {
-    clearAnswerResult()
+    updateSelectedAnswerSession(() => EMPTY_ANSWER_SESSION)
     setPracticeNotice(null)
   }
 
   function handleEditAnswer() {
-    setAnswerSubmitted(false)
-    setAnswerReview(null)
-    setErrorCandidates([])
-    setErrorConfirmationNotice(null)
-    setErrorConfirmationOpen(false)
+    updateSelectedAnswerSession((session) => ({
+      ...session,
+      answerSubmitted: false,
+      answerScoring: false,
+      answerReview: null,
+      answerNotice: null,
+      errorCandidates: [],
+      errorConfirmationNotice: null,
+      errorConfirmationOpen: false,
+    }))
     setPracticeNotice(null)
-  }
-
-  function clearAnswerResult() {
-    setAnswerText('')
-    setAnswerSubmitted(false)
-    setAnswerReview(null)
-    setErrorCandidates([])
-    setErrorConfirmationNotice(null)
-    setErrorConfirmationOpen(false)
   }
 
   function buildAiQuestionGenerationPayload() {
@@ -240,6 +347,24 @@ export default function PracticePage() {
     return payload
   }
 
+  function buildRandomQuestionFilter(): RandomQuestionFilter {
+    return {
+      level,
+      difficulty,
+      tagCodes: buildRandomQuestionTagCodes(),
+    }
+  }
+
+  function buildRandomQuestionTagCodes() {
+    if (sceneTagCode) {
+      return [sceneTagCode]
+    }
+    if (!sceneParentId) {
+      return []
+    }
+    return selectedSceneChildTags.map((tag) => tag.code)
+  }
+
   return (
     <section className="page-content" aria-label="练习">
       <div className="practice-grid">
@@ -251,7 +376,8 @@ export default function PracticePage() {
             <label><span>场景一级</span><select value={sceneParentId} disabled={practiceTagsLoading} onChange={(event) => { setSceneParentId(event.target.value); setSceneTagCode('') }}><option value="">{practiceTagsLoading ? '加载中' : '不限场景'}</option>{sceneParentTags.map((tag) => <option key={tag.id} value={tag.id}>{tag.name}</option>)}</select></label>
             <label><span>场景二级</span><select value={sceneTagCode} disabled={practiceTagsLoading || !sceneParentId} onChange={(event) => setSceneTagCode(event.target.value)}><option value="">{practiceTagsLoading ? '加载中' : sceneParentId ? '不限场景' : '请先选择一级场景'}</option>{selectedSceneChildTags.map((tag) => <option key={tag.id} value={tag.code}>{tag.name}</option>)}</select></label>
             <label className="wide-field"><span>补充要求</span><input value={extraRequirements} maxLength={500} placeholder="例如：使用敬语、指定场景或语法点" onChange={(event) => setExtraRequirements(event.target.value)} /></label>
-            <button type="button" className="primary-button" disabled={questionGenerating} onClick={handleGenerateQuestion}>{questionGenerating ? '生成中' : '生成题目'}</button>
+            <button type="button" disabled={questionLoading} onClick={handleRandomQuestion}>{questionRandomizing ? '抽题中' : '随机题目'}</button>
+            <button type="button" className="primary-button" disabled={questionLoading} onClick={handleGenerateQuestion}>{questionGenerating ? '生成中' : '生成题目'}</button>
           </form>
           {practiceTagsError ? <div className="error-message">标签加载失败：{practiceTagsError}</div> : null}
         </section>
@@ -272,13 +398,13 @@ export default function PracticePage() {
           <div className="section-title"><span className="label">{answerSubmitted ? '评分结果' : '作答'}</span><strong>{answerSubmitted ? '本次作答结果' : '输入日语答案'}</strong></div>
           {!answerSubmitted ? (
             <>
-              {practiceNotice && (practiceNotice.kind === 'error' || !selectedQuestion) ? <Notice notice={practiceNotice} /> : null}
-              <textarea value={answerText} disabled={!selectedQuestion} placeholder={selectedQuestion ? '请输入日语答案' : '生成题目后即可作答'} onChange={(event) => setAnswerText(event.target.value)} />
+              {answerInputNotice && (answerInputNotice.kind === 'error' || !selectedQuestion) ? <Notice notice={answerInputNotice} /> : null}
+              <textarea value={answerText} disabled={!selectedQuestion} placeholder={selectedQuestion ? '请输入日语答案' : '生成题目后即可作答'} onChange={(event) => updateSelectedAnswerSession((session) => ({ ...session, answerText: event.target.value }))} />
               <div className="action-row"><button type="button" className="primary-button" disabled={!selectedQuestion || answerScoring} onClick={handleSubmitAnswer}>{answerScoring ? '评分中' : '提交答案'}</button><button type="button" disabled={!selectedQuestion && !answerText} onClick={handleClearAnswer}>清空</button></div>
             </>
           ) : (
             <div className="answer-result">
-              {practiceNotice && (!answerReview || practiceNotice.kind === 'error') ? <Notice notice={practiceNotice} /> : null}
+              {answerNotice && (!answerReview || answerNotice.kind === 'error') ? <Notice notice={answerNotice} /> : null}
               {answerScoring ? <div className="notice"><strong>评分中</strong><p>正在分析本次作答。</p></div> : null}
               <section className="submitted-answer"><span className="label">你的答案</span><p>{answerText}</p></section>
               {answerReview ? <>
@@ -294,7 +420,7 @@ export default function PracticePage() {
                     selectedCount={selectedErrorCount}
                     onUpdate={updateErrorCandidate}
                     onConfirm={handleConfirmErrors}
-                    onClose={() => setErrorConfirmationOpen(false)}
+                    onClose={() => updateSelectedAnswerSession((session) => ({ ...session, errorConfirmationOpen: false }))}
                   />
                 ) : null}
                 <details className="review-detail"><summary>详细评分说明</summary><div className="review-result">
