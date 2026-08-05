@@ -24,6 +24,7 @@ import com.jt.learning.mapper.UserAnswerMapper;
 import com.jt.learning.mapper.UserErrorTypeMapper;
 import com.jt.learning.mapper.UserMapper;
 import com.jt.learning.service.UserAnswerService;
+import com.jt.learning.service.ReviewService;
 import com.jt.learning.vo.AnswerScoresVO;
 import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.QuestionAnswerVO;
@@ -54,6 +55,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     private final ErrorTypeMapper errorTypeMapper;
     private final UserErrorTypeMapper userErrorTypeMapper;
     private final UserAnswerErrorMapper userAnswerErrorMapper;
+    private final ReviewService reviewService;
 
     public UserAnswerServiceImpl(
             UserMapper userMapper,
@@ -62,7 +64,8 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             QuestionAnswerMapper questionAnswerMapper,
             ErrorTypeMapper errorTypeMapper,
             UserErrorTypeMapper userErrorTypeMapper,
-            UserAnswerErrorMapper userAnswerErrorMapper
+            UserAnswerErrorMapper userAnswerErrorMapper,
+            ReviewService reviewService
     ) {
         this.userMapper = userMapper;
         this.userAnswerMapper = userAnswerMapper;
@@ -71,6 +74,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         this.errorTypeMapper = errorTypeMapper;
         this.userErrorTypeMapper = userErrorTypeMapper;
         this.userAnswerErrorMapper = userAnswerErrorMapper;
+        this.reviewService = reviewService;
     }
 
     @Override
@@ -132,9 +136,16 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         }
 
         LocalDateTime now = LocalDateTime.now();
-        return request.errors().stream()
+        List<UserAnswerErrorVO> savedErrors = request.errors().stream()
                 .map(item -> saveConfirmedError(user, userAnswer, item, now))
                 .toList();
+        savedErrors.stream()
+                .map(UserAnswerErrorVO::userErrorTypeId)
+                .distinct()
+                .sorted()
+                .forEach(userErrorTypeId -> reviewService.recordPracticeError(
+                        user.getId(), userAnswer.getId(), userAnswer.getQuestionId(), userErrorTypeId, now));
+        return savedErrors;
     }
 
     @Override

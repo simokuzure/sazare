@@ -25,7 +25,7 @@ public record QuestionQueryRequest(
 
         Boolean exam,
 
-        @Pattern(regexp = "AI|MANUAL", message = "sourceType 只能是 AI 或 MANUAL")
+        @Pattern(regexp = "AI|MANUAL|REVIEW_DERIVED", message = "sourceType 只能是 AI、MANUAL 或 REVIEW_DERIVED")
         String sourceType,
 
         Boolean enabled,

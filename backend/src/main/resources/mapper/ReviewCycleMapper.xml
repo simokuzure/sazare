@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jt.learning.mapper.ReviewCycleMapper">
+
+    <sql id="cycleColumns">
+        id, review_card_id, cycle_no, status, target_success_count, successful_review_count,
+        verification_required_after, started_at, completed_at, created_at, updated_at
+    </sql>
+
+    <insert id="insertCycle" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        insert into review_cycles (
+            review_card_id, cycle_no, status, target_success_count, successful_review_count,
+            verification_required_after, started_at, completed_at, created_at, updated_at
+        ) values (
+            #{reviewCardId}, #{cycleNo}, #{status}, #{targetSuccessCount}, #{successfulReviewCount},
+            #{verificationRequiredAfter}, #{startedAt}, #{completedAt}, #{createdAt}, #{updatedAt}
+        )
+    </insert>
+
+    <select id="selectCurrentByCardId" resultType="com.jt.learning.entity.ReviewCycle">
+        select <include refid="cycleColumns" />
+        from review_cycles
+        where review_card_id = #{reviewCardId} and status = 'IN_PROGRESS'
+    </select>
+
+    <select id="selectLatestByCardId" resultType="com.jt.learning.entity.ReviewCycle">
+        select <include refid="cycleColumns" />
+        from review_cycles
+        where review_card_id = #{reviewCardId}
+        order by cycle_no desc
+        limit 1
+    </select>
+
+    <select id="selectCurrentForUpdateByCardId" resultType="com.jt.learning.entity.ReviewCycle">
+        select <include refid="cycleColumns" />
+        from review_cycles
+        where review_card_id = #{reviewCardId} and status = 'IN_PROGRESS'
+        for update
+    </select>
+
+    <select id="selectMaxCycleNo" resultType="int">
+        select coalesce(max(cycle_no), 0)
+        from review_cycles
+        where review_card_id = #{reviewCardId}
+    </select>
+
+    <update id="updateProgress">
+        update review_cycles
+        set target_success_count = #{targetSuccessCount},
+            successful_review_count = #{successfulReviewCount},
+            verification_required_after = #{verificationRequiredAfter},
+            updated_at = #{updatedAt}
+        where id = #{id} and status = 'IN_PROGRESS'
+    </update>
+
+    <update id="completeCycle">
+        update review_cycles
+        set status = 'COMPLETED', completed_at = #{completedAt}, updated_at = #{completedAt}
+        where id = #{id} and status = 'IN_PROGRESS'
+    </update>
+</mapper>

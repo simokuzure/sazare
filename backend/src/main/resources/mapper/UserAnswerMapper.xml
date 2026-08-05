@@ -106,6 +106,15 @@
           and deleted = false
     </update>
 
+    <update id="updateReviewEvaluated">
+        update user_answers
+        set answer_status = 'REVIEWED',
+            ai_overall_comment = #{aiOverallComment},
+            updated_at = #{updatedAt}
+        where id = #{id}
+          and deleted = false
+    </update>
+
     <select id="countUserAnswers" resultType="long">
         select count(1)
         from user_answers ua

@@ -2,11 +2,17 @@ package com.jt.learning.config;
 
 import com.jt.learning.service.AiQuestionClient;
 import com.jt.learning.service.AiAnswerScoringClient;
+import com.jt.learning.service.AiReviewQuestionClient;
+import com.jt.learning.service.AiReviewScoringClient;
 import com.jt.learning.service.impl.GoogleAiAnswerScoringClient;
 import com.jt.learning.service.impl.GoogleAiQuestionClient;
+import com.jt.learning.service.impl.GoogleAiReviewQuestionClient;
+import com.jt.learning.service.impl.GoogleAiReviewScoringClient;
 import com.jt.learning.service.impl.JavaAiProviderHttpClient;
 import com.jt.learning.service.impl.MockAiAnswerScoringClient;
 import com.jt.learning.service.impl.MockAiQuestionClient;
+import com.jt.learning.service.impl.MockAiReviewQuestionClient;
+import com.jt.learning.service.impl.MockAiReviewScoringClient;
 import com.jt.learning.service.impl.AiProviderHttpClient;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -60,6 +66,40 @@ public class AiClientConfig {
                     aiProperties.getProviders().getGoogle(),
                     objectMapper,
                     aiProviderHttpClient
+                )
+        );
+    }
+
+    @Bean
+    public AiReviewScoringClient aiReviewScoringClient(
+            AiProperties aiProperties,
+            ObjectMapper objectMapper,
+            AiProviderHttpClient aiProviderHttpClient
+    ) {
+        return createClient(
+                aiProperties,
+                () -> new MockAiReviewScoringClient(objectMapper),
+                () -> new GoogleAiReviewScoringClient(
+                        aiProperties.getProviders().getGoogle(),
+                        objectMapper,
+                        aiProviderHttpClient
+                )
+        );
+    }
+
+    @Bean
+    public AiReviewQuestionClient aiReviewQuestionClient(
+            AiProperties aiProperties,
+            ObjectMapper objectMapper,
+            AiProviderHttpClient aiProviderHttpClient
+    ) {
+        return createClient(
+                aiProperties,
+                () -> new MockAiReviewQuestionClient(objectMapper),
+                () -> new GoogleAiReviewQuestionClient(
+                        aiProperties.getProviders().getGoogle(),
+                        objectMapper,
+                        aiProviderHttpClient
                 )
         );
     }

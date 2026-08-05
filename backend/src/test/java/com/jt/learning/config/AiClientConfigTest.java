@@ -5,6 +5,10 @@ import com.jt.learning.service.impl.AiProviderHttpResponse;
 import com.jt.learning.service.impl.GoogleAiQuestionClient;
 import com.jt.learning.service.impl.MockAiAnswerScoringClient;
 import com.jt.learning.service.impl.MockAiQuestionClient;
+import com.jt.learning.service.impl.GoogleAiReviewQuestionClient;
+import com.jt.learning.service.impl.GoogleAiReviewScoringClient;
+import com.jt.learning.service.impl.MockAiReviewQuestionClient;
+import com.jt.learning.service.impl.MockAiReviewScoringClient;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
@@ -84,5 +88,31 @@ class AiClientConfigTest {
         );
 
         assertThat(client).isInstanceOf(GoogleAiAnswerScoringClient.class);
+    }
+
+    @Test
+    void reviewClientsShouldUseMockProvider() {
+        AiProperties properties = new AiProperties();
+        properties.setProvider("mock");
+        var httpClient = (com.jt.learning.service.impl.AiProviderHttpClient)
+                (uri, headers, body) -> new AiProviderHttpResponse(200, "{}");
+
+        assertThat(config.aiReviewScoringClient(properties, objectMapper, httpClient))
+                .isInstanceOf(MockAiReviewScoringClient.class);
+        assertThat(config.aiReviewQuestionClient(properties, objectMapper, httpClient))
+                .isInstanceOf(MockAiReviewQuestionClient.class);
+    }
+
+    @Test
+    void reviewClientsShouldUseGoogleProvider() {
+        AiProperties properties = new AiProperties();
+        properties.setProvider("google");
+        var httpClient = (com.jt.learning.service.impl.AiProviderHttpClient)
+                (uri, headers, body) -> new AiProviderHttpResponse(200, "{}");
+
+        assertThat(config.aiReviewScoringClient(properties, objectMapper, httpClient))
+                .isInstanceOf(GoogleAiReviewScoringClient.class);
+        assertThat(config.aiReviewQuestionClient(properties, objectMapper, httpClient))
+                .isInstanceOf(GoogleAiReviewQuestionClient.class);
     }
 }

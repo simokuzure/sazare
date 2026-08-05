@@ -1,0 +1,34 @@
+package com.jt.learning.service.impl;
+
+import com.jt.learning.service.AiQuestionPrompt;
+import com.jt.learning.service.AiReviewScoringClient;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
+
+import java.util.List;
+import java.util.Map;
+
+public class MockAiReviewScoringClient implements AiReviewScoringClient {
+
+    private final ObjectMapper objectMapper;
+
+    public MockAiReviewScoringClient(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
+
+    @Override
+    public String scoreAnswer(AiQuestionPrompt prompt) {
+        try {
+            return objectMapper.writeValueAsString(Map.of(
+                    "review", Map.of(
+                            "quality", 4,
+                            "targetErrorResolved", true,
+                            "feedback", "目标错误已经解决，表达基本自然。",
+                            "errorAnalysis", List.of()
+                    )
+            ));
+        } catch (JacksonException exception) {
+            throw new IllegalStateException("Mock 复习评分 JSON 序列化失败", exception);
+        }
+    }
+}

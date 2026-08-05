@@ -70,6 +70,7 @@ public class QuestionServiceImpl implements QuestionService {
     private static final String QUESTION_TYPE = "TRANSLATION_ZH_TO_JA";
     private static final String SOURCE_TYPE_AI = "AI";
     private static final String SOURCE_TYPE_MANUAL = "MANUAL";
+    private static final String SOURCE_TYPE_REVIEW_DERIVED = "REVIEW_DERIVED";
     private static final String TAG_TYPE_SCENE = "SCENE";
     private static final String TAG_TYPE_FUNCTION = "FUNCTION";
     private static final String ANSWER_TYPE_STANDARD = "STANDARD";
@@ -80,7 +81,6 @@ public class QuestionServiceImpl implements QuestionService {
     private static final String ANSWER_STATUS_FAILED = "FAILED";
 
     private static final Set<String> VALID_ANSWER_TYPES = Set.of(ANSWER_TYPE_STANDARD, ANSWER_TYPE_REFERENCE);
-    private static final Set<String> VALID_ERROR_SEVERITIES = Set.of("LOW", "MEDIUM", "HIGH");
     private static final Set<String> VALID_FORMALITIES = Set.of("CASUAL", "NEUTRAL", "POLITE", "BUSINESS");
     private static final Pattern CHINESE_PATTERN = Pattern.compile(".*[\\u4e00-\\u9fff].*");
     private static final Pattern JAPANESE_TEXT_PATTERN = Pattern.compile(".*[\\u3040-\\u30ff\\u4e00-\\u9fff].*");
@@ -96,6 +96,7 @@ public class QuestionServiceImpl implements QuestionService {
     private final AiQuestionClient aiQuestionClient;
     private final AiAnswerScoringPromptBuilder answerScoringPromptBuilder;
     private final AiAnswerScoringClient aiAnswerScoringClient;
+    private final AiErrorAnalysisValidator aiErrorAnalysisValidator;
     private final ObjectMapper objectMapper;
 
     public QuestionServiceImpl(
@@ -110,6 +111,7 @@ public class QuestionServiceImpl implements QuestionService {
             AiQuestionClient aiQuestionClient,
             AiAnswerScoringPromptBuilder answerScoringPromptBuilder,
             AiAnswerScoringClient aiAnswerScoringClient,
+            AiErrorAnalysisValidator aiErrorAnalysisValidator,
             ObjectMapper objectMapper
     ) {
         this.tagMapper = tagMapper;
@@ -123,6 +125,7 @@ public class QuestionServiceImpl implements QuestionService {
         this.aiQuestionClient = aiQuestionClient;
         this.answerScoringPromptBuilder = answerScoringPromptBuilder;
         this.aiAnswerScoringClient = aiAnswerScoringClient;
+        this.aiErrorAnalysisValidator = aiErrorAnalysisValidator;
         this.objectMapper = objectMapper;
     }
 
@@ -324,6 +327,9 @@ public class QuestionServiceImpl implements QuestionService {
         Question question = questionMapper.selectActiveQuestionById(questionId);
         if (question == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或不可用");
+        }
+        if (SOURCE_TYPE_REVIEW_DERIVED.equals(question.getSourceType())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "复习衍生题必须通过复习接口作答");
         }
 
         List<QuestionAnswer> standardAnswers = questionAnswerMapper.selectActiveAnswersByQuestionId(questionId);
@@ -555,7 +561,7 @@ public class QuestionServiceImpl implements QuestionService {
         }
         validateRequiredText(review.overallComment(), "AI 评分 overallComment 不能为空");
         validateComments(review.comments());
-        validateErrorAnalysis(review.errorAnalysis(), errorTypesByCode, answerText);
+        aiErrorAnalysisValidator.validate(review.errorAnalysis(), errorTypesByCode, answerText);
         validateRevisionSuggestions(review.revisionSuggestions());
         validateRecommendedExpressions(review.recommendedExpressions());
         return review;
@@ -585,52 +591,6 @@ public class QuestionServiceImpl implements QuestionService {
         validateRequiredText(comments.vocabularyComment(), "AI 评分 vocabularyComment 不能为空");
         validateRequiredText(comments.naturalnessComment(), "AI 评分 naturalnessComment 不能为空");
         validateRequiredText(comments.scenarioComment(), "AI 评分 scenarioComment 不能为空");
-    }
-
-    private void validateErrorAnalysis(
-            List<AiAnswerErrorAnalysisDTO> errorAnalysis,
-            Map<String, AiErrorTypeOptionDTO> errorTypesByCode,
-            String answerText
-    ) {
-        if (errorAnalysis == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis 不能为空");
-        }
-        Set<String> errorKeys = new LinkedHashSet<>();
-        for (AiAnswerErrorAnalysisDTO error : errorAnalysis) {
-            if (error == null) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis 项不能为空");
-            }
-            if (!errorTypesByCode.containsKey(error.errorTypeCode())) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis.errorTypeCode 不合法");
-            }
-            validateRequiredText(error.original(), "AI 评分 errorAnalysis.original 不能为空");
-            if (!answerText.contains(error.original().trim())) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis.original 不属于用户答案");
-            }
-            validateRequiredText(error.issue(), "AI 评分 errorAnalysis.issue 不能为空");
-            validateRequiredText(error.suggestion(), "AI 评分 errorAnalysis.suggestion 不能为空");
-            if (!VALID_ERROR_SEVERITIES.contains(error.severity())) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis.severity 不合法");
-            }
-            validateRequiredText(
-                    error.suggestedUserErrorTypeName(),
-                    "AI 评分 errorAnalysis.suggestedUserErrorTypeName 不能为空"
-            );
-            validateRequiredText(
-                    error.suggestedUserErrorTypeDescription(),
-                    "AI 评分 errorAnalysis.suggestedUserErrorTypeDescription 不能为空"
-            );
-            if (error.suggestedUserErrorTypeName().trim().length() > 128) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分建议的用户错误类型名称过长");
-            }
-            if (error.suggestedUserErrorTypeDescription().trim().length() > 255) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分建议的用户错误类型说明过长");
-            }
-            String errorKey = error.errorTypeCode() + "\u0000" + error.original().trim();
-            if (!errorKeys.add(errorKey)) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 errorAnalysis 存在重复错误");
-            }
-        }
     }
 
     private void validateRevisionSuggestions(List<String> revisionSuggestions) {

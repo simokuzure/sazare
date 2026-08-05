@@ -86,6 +86,7 @@ class QuestionServiceImplTest {
                 aiQuestionClient,
                 new AiAnswerScoringPromptBuilder(objectMapper),
                 aiAnswerScoringClient,
+                new AiErrorAnalysisValidator(),
                 objectMapper
         );
     }
@@ -544,6 +545,22 @@ class QuestionServiceImplTest {
                 .hasMessageContaining("grammarVocabularyScore");
 
         verify(userAnswerMapper).updateFailed(eq(300L), any(LocalDateTime.class));
+    }
+
+    @Test
+    void submitAnswerShouldRejectReviewDerivedQuestion() {
+        Question question = question(100L);
+        question.setSourceType("REVIEW_DERIVED");
+        when(questionMapper.selectActiveQuestionById(100L)).thenReturn(question);
+
+        assertThatThrownBy(() -> questionService.submitAnswer(
+                100L,
+                new AiAnswerScoringRequest("回答")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("必须通过复习接口");
+
+        verify(userAnswerMapper, never()).insertUserAnswer(any());
     }
 
     private AiQuestionGenerationRequest request() {

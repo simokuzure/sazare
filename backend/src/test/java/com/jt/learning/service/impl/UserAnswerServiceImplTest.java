@@ -19,6 +19,7 @@ import com.jt.learning.mapper.UserAnswerErrorMapper;
 import com.jt.learning.mapper.UserAnswerMapper;
 import com.jt.learning.mapper.UserErrorTypeMapper;
 import com.jt.learning.mapper.UserMapper;
+import com.jt.learning.service.ReviewService;
 import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.UserAnswerDetailVO;
 import com.jt.learning.vo.UserAnswerErrorVO;
@@ -49,6 +50,7 @@ class UserAnswerServiceImplTest {
     private ErrorTypeMapper errorTypeMapper;
     private UserErrorTypeMapper userErrorTypeMapper;
     private UserAnswerErrorMapper userAnswerErrorMapper;
+    private ReviewService reviewService;
     private UserAnswerServiceImpl userAnswerService;
 
     @BeforeEach
@@ -60,6 +62,7 @@ class UserAnswerServiceImplTest {
         errorTypeMapper = mock(ErrorTypeMapper.class);
         userErrorTypeMapper = mock(UserErrorTypeMapper.class);
         userAnswerErrorMapper = mock(UserAnswerErrorMapper.class);
+        reviewService = mock(ReviewService.class);
         userAnswerService = new UserAnswerServiceImpl(
                 userMapper,
                 userAnswerMapper,
@@ -67,7 +70,8 @@ class UserAnswerServiceImplTest {
                 questionAnswerMapper,
                 errorTypeMapper,
                 userErrorTypeMapper,
-                userAnswerErrorMapper
+                userAnswerErrorMapper,
+                reviewService
         );
     }
 
@@ -290,6 +294,7 @@ class UserAnswerServiceImplTest {
         verify(userAnswerErrorMapper).insertUserAnswerError(errorCaptor.capture());
         assertThat(errorCaptor.getValue().getUserId()).isEqualTo(1L);
         assertThat(errorCaptor.getValue().getQuestionId()).isEqualTo(100L);
+        verify(reviewService).recordPracticeError(eq(1L), eq(10L), eq(100L), eq(20L), any());
     }
 
     @Test
@@ -325,6 +330,7 @@ class UserAnswerServiceImplTest {
 
         verify(userErrorTypeMapper).selectActiveByIdAndUserId(20L, 1L);
         verify(userErrorTypeMapper, never()).insertUserErrorType(any());
+        verify(reviewService).recordPracticeError(eq(1L), eq(10L), eq(100L), eq(20L), any());
     }
 
     @Test

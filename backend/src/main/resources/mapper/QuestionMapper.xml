@@ -132,6 +132,7 @@
         select q.id
         from questions q
         <include refid="questionFilterClause" />
+          and q.source_type &lt;&gt; 'REVIEW_DERIVED'
         order by random()
         limit 1
     </select>

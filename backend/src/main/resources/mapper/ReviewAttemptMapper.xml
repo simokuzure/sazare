@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jt.learning.mapper.ReviewAttemptMapper">
+
+    <insert id="insertAttempt" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        insert into review_attempts (
+            user_id, review_card_id, review_cycle_id, review_cycle_question_id, user_answer_id,
+            attempt_source, result, sm2_quality, target_error_resolved, ai_feedback,
+            ease_factor_after, repetition_count_after, interval_days_after,
+            cycle_success_count_after, next_due_at, created_at
+        ) values (
+            #{userId}, #{reviewCardId}, #{reviewCycleId}, #{reviewCycleQuestionId}, #{userAnswerId},
+            #{attemptSource}, #{result}, #{sm2Quality}, #{targetErrorResolved}, #{aiFeedback},
+            #{easeFactorAfter}, #{repetitionCountAfter}, #{intervalDaysAfter},
+            #{cycleSuccessCountAfter}, #{nextDueAt}, #{createdAt}
+        )
+    </insert>
+
+    <select id="existsByCardIdAndUserAnswerId" resultType="boolean">
+        select exists (
+            select 1 from review_attempts
+            where review_card_id = #{reviewCardId} and user_answer_id = #{userAnswerId}
+        )
+    </select>
+</mapper>

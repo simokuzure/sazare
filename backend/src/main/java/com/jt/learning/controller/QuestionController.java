@@ -66,7 +66,7 @@ public class QuestionController {
             @RequestParam(required = false) Boolean spoken,
             @RequestParam(required = false) Boolean business,
             @RequestParam(required = false) Boolean exam,
-            @Pattern(regexp = "AI|MANUAL", message = "sourceType 只能是 AI 或 MANUAL")
+            @Pattern(regexp = "AI|MANUAL|REVIEW_DERIVED", message = "sourceType 只能是 AI、MANUAL 或 REVIEW_DERIVED")
             @RequestParam(required = false) String sourceType,
             @RequestParam(defaultValue = "true") Boolean enabled,
             @Min(value = 1, message = "page 必须大于等于 1")
@@ -104,7 +104,7 @@ public class QuestionController {
             @RequestParam(required = false) Boolean spoken,
             @RequestParam(required = false) Boolean business,
             @RequestParam(required = false) Boolean exam,
-            @Pattern(regexp = "AI|MANUAL", message = "sourceType 蜿ｪ閭ｽ譏ｯ AI 謌・MANUAL")
+            @Pattern(regexp = "AI|MANUAL", message = "sourceType 只能是 AI 或 MANUAL")
             @RequestParam(required = false) String sourceType,
             @RequestParam(defaultValue = "true") Boolean enabled
     ) {

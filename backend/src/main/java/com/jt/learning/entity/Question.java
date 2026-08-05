@@ -60,7 +60,7 @@ public class Question {
     private Boolean exam;
 
     /**
-     * 题目来源：AI=AI生成，MANUAL=人工录入
+     * 题目来源：AI=AI生成，MANUAL=人工录入，REVIEW_DERIVED=复习衍生题
      */
     private String sourceType;
 

@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jt.learning.mapper.ReviewCycleQuestionMapper">
+
+    <sql id="cycleQuestionColumns">
+        id, review_cycle_id, question_id, question_role, review_status, attempt_count,
+        last_quality, last_attempt_at, passed_at, sort_order, created_at, updated_at
+    </sql>
+
+    <insert id="insertQuestion" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        insert into review_cycle_questions (
+            review_cycle_id, question_id, question_role, review_status, attempt_count,
+            last_quality, last_attempt_at, passed_at, sort_order, created_at, updated_at
+        ) values (
+            #{reviewCycleId}, #{questionId}, #{questionRole}, #{reviewStatus}, #{attemptCount},
+            #{lastQuality}, #{lastAttemptAt}, #{passedAt}, #{sortOrder}, #{createdAt}, #{updatedAt}
+        )
+    </insert>
+
+    <insert id="insertQuestionIfAbsent" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        insert into review_cycle_questions (
+            review_cycle_id, question_id, question_role, review_status, attempt_count,
+            last_quality, last_attempt_at, passed_at, sort_order, created_at, updated_at
+        ) values (
+            #{reviewCycleId}, #{questionId}, #{questionRole}, #{reviewStatus}, #{attemptCount},
+            #{lastQuality}, #{lastAttemptAt}, #{passedAt}, #{sortOrder}, #{createdAt}, #{updatedAt}
+        )
+        on conflict (review_cycle_id, question_id) do nothing
+    </insert>
+
+    <select id="selectByIdAndCycleId" resultType="com.jt.learning.entity.ReviewCycleQuestion">
+        select <include refid="cycleQuestionColumns" />
+        from review_cycle_questions
+        where id = #{id} and review_cycle_id = #{reviewCycleId}
+    </select>
+
+    <select id="selectByCycleIdAndQuestionId" resultType="com.jt.learning.entity.ReviewCycleQuestion">
+        select <include refid="cycleQuestionColumns" />
+        from review_cycle_questions
+        where review_cycle_id = #{reviewCycleId} and question_id = #{questionId}
+    </select>
+
+    <select id="selectLatestRetry" resultType="com.jt.learning.entity.ReviewCycleQuestion">
+        select <include refid="cycleQuestionColumns" />
+        from review_cycle_questions
+        where review_cycle_id = #{reviewCycleId} and review_status = 'RETRY'
+        order by last_attempt_at desc nulls last, id desc
+        limit 1
+    </select>
+
+    <select id="selectRandomPendingOriginal" resultType="com.jt.learning.entity.ReviewCycleQuestion">
+        select <include refid="cycleQuestionColumns" />
+        from review_cycle_questions
+        where review_cycle_id = #{reviewCycleId}
+          and question_role = 'ORIGINAL'
+          and review_status = 'PENDING'
+        order by random()
+        limit 1
+    </select>
+
+    <select id="selectActiveDerived" resultType="com.jt.learning.entity.ReviewCycleQuestion">
+        select <include refid="cycleQuestionColumns" />
+        from review_cycle_questions
+        where review_cycle_id = #{reviewCycleId}
+          and question_role = 'DERIVED'
+          and review_status in ('PENDING', 'RETRY')
+        order by case when review_status = 'RETRY' then 0 else 1 end,
+                 last_attempt_at desc nulls last, id desc
+        limit 1
+    </select>
+
+    <select id="selectLatestFailedOriginal" resultType="com.jt.learning.entity.ReviewCycleQuestion">
+        select
+            question.id,
+            question.review_cycle_id,
+            question.question_id,
+            question.question_role,
+            question.review_status,
+            question.attempt_count,
+            question.last_quality,
+            question.last_attempt_at,
+            question.passed_at,
+            question.sort_order,
+            question.created_at,
+            question.updated_at
+        from review_attempts attempt
+        inner join review_cycle_questions question
+          on question.id = attempt.review_cycle_question_id
+        where attempt.review_cycle_id = #{reviewCycleId}
+          and attempt.result = 'FAIL'
+          and question.question_role = 'ORIGINAL'
+        order by attempt.created_at desc, attempt.id desc
+        limit 1
+    </select>
+
+    <select id="selectAllByCycleId" resultType="com.jt.learning.entity.ReviewCycleQuestion">
+        select <include refid="cycleQuestionColumns" />
+        from review_cycle_questions
+        where review_cycle_id = #{reviewCycleId}
+        order by sort_order, id
+    </select>
+
+    <select id="selectProgress" resultType="com.jt.learning.dto.ReviewCycleProgressRow">
+        select
+            count(*) filter (where question_role = 'ORIGINAL')::integer as original_question_count,
+            count(*) filter (where question_role = 'ORIGINAL' and review_status = 'PASSED')::integer as original_passed_count,
+            count(*) filter (where review_status = 'RETRY')::integer as retry_question_count,
+            count(*) filter (where review_status = 'PENDING')::integer as pending_question_count,
+            count(*) filter (where review_status in ('PENDING', 'RETRY'))::integer as active_question_count,
+            count(*) filter (where question_role = 'DERIVED')::integer as derived_question_count,
+            count(*) filter (
+                where question_role = 'DERIVED'
+                  and review_status = 'PASSED'
+                  and passed_at &gt; #{verificationRequiredAfter}
+            )::integer as verified_derived_passed_count
+        from review_cycle_questions
+        where review_cycle_id = #{reviewCycleId}
+    </select>
+
+    <update id="markAttempt">
+        update review_cycle_questions
+        set review_status = #{reviewStatus},
+            attempt_count = #{attemptCount},
+            last_quality = #{lastQuality},
+            last_attempt_at = #{lastAttemptAt},
+            passed_at = #{passedAt},
+            updated_at = #{updatedAt}
+        where id = #{id}
+    </update>
+
+    <update id="markPracticeFailure">
+        update review_cycle_questions
+        set review_status = 'RETRY',
+            attempt_count = #{attemptCount},
+            last_quality = 2,
+            last_attempt_at = #{attemptedAt},
+            passed_at = null,
+            updated_at = #{attemptedAt}
+        where id = #{id}
+    </update>
+</mapper>
