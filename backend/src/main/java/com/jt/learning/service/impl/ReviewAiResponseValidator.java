@@ -1,6 +1,7 @@
 package com.jt.learning.service.impl;
 
 import com.jt.learning.dto.AiErrorTypeOptionDTO;
+import com.jt.learning.dto.AiAnswerScoresDTO;
 import com.jt.learning.dto.AiQuestionAnswerDTO;
 import com.jt.learning.dto.AiReviewDTO;
 import com.jt.learning.dto.AiReviewGeneratedQuestionDTO;
@@ -13,7 +14,6 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -41,8 +41,12 @@ public class ReviewAiResponseValidator {
         requireOnlyFields(root, List.of("review"), "复习评分 JSON 顶层");
         JsonNode reviewNode = root.get("review");
         requireOnlyFields(reviewNode,
-                List.of("quality", "targetErrorResolved", "feedback", "errorAnalysis"),
+                List.of("quality", "targetErrorResolved", "feedback", "scores", "errorAnalysis"),
                 "复习评分 review");
+        requireOnlyFields(reviewNode.get("scores"), List.of(
+                "grammarVocabularyScore", "naturalFluencyScore",
+                "scenarioAdaptationScore", "informationCompletenessScore"
+        ), "复习评分 scores");
         JsonNode errorsNode = reviewNode.get("errorAnalysis");
         if (errorsNode == null || !errorsNode.isArray()) {
             throw invalid("复习评分 errorAnalysis 必须是数组");
@@ -107,7 +111,7 @@ public class ReviewAiResponseValidator {
         if (node == null || !node.isObject()) {
             throw invalid(label + "必须是对象");
         }
-        if (!new ArrayList<>(node.propertyNames()).equals(expectedFields)) {
+        if (!new HashSet<>(node.propertyNames()).equals(Set.copyOf(expectedFields))) {
             throw invalid(label + "字段不合法");
         }
     }
@@ -125,7 +129,24 @@ public class ReviewAiResponseValidator {
             throw invalid("复习评分 quality 与 targetErrorResolved 不一致");
         }
         requireText(review.feedback(), "复习评分 feedback 不能为空");
+        validateScores(review.scores());
         errorAnalysisValidator.validate(review.errorAnalysis(), errorTypesByCode, answerText);
+    }
+
+    private void validateScores(AiAnswerScoresDTO scores) {
+        if (scores == null) {
+            throw invalid("复习评分 scores 不能为空");
+        }
+        validateScore(scores.grammarVocabularyScore(), "grammarVocabularyScore");
+        validateScore(scores.naturalFluencyScore(), "naturalFluencyScore");
+        validateScore(scores.scenarioAdaptationScore(), "scenarioAdaptationScore");
+        validateScore(scores.informationCompletenessScore(), "informationCompletenessScore");
+    }
+
+    private void validateScore(Integer score, String field) {
+        if (score == null || score < 0 || score > 100) {
+            throw invalid("复习评分 " + field + " 不合法");
+        }
     }
 
     private void validateQuestion(AiReviewGeneratedQuestionDTO question, Set<String> existingSourceTexts) {

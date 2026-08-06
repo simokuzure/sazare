@@ -360,6 +360,7 @@ export default function QuestionManagementPage() {
                     <option value="">全部</option>
                     <option value="AI">AI</option>
                     <option value="MANUAL">人工</option>
+                    <option value="REVIEW_DERIVED">复习衍生</option>
                   </select>
                 </label>
 
@@ -403,7 +404,7 @@ export default function QuestionManagementPage() {
                         <td>{question.id}</td>
                         <td className="question-text-cell" title={question.sourceText}>{question.sourceText}</td>
                         <td>{question.level} / {question.difficulty}</td>
-                        <td>{question.sourceType === 'AI' ? 'AI' : '人工'}</td>
+                        <td>{formatQuestionSourceType(question.sourceType)}</td>
                         <td>{question.enabled ? '启用' : '停用'}</td>
                         <td className="question-tags-cell">
                           <span className="tag-chip-row">
@@ -755,4 +756,10 @@ function formatQuestionFlags(question: Question) {
   ].filter(Boolean)
 
   return `${question.level} / 难度 ${question.difficulty} / ${question.sourceType} / ${question.enabled ? '启用' : '停用'}${flags.length > 0 ? ` / ${flags.join('、')}` : ''}`
+}
+
+function formatQuestionSourceType(sourceType: Question['sourceType']) {
+  if (sourceType === 'AI') return 'AI'
+  if (sourceType === 'REVIEW_DERIVED') return '复习衍生'
+  return '人工'
 }

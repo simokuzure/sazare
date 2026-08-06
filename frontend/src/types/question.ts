@@ -19,7 +19,7 @@ export type Question = {
   spoken: boolean
   business: boolean
   exam: boolean
-  sourceType: 'AI' | 'MANUAL'
+  sourceType: 'AI' | 'MANUAL' | 'REVIEW_DERIVED'
   enabled: boolean
   tags: Tag[]
   answers: QuestionAnswer[]
@@ -47,7 +47,7 @@ export type QuestionFilterState = {
   level: string
   difficulty: string
   tagCodes: string
-  sourceType: '' | 'AI' | 'MANUAL'
+  sourceType: '' | 'AI' | 'MANUAL' | 'REVIEW_DERIVED'
   enabled: 'true' | 'false' | 'all'
   page: number
   size: number

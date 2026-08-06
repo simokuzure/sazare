@@ -41,6 +41,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -142,17 +145,43 @@ class ReviewServiceImplTest {
     }
 
     @Test
+    void scoringFailureShouldOnlyMarkAnswerFailed() {
+        stubReadyAttempt("RETRY", "ORIGINAL", 0, 4);
+        when(scoringClient.scoreAnswer(any())).thenThrow(new BusinessException(
+                com.jt.learning.exception.ErrorCode.BUSINESS_ERROR, "评分失败"));
+
+        assertThatThrownBy(() -> service.submitReviewAttempt(
+                1L, new ReviewAttemptRequest(30L, 0, "電車に間に合いました")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("评分失败");
+
+        verify(userAnswerMapper).updateFailed(eq(40L), any());
+        verify(userAnswerMapper, never()).updateReviewed(
+                anyLong(), anyInt(), anyInt(), anyInt(), anyInt(),
+                any(BigDecimal.class), anyString(), any(LocalDateTime.class));
+        verify(cycleQuestionMapper, never()).markAttempt(
+                anyLong(), anyString(), anyInt(), anyInt(),
+                any(LocalDateTime.class), any(LocalDateTime.class), any(LocalDateTime.class));
+        verify(attemptMapper, never()).insertAttempt(any());
+    }
+
+    @Test
     void failedReviewShouldResetQuestionAndScheduleNextDay() {
         ReviewCard card = stubReadyAttempt("RETRY", "ORIGINAL", 0, 4);
         when(scoringClient.scoreAnswer(any())).thenReturn("""
-                {"review":{"quality":2,"targetErrorResolved":false,"feedback":"目标错误仍存在。","errorAnalysis":[]}}
+                {"review":{"quality":2,"targetErrorResolved":false,"feedback":"目标错误仍存在。","scores":{"grammarVocabularyScore":80,"naturalFluencyScore":70,"scenarioAdaptationScore":90,"informationCompletenessScore":81},"errorAnalysis":[]}}
                 """);
         when(cycleQuestionMapper.selectProgress(eq(20L), any())).thenReturn(progress(1, 0, 1, 0, 1, 0, 0));
 
         var result = service.submitReviewAttempt(1L, new ReviewAttemptRequest(30L, 0, "電車を間に合いました"));
 
         assertThat(result.result()).isEqualTo("FAIL");
+        assertThat(result.totalScore()).isEqualByComparingTo("80.25");
+        assertThat(result.scores().informationCompletenessScore()).isEqualTo(81);
         assertThat(result.nextDueAt()).isAfter(LocalDateTime.now().plusHours(23));
+        verify(userAnswerMapper).updateReviewed(
+                eq(40L), eq(80), eq(70), eq(90), eq(81), eq(new BigDecimal("80.25")),
+                eq("目标错误仍存在。"), any());
         verify(cycleQuestionMapper).markAttempt(eq(30L), eq("RETRY"), eq(1), eq(2), any(), eq(null), any());
         ArgumentCaptor<BigDecimal> easeCaptor = ArgumentCaptor.forClass(BigDecimal.class);
         verify(cardMapper).updateSchedule(
@@ -164,7 +193,7 @@ class ReviewServiceImplTest {
     void passingFinalDerivedQuestionShouldCompleteCycleAndMasterCard() {
         stubReadyAttempt("RETRY", "DERIVED", 3, 4);
         when(scoringClient.scoreAnswer(any())).thenReturn("""
-                {"review":{"quality":4,"targetErrorResolved":true,"feedback":"目标错误已解决。","errorAnalysis":[]}}
+                {"review":{"quality":4,"targetErrorResolved":true,"feedback":"目标错误已解决。","scores":{"grammarVocabularyScore":88,"naturalFluencyScore":86,"scenarioAdaptationScore":90,"informationCompletenessScore":92},"errorAnalysis":[]}}
                 """);
         when(cycleQuestionMapper.selectProgress(eq(20L), any())).thenReturn(progress(1, 1, 0, 0, 0, 1, 1));
 
@@ -181,7 +210,7 @@ class ReviewServiceImplTest {
     void generationFailureAfterPassShouldKeepAttemptAndReturnFailedStatus() {
         stubReadyAttempt("RETRY", "ORIGINAL", 0, 4);
         when(scoringClient.scoreAnswer(any())).thenReturn("""
-                {"review":{"quality":4,"targetErrorResolved":true,"feedback":"目标错误已解决。","errorAnalysis":[]}}
+                {"review":{"quality":4,"targetErrorResolved":true,"feedback":"目标错误已解决。","scores":{"grammarVocabularyScore":88,"naturalFluencyScore":86,"scenarioAdaptationScore":90,"informationCompletenessScore":92},"errorAnalysis":[]}}
                 """);
         ReviewCycleProgressRow progress = progress(1, 1, 0, 0, 0, 0, 0);
         when(cycleQuestionMapper.selectProgress(eq(20L), any())).thenReturn(progress);
@@ -195,7 +224,9 @@ class ReviewServiceImplTest {
 
         assertThat(result.derivedGenerationStatus()).isEqualTo("FAILED");
         verify(attemptMapper).insertAttempt(any());
-        verify(userAnswerMapper).updateReviewEvaluated(eq(40L), any(), any());
+        verify(userAnswerMapper).updateReviewed(
+                eq(40L), eq(88), eq(86), eq(90), eq(92), eq(new BigDecimal("89.00")),
+                eq("目标错误已解决。"), any());
     }
 
     @Test

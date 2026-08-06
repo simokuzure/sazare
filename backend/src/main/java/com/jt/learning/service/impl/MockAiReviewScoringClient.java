@@ -24,6 +24,12 @@ public class MockAiReviewScoringClient implements AiReviewScoringClient {
                             "quality", 4,
                             "targetErrorResolved", true,
                             "feedback", "目标错误已经解决，表达基本自然。",
+                            "scores", Map.of(
+                                    "grammarVocabularyScore", 84,
+                                    "naturalFluencyScore", 82,
+                                    "scenarioAdaptationScore", 80,
+                                    "informationCompletenessScore", 86
+                            ),
                             "errorAnalysis", List.of()
                     )
             ));

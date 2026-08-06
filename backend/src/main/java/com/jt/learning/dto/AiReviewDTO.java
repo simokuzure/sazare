@@ -6,6 +6,7 @@ public record AiReviewDTO(
         Integer quality,
         Boolean targetErrorResolved,
         String feedback,
+        AiAnswerScoresDTO scores,
         List<AiAnswerErrorAnalysisDTO> errorAnalysis
 ) {
 }

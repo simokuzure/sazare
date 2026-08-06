@@ -23,8 +23,9 @@ class AiReviewPromptBuilderTest {
                 "電車に間に合いました"
         );
 
-        assertThat(prompt.systemPrompt()).contains("quality", "targetErrorResolved", "0到2");
-        assertThat(prompt.userPrompt()).contains("赶上交通工具时误用を", "電車に間に合いました");
+        assertThat(prompt.systemPrompt()).contains("quality", "targetErrorResolved", "0到2", "0到100");
+        assertThat(prompt.userPrompt()).contains(
+                "赶上交通工具时误用を", "電車に間に合いました", "grammarVocabularyScore");
     }
 
     @Test

@@ -41,6 +41,7 @@ import com.jt.learning.service.ReviewService;
 import com.jt.learning.service.Sm2Result;
 import com.jt.learning.service.Sm2Scheduler;
 import com.jt.learning.vo.AnswerErrorAnalysisVO;
+import com.jt.learning.vo.AnswerScoresVO;
 import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.QuestionAnswerVO;
 import com.jt.learning.vo.ReviewAttemptVO;
@@ -54,6 +55,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -222,7 +224,17 @@ public class ReviewServiceImpl implements ReviewService {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "复习 AI 评分失败");
         }
 
-        userAnswerMapper.updateReviewEvaluated(userAnswer.getId(), review.feedback(), now);
+        BigDecimal totalScore = calculateTotalScore(review);
+        userAnswerMapper.updateReviewed(
+                userAnswer.getId(),
+                review.scores().grammarVocabularyScore(),
+                review.scores().naturalFluencyScore(),
+                review.scores().scenarioAdaptationScore(),
+                review.scores().informationCompletenessScore(),
+                totalScore,
+                review.feedback().trim(),
+                now
+        );
         boolean passed = review.quality() >= 3;
         int successfulCount = cycle.getSuccessfulReviewCount() + (passed ? 1 : 0);
         reviewCycleQuestionMapper.markAttempt(
@@ -263,11 +275,25 @@ public class ReviewServiceImpl implements ReviewService {
 
         return new ReviewAttemptVO(
                 userAnswer.getId(), review.quality(), passed ? RESULT_PASS : RESULT_FAIL,
-                review.targetErrorResolved(), review.feedback(),
+                review.targetErrorResolved(), review.feedback(), new AnswerScoresVO(
+                        review.scores().grammarVocabularyScore(),
+                        review.scores().naturalFluencyScore(),
+                        review.scores().scenarioAdaptationScore(),
+                        review.scores().informationCompletenessScore()
+                ), totalScore,
                 toErrorAnalysisVO(review.errorAnalysis(), errorTypesByCode),
                 toProgressVO(cycle, progress), nextDueAt, completed ? CARD_MASTERED : CARD_ACTIVE,
                 standardAnswers.stream().map(this::toAnswerVO).toList(), generationStatus
         );
+    }
+
+    private BigDecimal calculateTotalScore(AiReviewDTO review) {
+        int sum = review.scores().grammarVocabularyScore()
+                + review.scores().naturalFluencyScore()
+                + review.scores().scenarioAdaptationScore()
+                + review.scores().informationCompletenessScore();
+        return BigDecimal.valueOf(sum)
+                .divide(BigDecimal.valueOf(4), 2, RoundingMode.HALF_UP);
     }
 
     @Override

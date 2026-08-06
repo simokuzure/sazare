@@ -32,12 +32,6 @@ public interface UserAnswerMapper {
             @Param("updatedAt") LocalDateTime updatedAt
     );
 
-    int updateReviewEvaluated(
-            @Param("id") Long id,
-            @Param("aiOverallComment") String aiOverallComment,
-            @Param("updatedAt") LocalDateTime updatedAt
-    );
-
     long countUserAnswers(
             @Param("userId") Long userId,
             @Param("request") UserAnswerQueryRequest request

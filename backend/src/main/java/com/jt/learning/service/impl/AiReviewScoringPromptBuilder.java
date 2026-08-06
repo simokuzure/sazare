@@ -22,6 +22,8 @@ public class AiReviewScoringPromptBuilder {
             quality 只能是0到5的整数：0=空白或无关；1=目标错误严重；2=目标错误仍存在但部分可用；
             3=目标错误已解决但有较明显的其他问题；4=目标错误已解决且仅有轻微问题；5=正确、自然且符合场景。
             quality为0到2时targetErrorResolved必须为false；quality为3到5时必须为true。
+            scores包含语法与词汇、自然流畅度、场景适配度、信息完整性四项评分，每项只能是0到100的整数。
+            scores评价答案整体质量，与用于判断目标错误是否解决的quality分别独立判断。
             feedback使用简洁中文，说明目标错误是否解决及最重要的改进点。
             errorAnalysis只记录有明确依据的候选新错误；original必须是用户答案中的连续片段。
             errorTypeCode必须来自输入的errorTypeOptions，severity只能是LOW、MEDIUM、HIGH。
@@ -52,7 +54,7 @@ public class AiReviewScoringPromptBuilder {
                 用户答案：%s
 
                 JSON结构：
-                {"review":{"quality":0,"targetErrorResolved":false,"feedback":"中文反馈","errorAnalysis":[{"errorTypeCode":"可选code","original":"用户答案片段","issue":"中文说明","suggestion":"中文建议","severity":"MEDIUM","suggestedUserErrorTypeName":"具体错误模式","suggestedUserErrorTypeDescription":"触发情形、错误形式和正确用法"}]}}
+                {"review":{"quality":0,"targetErrorResolved":false,"feedback":"中文反馈","scores":{"grammarVocabularyScore":0,"naturalFluencyScore":0,"scenarioAdaptationScore":0,"informationCompletenessScore":0},"errorAnalysis":[{"errorTypeCode":"可选code","original":"用户答案片段","issue":"中文说明","suggestion":"中文建议","severity":"MEDIUM","suggestedUserErrorTypeName":"具体错误模式","suggestedUserErrorTypeDescription":"触发情形、错误形式和正确用法"}]}}
                 """.formatted(
                 toJson(Map.of(
                         "userErrorTypeName", userErrorType.getName(),
