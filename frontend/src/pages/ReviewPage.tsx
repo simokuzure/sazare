@@ -366,19 +366,19 @@ export default function ReviewPage() {
       {!listLoading && !listError && cards.items.length === 0 ? <div className="empty-state">{emptyListText(filters.mode)}</div> : null}
 
       {!listLoading && !listError && cards.items.length > 0 ? <div className="table-scroll">
-        <table className="review-card-table">
+        <table className="responsive-list-table review-card-table">
           <thead><tr><th>错误模式</th><th>全局分类</th><th>到期状态</th><th>周期进度</th><th>原题</th><th>待重试</th><th>最近活动</th><th>操作</th></tr></thead>
           <tbody>{cards.items.map((card) => {
             const due = card.status === 'ACTIVE' && isDue(card.dueAt)
             return <tr key={card.id}>
-              <td><strong>{card.userErrorTypeName}</strong></td>
-              <td>{card.errorTypeName}<span className="table-secondary-text">{card.errorTypeCode}</span></td>
-              <td><span className={`review-state-badge ${card.status === 'MASTERED' ? 'is-mastered' : due ? 'is-ready' : 'is-waiting'}`}>{card.status === 'MASTERED' ? '已掌握' : due ? '已到期' : '等待中'}</span><span className="table-secondary-text">{card.status === 'MASTERED' ? formatDateTime(card.masteredAt) : dueText(card.dueAt)}</span></td>
-              <td><ProgressBar progress={card.progress} /></td>
-              <td>{card.progress.originalPassedCount} / {card.progress.originalQuestionCount}</td>
-              <td>{card.progress.retryQuestionCount}</td>
-              <td>{formatDateTime(card.status === 'MASTERED' ? card.masteredAt : card.lastReviewedAt)}</td>
-              <td><div className="review-card-actions"><button type="button" className="compact-button" onClick={() => viewCard(card.id)}>查看</button>{due ? <button type="button" className="primary-button compact-button" onClick={() => startReview(card.id)}>开始复习</button> : null}</div></td>
+              <td className="table-ellipsis-cell" data-label="错误模式" title={card.userErrorTypeName}><strong>{card.userErrorTypeName}</strong></td>
+              <td className="table-ellipsis-cell" data-label="全局分类" title={`${card.errorTypeName} (${card.errorTypeCode})`}>{card.errorTypeName}<span className="table-secondary-text">{card.errorTypeCode}</span></td>
+              <td data-label="到期状态"><span className={`review-state-badge ${card.status === 'MASTERED' ? 'is-mastered' : due ? 'is-ready' : 'is-waiting'}`}>{card.status === 'MASTERED' ? '已掌握' : due ? '已到期' : '等待中'}</span><span className="table-secondary-text">{card.status === 'MASTERED' ? formatDateTime(card.masteredAt) : dueText(card.dueAt)}</span></td>
+              <td data-label="周期进度"><ProgressBar progress={card.progress} /></td>
+              <td data-label="原题">{card.progress.originalPassedCount} / {card.progress.originalQuestionCount}</td>
+              <td data-label="待重试">{card.progress.retryQuestionCount}</td>
+              <td data-label="最近活动">{formatDateTime(card.status === 'MASTERED' ? card.masteredAt : card.lastReviewedAt)}</td>
+              <td data-label="操作"><div className="review-card-actions"><button type="button" className="compact-button" onClick={() => viewCard(card.id)}>查看</button>{due ? <button type="button" className="primary-button compact-button" onClick={() => startReview(card.id)}>开始复习</button> : null}</div></td>
             </tr>
           })}</tbody>
         </table>

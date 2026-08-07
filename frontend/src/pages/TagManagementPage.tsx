@@ -90,7 +90,7 @@ export default function TagManagementPage() {
               {tagError ? <div className="error-message">{tagError}</div> : null}
 
               <div className="table-wrap">
-                <table>
+                <table className="responsive-list-table tag-table">
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -105,13 +105,13 @@ export default function TagManagementPage() {
                   <tbody>
                     {tags.map((tag) => (
                       <tr key={tag.id}>
-                        <td>{tag.id}</td>
-                        <td>{tag.tagType === 'SCENE' ? '场景' : '功能'}</td>
-                        <td>{tag.parentId ?? '-'}</td>
-                        <td className="code-cell">{tag.code}</td>
-                        <td>{tag.name}</td>
-                        <td>{tag.description ?? '-'}</td>
-                        <td>{tag.sortOrder}</td>
+                        <td data-label="ID">{tag.id}</td>
+                        <td data-label="类型">{tag.tagType === 'SCENE' ? '场景' : '功能'}</td>
+                        <td data-label="父级">{tag.parentId ?? '-'}</td>
+                        <td className="code-cell table-ellipsis-cell" data-label="编码" title={tag.code}>{tag.code}</td>
+                        <td className="table-ellipsis-cell" data-label="名称" title={tag.name}>{tag.name}</td>
+                        <td className="table-ellipsis-cell" data-label="说明" title={tag.description ?? undefined}>{tag.description ?? '-'}</td>
+                        <td data-label="排序">{tag.sortOrder}</td>
                       </tr>
                     ))}
                   </tbody>

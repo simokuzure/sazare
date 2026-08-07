@@ -386,7 +386,7 @@ export default function QuestionManagementPage() {
 
               {questionError ? <div className="error-message">{questionError}</div> : null}
               <div className="table-wrap">
-                <table className="question-table">
+                <table className="responsive-list-table question-table">
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -401,12 +401,12 @@ export default function QuestionManagementPage() {
                   <tbody>
                     {questions.map((question) => (
                       <tr key={question.id}>
-                        <td>{question.id}</td>
-                        <td className="question-text-cell" title={question.sourceText}>{question.sourceText}</td>
-                        <td>{question.level} / {question.difficulty}</td>
-                        <td>{formatQuestionSourceType(question.sourceType)}</td>
-                        <td>{question.enabled ? '启用' : '停用'}</td>
-                        <td className="question-tags-cell">
+                        <td data-label="ID">{question.id}</td>
+                        <td className="table-question-answer-cell" data-label="原文" title={question.sourceText}>{question.sourceText}</td>
+                        <td data-label="等级">{question.level} / {question.difficulty}</td>
+                        <td data-label="来源">{formatQuestionSourceType(question.sourceType)}</td>
+                        <td data-label="状态">{question.enabled ? '启用' : '停用'}</td>
+                        <td className="question-tags-cell" data-label="标签">
                           <span className="tag-chip-row">
                             {question.tags.slice(0, 3).map((tag) => (
                               <span key={tag.id}>{tag.name}</span>
@@ -414,7 +414,7 @@ export default function QuestionManagementPage() {
                             {question.tags.length > 3 ? <span>+{question.tags.length - 3}</span> : null}
                           </span>
                         </td>
-                        <td className="question-actions-cell">
+                        <td className="question-actions-cell" data-label="操作">
                           <div className="table-actions">
                             <button
                               type="button"

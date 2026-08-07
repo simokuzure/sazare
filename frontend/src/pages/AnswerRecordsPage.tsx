@@ -173,7 +173,7 @@ export default function AnswerRecordsPage() {
         ) : null}
 
         <div className="table-wrap">
-          <table className="answer-record-table">
+          <table className="responsive-list-table answer-record-table">
             <thead>
               <tr>
                 <th>记录</th>
@@ -191,16 +191,16 @@ export default function AnswerRecordsPage() {
             <tbody>
               {records.map((record) => (
                 <tr key={record.id}>
-                  <td>#{record.id}</td>
-                  <td>#{record.questionId}</td>
-                  <td className="answer-record-source">{record.sourceText}</td>
-                  <td>{formatLevelDifficulty(record)}</td>
-                  <td className="answer-record-answer">{record.answerText}</td>
-                  <td>{STATUS_LABELS[record.answerStatus]}</td>
-                  <td>{formatReviewedScore(record.answerStatus, record.totalScore)}</td>
-                  <td>{formatScores(record)}</td>
-                  <td>{formatDateTime(record.createdAt)}</td>
-                  <td>
+                  <td data-label="记录">#{record.id}</td>
+                  <td data-label="题目">#{record.questionId}</td>
+                  <td className="table-question-answer-cell" data-label="中文原文" title={record.sourceText}>{record.sourceText}</td>
+                  <td data-label="等级/难度">{formatLevelDifficulty(record)}</td>
+                  <td className="table-question-answer-cell" data-label="用户答案" title={record.answerText}>{record.answerText}</td>
+                  <td data-label="状态">{STATUS_LABELS[record.answerStatus]}</td>
+                  <td data-label="总分">{formatReviewedScore(record.answerStatus, record.totalScore)}</td>
+                  <td data-label="四项评分">{formatScores(record)}</td>
+                  <td data-label="提交时间">{formatDateTime(record.createdAt)}</td>
+                  <td data-label="操作">
                     <div className="table-actions">
                       <button
                         type="button"

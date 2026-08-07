@@ -112,7 +112,7 @@ export default function ErrorTypeManagementPage() {
         ) : null}
 
         <div className="table-wrap">
-          <table className="error-type-table">
+          <table className="responsive-list-table error-type-table">
             <thead>
               <tr>
                 <th>ID</th>
@@ -129,15 +129,15 @@ export default function ErrorTypeManagementPage() {
             <tbody>
               {errorTypes.map((errorType) => (
                 <tr key={errorType.id}>
-                  <td>{errorType.id}</td>
-                  <td>{formatTypeLevel(errorType.typeLevel)}</td>
-                  <td>{errorType.parentId ?? '-'}</td>
-                  <td className="code-cell">{errorType.code}</td>
-                  <td>{errorType.name}</td>
-                  <td>{errorType.description ?? '-'}</td>
-                  <td>{errorType.sortOrder}</td>
-                  <td>{errorType.enabled ? '启用' : '停用'}</td>
-                  <td>{formatDateTime(errorType.updatedAt)}</td>
+                  <td data-label="ID">{errorType.id}</td>
+                  <td data-label="层级">{formatTypeLevel(errorType.typeLevel)}</td>
+                  <td data-label="父级">{errorType.parentId ?? '-'}</td>
+                  <td className="code-cell table-ellipsis-cell" data-label="编码" title={errorType.code}>{errorType.code}</td>
+                  <td className="table-ellipsis-cell" data-label="名称" title={errorType.name}>{errorType.name}</td>
+                  <td className="table-ellipsis-cell" data-label="说明" title={errorType.description ?? undefined}>{errorType.description ?? '-'}</td>
+                  <td data-label="排序">{errorType.sortOrder}</td>
+                  <td data-label="状态">{errorType.enabled ? '启用' : '停用'}</td>
+                  <td data-label="更新时间">{formatDateTime(errorType.updatedAt)}</td>
                 </tr>
               ))}
             </tbody>

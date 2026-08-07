@@ -178,15 +178,20 @@ class ReviewServiceImplTest {
         assertThat(result.result()).isEqualTo("FAIL");
         assertThat(result.totalScore()).isEqualByComparingTo("80.25");
         assertThat(result.scores().informationCompletenessScore()).isEqualTo(81);
-        assertThat(result.nextDueAt()).isAfter(LocalDateTime.now().plusHours(23));
         verify(userAnswerMapper).updateReviewed(
                 eq(40L), eq(80), eq(70), eq(90), eq(81), eq(new BigDecimal("80.25")),
                 eq("目标错误仍存在。"), any());
         verify(cycleQuestionMapper).markAttempt(eq(30L), eq("RETRY"), eq(1), eq(2), any(), eq(null), any());
         ArgumentCaptor<BigDecimal> easeCaptor = ArgumentCaptor.forClass(BigDecimal.class);
+        ArgumentCaptor<LocalDateTime> dueAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        ArgumentCaptor<LocalDateTime> reviewedAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         verify(cardMapper).updateSchedule(
-                eq(1L), eq("ACTIVE"), easeCaptor.capture(), eq(0), eq(1), eq(1), any(), any(), eq(null), any());
+                eq(1L), eq("ACTIVE"), easeCaptor.capture(), eq(0), eq(1), eq(1), dueAtCaptor.capture(),
+                reviewedAtCaptor.capture(), eq(null), any());
         assertThat(easeCaptor.getValue()).isEqualByComparingTo("2.1800");
+        assertThat(dueAtCaptor.getValue())
+                .isEqualTo(reviewedAtCaptor.getValue().toLocalDate().plusDays(1).atTime(7, 0));
+        assertThat(result.nextDueAt()).isEqualTo(dueAtCaptor.getValue());
     }
 
     @Test
@@ -239,13 +244,16 @@ class ReviewServiceImplTest {
         when(attemptMapper.existsByCardIdAndUserAnswerId(1L, 50L)).thenReturn(false);
         when(cycleMapper.selectMaxCycleNo(1L)).thenReturn(1);
 
-        service.recordPracticeError(1L, 50L, 100L, 2L, LocalDateTime.now());
+        LocalDateTime occurredAt = LocalDateTime.of(2026, 8, 31, 0, 0);
+        service.recordPracticeError(1L, 50L, 100L, 2L, occurredAt);
 
         ArgumentCaptor<ReviewCycle> cycleCaptor = ArgumentCaptor.forClass(ReviewCycle.class);
         verify(cycleMapper).insertCycle(cycleCaptor.capture());
         assertThat(cycleCaptor.getValue().getCycleNo()).isEqualTo(2);
+        ArgumentCaptor<LocalDateTime> dueAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         verify(cardMapper).updateSchedule(
-                eq(1L), eq("ACTIVE"), any(), eq(0), eq(1), eq(1), any(), any(), eq(null), any());
+                eq(1L), eq("ACTIVE"), any(), eq(0), eq(1), eq(1), dueAtCaptor.capture(), any(), eq(null), any());
+        assertThat(dueAtCaptor.getValue()).isEqualTo(LocalDateTime.of(2026, 9, 1, 7, 0));
     }
 
     @Test
@@ -273,11 +281,15 @@ class ReviewServiceImplTest {
             return 1;
         });
 
-        service.recordPracticeError(1L, 50L, 100L, 2L, LocalDateTime.now());
+        LocalDateTime occurredAt = LocalDateTime.of(2026, 12, 31, 23, 59);
+        service.recordPracticeError(1L, 50L, 100L, 2L, occurredAt);
 
+        assertThat(insertedCard.get().getDueAt()).isEqualTo(LocalDateTime.of(2027, 1, 1, 7, 0));
+        ArgumentCaptor<LocalDateTime> dueAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         verify(cardMapper).updateSchedule(
                 eq(1L), eq("ACTIVE"), eq(new BigDecimal("2.1800")), eq(0), eq(1), eq(1),
-                any(), any(), eq(null), any());
+                dueAtCaptor.capture(), any(), eq(null), any());
+        assertThat(dueAtCaptor.getValue()).isEqualTo(LocalDateTime.of(2027, 1, 1, 7, 0));
         verify(attemptMapper).insertAttempt(any());
     }
 

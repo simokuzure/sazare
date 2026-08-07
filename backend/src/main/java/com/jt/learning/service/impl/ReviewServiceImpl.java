@@ -40,6 +40,7 @@ import com.jt.learning.service.AiReviewScoringClient;
 import com.jt.learning.service.ReviewService;
 import com.jt.learning.service.Sm2Result;
 import com.jt.learning.service.Sm2Scheduler;
+import com.jt.learning.util.ReviewDueAtCalculator;
 import com.jt.learning.vo.AnswerErrorAnalysisVO;
 import com.jt.learning.vo.AnswerScoresVO;
 import com.jt.learning.vo.PageVO;
@@ -250,7 +251,7 @@ public class ReviewServiceImpl implements ReviewService {
                 review.quality());
         ReviewCycleProgressRow progress = loadProgress(cycle);
         boolean completed = isCycleComplete(cycle, progress);
-        LocalDateTime nextDueAt = completed ? null : now.plusDays(sm2.intervalDays());
+        LocalDateTime nextDueAt = completed ? null : ReviewDueAtCalculator.calculate(now, sm2.intervalDays());
         updateCardAfterAttempt(card, sm2, completed, nextDueAt, now);
         if (completed) {
             reviewCycleMapper.completeCycle(cycle.getId(), now);
@@ -415,7 +416,7 @@ public class ReviewServiceImpl implements ReviewService {
     ) {
         Sm2Result sm2 = sm2Scheduler.schedule(
                 card.getEaseFactor(), card.getRepetitionCount(), card.getIntervalDays(), card.getLapseCount(), 2);
-        LocalDateTime dueAt = occurredAt.plusDays(1);
+        LocalDateTime dueAt = ReviewDueAtCalculator.calculate(occurredAt, 1);
         reviewCardMapper.updateSchedule(
                 card.getId(), CARD_ACTIVE, sm2.easeFactor(), sm2.repetitionCount(), sm2.intervalDays(),
                 sm2.lapseCount(), dueAt, occurredAt, null, occurredAt);
@@ -694,7 +695,7 @@ public class ReviewServiceImpl implements ReviewService {
         card.setRepetitionCount(0);
         card.setIntervalDays(1);
         card.setLapseCount(0);
-        card.setDueAt(now);
+        card.setDueAt(ReviewDueAtCalculator.calculate(now, card.getIntervalDays()));
         card.setLastReviewedAt(null);
         card.setMasteredAt(null);
         card.setCreatedAt(now);
