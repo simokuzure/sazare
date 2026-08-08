@@ -16,6 +16,7 @@ import com.jt.learning.dto.AiQuestionTagOptionDTO;
 import com.jt.learning.dto.QuestionAnswerRequest;
 import com.jt.learning.dto.QuestionCreateRequest;
 import com.jt.learning.dto.QuestionEnabledRequest;
+import com.jt.learning.dto.QuestionEmbeddingBackfillRequest;
 import com.jt.learning.dto.QuestionQueryRequest;
 import com.jt.learning.dto.QuestionTagRow;
 import com.jt.learning.dto.QuestionUpdateRequest;
@@ -45,6 +46,7 @@ import com.jt.learning.vo.AnswerScoresVO;
 import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.QuestionAnswerVO;
 import com.jt.learning.vo.QuestionVO;
+import com.jt.learning.vo.QuestionEmbeddingBackfillVO;
 import com.jt.learning.vo.TagVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -97,6 +99,7 @@ public class QuestionServiceImpl implements QuestionService {
     private final AiAnswerScoringPromptBuilder answerScoringPromptBuilder;
     private final AiAnswerScoringClient aiAnswerScoringClient;
     private final AiErrorAnalysisValidator aiErrorAnalysisValidator;
+    private final QuestionEmbeddingService questionEmbeddingService;
     private final ObjectMapper objectMapper;
 
     public QuestionServiceImpl(
@@ -112,6 +115,7 @@ public class QuestionServiceImpl implements QuestionService {
             AiAnswerScoringPromptBuilder answerScoringPromptBuilder,
             AiAnswerScoringClient aiAnswerScoringClient,
             AiErrorAnalysisValidator aiErrorAnalysisValidator,
+            QuestionEmbeddingService questionEmbeddingService,
             ObjectMapper objectMapper
     ) {
         this.tagMapper = tagMapper;
@@ -126,6 +130,7 @@ public class QuestionServiceImpl implements QuestionService {
         this.answerScoringPromptBuilder = answerScoringPromptBuilder;
         this.aiAnswerScoringClient = aiAnswerScoringClient;
         this.aiErrorAnalysisValidator = aiErrorAnalysisValidator;
+        this.questionEmbeddingService = questionEmbeddingService;
         this.objectMapper = objectMapper;
     }
 
@@ -140,23 +145,51 @@ public class QuestionServiceImpl implements QuestionService {
 
         List<AiQuestionTagOptionDTO> sceneTagOptions = toTagOptions(sceneTags);
         List<AiQuestionTagOptionDTO> functionTagOptions = toTagOptions(functionTags);
-        AiQuestionPrompt prompt = promptBuilder.build(request, sceneTagOptions, functionTagOptions);
-        AiQuestionGenerationResponseDTO aiResponse = parseAiResponse(
-                aiQuestionClient.generateQuestions(prompt, request, sceneTagOptions, functionTagOptions)
-        );
+        List<List<Float>> excludedEmbeddings = embedExcludedSourceTexts(request.excludedSourceTexts());
+        List<String> promptExcludedSourceTexts = new ArrayList<>(emptyIfNull(request.excludedSourceTexts()));
+        List<PreparedGeneratedQuestion> acceptedQuestions = new ArrayList<>();
 
-        List<ValidatedGeneratedQuestion> validatedQuestions = validateAiResponse(
-                request,
-                aiResponse,
-                toTagMap(sceneTags),
-                toTagMap(functionTags)
-        );
+        for (int attempt = 0; attempt < 3 && acceptedQuestions.size() < request.questionCount(); attempt++) {
+            AiQuestionGenerationRequest attemptRequest = createRetryRequest(
+                    request,
+                    request.questionCount() - acceptedQuestions.size(),
+                    promptExcludedSourceTexts
+            );
+            AiQuestionPrompt prompt = promptBuilder.build(attemptRequest, sceneTagOptions, functionTagOptions);
+            AiQuestionGenerationResponseDTO aiResponse = parseAiResponse(
+                    aiQuestionClient.generateQuestions(prompt, attemptRequest, sceneTagOptions, functionTagOptions)
+            );
+            List<ValidatedGeneratedQuestion> validatedQuestions = validateAiResponse(
+                    attemptRequest,
+                    aiResponse,
+                    toTagMap(sceneTags),
+                    toTagMap(functionTags)
+            );
 
-        List<QuestionVO> savedQuestions = new ArrayList<>();
-        for (ValidatedGeneratedQuestion validatedQuestion : validatedQuestions) {
-            savedQuestions.add(saveQuestion(validatedQuestion));
+            for (ValidatedGeneratedQuestion validatedQuestion : validatedQuestions) {
+                List<Float> embedding = questionEmbeddingService.embedQuestion(
+                        validatedQuestion.question().sourceText(),
+                        validatedQuestion.question().contextText()
+                );
+                if (isDuplicate(embedding, excludedEmbeddings, acceptedQuestions)) {
+                    promptExcludedSourceTexts.add(validatedQuestion.question().sourceText().trim());
+                    continue;
+                }
+                acceptedQuestions.add(new PreparedGeneratedQuestion(validatedQuestion, embedding));
+                promptExcludedSourceTexts.add(validatedQuestion.question().sourceText().trim());
+            }
         }
-        return savedQuestions;
+
+        if (acceptedQuestions.size() != request.questionCount()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 生成题目存在近似重复，补生成后仍未达到要求数量");
+        }
+        return acceptedQuestions.stream().map(this::saveQuestion).toList();
+    }
+
+    @Override
+    @Transactional
+    public QuestionEmbeddingBackfillVO backfillQuestionEmbeddings(QuestionEmbeddingBackfillRequest request) {
+        return questionEmbeddingService.backfill(request.batchSize());
     }
 
     @Override
@@ -190,6 +223,7 @@ public class QuestionServiceImpl implements QuestionService {
         question.setCreatedAt(now);
         question.setUpdatedAt(now);
         questionMapper.insertQuestion(question);
+        questionEmbeddingService.synchronizeEmbedding(question);
 
         List<QuestionAnswer> savedAnswers = saveAnswers(question.getId(), answers, now);
         saveQuestionTags(question.getId(), tags);
@@ -294,6 +328,9 @@ public class QuestionServiceImpl implements QuestionService {
         question.setUpdatedAt(LocalDateTime.now());
         if (questionMapper.updateQuestion(question) == 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或已删除");
+        }
+        if (!SOURCE_TYPE_REVIEW_DERIVED.equals(question.getSourceType())) {
+            questionEmbeddingService.synchronizeEmbedding(question);
         }
 
         questionAnswerMapper.logicalDeleteByQuestionId(id);
@@ -719,6 +756,47 @@ public class QuestionServiceImpl implements QuestionService {
         return validatedQuestions;
     }
 
+    private List<List<Float>> embedExcludedSourceTexts(List<String> sourceTexts) {
+        return emptyIfNull(sourceTexts).stream()
+                .map(sourceText -> questionEmbeddingService.embedQuestion(sourceText, ""))
+                .toList();
+    }
+
+    private AiQuestionGenerationRequest createRetryRequest(
+            AiQuestionGenerationRequest request,
+            int questionCount,
+            List<String> excludedSourceTexts
+    ) {
+        return new AiQuestionGenerationRequest(
+                questionCount,
+                request.level(),
+                request.difficulty(),
+                request.sceneTagCodes(),
+                request.functionTagCodes(),
+                List.copyOf(excludedSourceTexts),
+                request.extraRequirements()
+        );
+    }
+
+    private boolean isDuplicate(
+            List<Float> embedding,
+            List<List<Float>> excludedEmbeddings,
+            List<PreparedGeneratedQuestion> acceptedQuestions
+    ) {
+        if (!questionEmbeddingService.findSimilarQuestions(embedding).isEmpty()) {
+            return true;
+        }
+        if (excludedEmbeddings.stream().anyMatch(excluded -> questionEmbeddingService.isSimilar(embedding, excluded))) {
+            return true;
+        }
+        return acceptedQuestions.stream()
+                .anyMatch(accepted -> questionEmbeddingService.isSimilar(embedding, accepted.embedding()));
+    }
+
+    private List<String> emptyIfNull(List<String> values) {
+        return values == null ? List.of() : values;
+    }
+
     private ValidatedGeneratedQuestion validateQuestion(
             AiQuestionGenerationRequest request,
             AiGeneratedQuestionDTO question,
@@ -839,7 +917,8 @@ public class QuestionServiceImpl implements QuestionService {
         }
     }
 
-    private QuestionVO saveQuestion(ValidatedGeneratedQuestion validatedQuestion) {
+    private QuestionVO saveQuestion(PreparedGeneratedQuestion preparedQuestion) {
+        ValidatedGeneratedQuestion validatedQuestion = preparedQuestion.question();
         AiGeneratedQuestionDTO generatedQuestion = validatedQuestion.question();
         LocalDateTime now = LocalDateTime.now();
 
@@ -859,6 +938,7 @@ public class QuestionServiceImpl implements QuestionService {
         question.setCreatedAt(now);
         question.setUpdatedAt(now);
         questionMapper.insertQuestion(question);
+        questionEmbeddingService.saveEmbedding(question, preparedQuestion.embedding());
 
         List<QuestionAnswer> answers = saveAnswers(question.getId(), generatedQuestion.answers(), now);
         for (Tag tag : validatedQuestion.tags()) {
@@ -1039,6 +1119,12 @@ public class QuestionServiceImpl implements QuestionService {
     private record ValidatedGeneratedQuestion(
             AiGeneratedQuestionDTO question,
             List<Tag> tags
+    ) {
+    }
+
+    private record PreparedGeneratedQuestion(
+            ValidatedGeneratedQuestion question,
+            List<Float> embedding
     ) {
     }
 }

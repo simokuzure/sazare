@@ -51,6 +51,7 @@ export default function PracticePage() {
   const [extraRequirements, setExtraRequirements] = useState('')
   const [generatedQuestions, setGeneratedQuestions] = useState<Question[]>([])
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0)
+  const [grammarPointVisible, setGrammarPointVisible] = useState(false)
   const [questionGenerating, setQuestionGenerating] = useState(false)
   const [questionRandomizing, setQuestionRandomizing] = useState(false)
   const [answerSessions, setAnswerSessions] = useState<Record<number, AnswerSessionState>>({})
@@ -105,6 +106,7 @@ export default function PracticePage() {
 
   async function handleGenerateQuestion() {
     setQuestionGenerating(true)
+    setGrammarPointVisible(false)
     setPracticeNotice(null)
     try {
       const questions = await generateQuestions(buildAiQuestionGenerationPayload())
@@ -128,6 +130,7 @@ export default function PracticePage() {
 
   async function handleRandomQuestion() {
     const filters = buildRandomQuestionFilter()
+    setGrammarPointVisible(false)
     if (sceneParentId && !sceneTagCode && filters.tagCodes.length === 0) {
       setGeneratedQuestions([])
       setSelectedQuestionIndex(0)
@@ -160,6 +163,7 @@ export default function PracticePage() {
 
   function handleSelectQuestion(index: number) {
     setSelectedQuestionIndex(index)
+    setGrammarPointVisible(false)
     setPracticeNotice(null)
   }
 
@@ -386,7 +390,20 @@ export default function PracticePage() {
           <dl className="question-details">
             <div><dt>中文原文</dt><dd>{selectedQuestion?.sourceText ?? '暂无题目'}</dd></div>
             <div><dt>语境</dt><dd>{selectedQuestion?.contextText ?? '暂无'}</dd></div>
-            <div><dt>语法点</dt><dd>{selectedQuestion?.grammarPoint ?? '暂无'}</dd></div>
+            <div>
+              <dt>语法点</dt>
+              <dd className="grammar-point">
+                <button
+                  type="button"
+                  disabled={!selectedQuestion}
+                  aria-expanded={grammarPointVisible}
+                  onClick={() => setGrammarPointVisible((visible) => !visible)}
+                >
+                  {grammarPointVisible ? '隐藏语法点' : '显示语法点'}
+                </button>
+                {grammarPointVisible ? <span>{selectedQuestion?.grammarPoint ?? '暂无'}</span> : null}
+              </dd>
+            </div>
             <div><dt>标签</dt><dd>{selectedQuestion ? <span className="tag-chip-row">{selectedQuestion.tags.map((tag) => <span key={tag.id}>{tag.name}</span>)}</span> : '暂无'}</dd></div>
             <div><dt>难度</dt><dd>{selectedQuestion ? `${selectedQuestion.level} / ${selectedQuestion.difficulty}` : '暂无'}</dd></div>
           </dl>

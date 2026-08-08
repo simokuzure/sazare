@@ -6,6 +6,7 @@ import com.jt.learning.dto.AiQuestionGenerationRequest;
 import com.jt.learning.dto.QuestionAnswerRequest;
 import com.jt.learning.dto.QuestionCreateRequest;
 import com.jt.learning.dto.QuestionEnabledRequest;
+import com.jt.learning.dto.QuestionEmbeddingMatch;
 import com.jt.learning.dto.QuestionQueryRequest;
 import com.jt.learning.dto.QuestionTagRow;
 import com.jt.learning.dto.QuestionUpdateRequest;
@@ -44,6 +45,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -58,6 +60,7 @@ class QuestionServiceImplTest {
     private ErrorTypeMapper errorTypeMapper;
     private AiQuestionClient aiQuestionClient;
     private AiAnswerScoringClient aiAnswerScoringClient;
+    private QuestionEmbeddingService questionEmbeddingService;
     private QuestionServiceImpl questionService;
 
     @BeforeEach
@@ -71,6 +74,7 @@ class QuestionServiceImplTest {
         errorTypeMapper = mock(ErrorTypeMapper.class);
         aiQuestionClient = mock(AiQuestionClient.class);
         aiAnswerScoringClient = mock(AiAnswerScoringClient.class);
+        questionEmbeddingService = mock(QuestionEmbeddingService.class);
 
         ObjectMapper objectMapper = new ObjectMapper();
         when(errorTypeMapper.selectEnabledLeafOptions()).thenReturn(List.of(errorTypeOption()));
@@ -87,6 +91,7 @@ class QuestionServiceImplTest {
                 new AiAnswerScoringPromptBuilder(objectMapper),
                 aiAnswerScoringClient,
                 new AiErrorAnalysisValidator(),
+                questionEmbeddingService,
                 objectMapper
         );
     }
@@ -126,6 +131,27 @@ class QuestionServiceImplTest {
         verify(questionAnswerMapper).insertQuestionAnswer(any(QuestionAnswer.class));
         verify(questionTagMapper).insertQuestionTag(100L, 1L);
         verify(questionTagMapper).insertQuestionTag(100L, 2L);
+        verify(questionEmbeddingService).saveEmbedding(any(Question.class), anyList());
+    }
+
+    @Test
+    void generateQuestionsByAiShouldRollbackWhenSimilarQuestionCannotBeReplaced() {
+        Tag sceneTag = tag(1L, "SCENE", "DAILY_LIFE_WEATHER", "天气");
+        Tag functionTag = tag(2L, "FUNCTION", "FUNCTION_PROPOSE_PLAN", "提出计划");
+        when(tagMapper.selectEnabledTagsByCodes(eq("SCENE"), anyList())).thenReturn(List.of(sceneTag));
+        when(tagMapper.selectEnabledTagsByCodes(eq("FUNCTION"), anyList())).thenReturn(List.of(functionTag));
+        when(aiQuestionClient.generateQuestions(any(), any(), anyList(), anyList())).thenReturn(validAiJson());
+        when(questionEmbeddingService.embedQuestion(any(), any())).thenReturn(vector());
+        when(questionEmbeddingService.findSimilarQuestions(anyList()))
+                .thenReturn(List.of(new QuestionEmbeddingMatch(99L, 0.95d)));
+
+        assertThatThrownBy(() -> questionService.generateQuestionsByAi(request()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("补生成后仍未达到要求数量");
+
+        verify(aiQuestionClient, times(3)).generateQuestions(any(), any(), anyList(), anyList());
+        verify(questionMapper, never()).insertQuestion(any());
+        verify(questionEmbeddingService, never()).saveEmbedding(any(), anyList());
     }
 
     @Test
@@ -289,6 +315,7 @@ class QuestionServiceImplTest {
 
         assertThat(question.id()).isEqualTo(100L);
         assertThat(question.sourceType()).isEqualTo("MANUAL");
+        verify(questionEmbeddingService).synchronizeEmbedding(any(Question.class));
         assertThat(question.tags()).extracting("code")
                 .containsExactly("FINANCE_BANK", "FUNCTION_EXPRESS_PLAN");
         assertThat(question.answers()).extracting("answerType")
@@ -673,6 +700,12 @@ class QuestionServiceImplTest {
                   ]
                 }
                 """;
+    }
+
+    private List<Float> vector() {
+        Float[] values = new Float[768];
+        java.util.Arrays.fill(values, 0.1f);
+        return java.util.Arrays.asList(values);
     }
 
     private String validReviewJson() {

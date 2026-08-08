@@ -5,12 +5,14 @@ import com.jt.learning.dto.AiAnswerScoringRequest;
 import com.jt.learning.dto.AiQuestionGenerationRequest;
 import com.jt.learning.dto.QuestionCreateRequest;
 import com.jt.learning.dto.QuestionEnabledRequest;
+import com.jt.learning.dto.QuestionEmbeddingBackfillRequest;
 import com.jt.learning.dto.QuestionQueryRequest;
 import com.jt.learning.dto.QuestionUpdateRequest;
 import com.jt.learning.service.QuestionService;
 import com.jt.learning.vo.AnswerReviewVO;
 import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.QuestionVO;
+import com.jt.learning.vo.QuestionEmbeddingBackfillVO;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -46,6 +48,16 @@ public class QuestionController {
             @Valid @RequestBody AiQuestionGenerationRequest request
     ) {
         return ApiResponse.success(questionService.generateQuestionsByAi(request));
+    }
+
+    @PostMapping("/embedding-backfills")
+    public ApiResponse<QuestionEmbeddingBackfillVO> backfillQuestionEmbeddings(
+            @Valid @RequestBody(required = false) QuestionEmbeddingBackfillRequest request
+    ) {
+        QuestionEmbeddingBackfillRequest normalizedRequest = request == null
+                ? new QuestionEmbeddingBackfillRequest(null)
+                : request;
+        return ApiResponse.success(questionService.backfillQuestionEmbeddings(normalizedRequest));
     }
 
     @PostMapping

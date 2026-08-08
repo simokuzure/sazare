@@ -230,6 +230,8 @@ AI纠错
 docker compose up -d
 ```
 
+> 数据库镜像已使用 pgvector 的 PostgreSQL 16 版本。已有本地数据升级时，先执行备份，再运行 `docker compose down`（不要加 `-v`）和 `docker compose up -d`，以保留 `postgres_data` 数据卷；随后执行 `backend/src/main/resources/db/migrations/20260808_add_question_embeddings.sql` 的增量 SQL，最后调用 `POST /api/questions/embedding-backfills` 补齐历史题目向量。
+
 启动后服务：
 
 -   PostgreSQL：`localhost:5432`

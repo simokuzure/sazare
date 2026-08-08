@@ -1,16 +1,19 @@
 package com.jt.learning.config;
 
 import com.jt.learning.service.AiQuestionClient;
+import com.jt.learning.service.AiEmbeddingClient;
 import com.jt.learning.service.AiAnswerScoringClient;
 import com.jt.learning.service.AiReviewQuestionClient;
 import com.jt.learning.service.AiReviewScoringClient;
 import com.jt.learning.service.impl.GoogleAiAnswerScoringClient;
 import com.jt.learning.service.impl.GoogleAiQuestionClient;
+import com.jt.learning.service.impl.GoogleAiEmbeddingClient;
 import com.jt.learning.service.impl.GoogleAiReviewQuestionClient;
 import com.jt.learning.service.impl.GoogleAiReviewScoringClient;
 import com.jt.learning.service.impl.JavaAiProviderHttpClient;
 import com.jt.learning.service.impl.MockAiAnswerScoringClient;
 import com.jt.learning.service.impl.MockAiQuestionClient;
+import com.jt.learning.service.impl.MockAiEmbeddingClient;
 import com.jt.learning.service.impl.MockAiReviewQuestionClient;
 import com.jt.learning.service.impl.MockAiReviewScoringClient;
 import com.jt.learning.service.impl.AiProviderHttpClient;
@@ -49,6 +52,23 @@ public class AiClientConfig {
                     aiProperties.getProviders().getGoogle(),
                     objectMapper,
                     aiProviderHttpClient
+                )
+        );
+    }
+
+    @Bean
+    public AiEmbeddingClient aiEmbeddingClient(
+            AiProperties aiProperties,
+            ObjectMapper objectMapper,
+            AiProviderHttpClient aiProviderHttpClient
+    ) {
+        return createClient(
+                aiProperties,
+                MockAiEmbeddingClient::new,
+                () -> new GoogleAiEmbeddingClient(
+                        aiProperties.getProviders().getGoogle(),
+                        objectMapper,
+                        aiProviderHttpClient
                 )
         );
     }

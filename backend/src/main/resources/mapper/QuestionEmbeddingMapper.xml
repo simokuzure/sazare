@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jt.learning.mapper.QuestionEmbeddingMapper">
+
+    <select id="selectSimilarQuestionEmbeddings" resultType="com.jt.learning.dto.QuestionEmbeddingMatch">
+        select
+            qe.question_id,
+            1 - (qe.embedding &lt;=&gt; cast(#{embedding} as vector)) as similarity
+        from question_embeddings qe
+        inner join questions q on q.id = qe.question_id
+        where q.deleted = false
+          and q.source_type in ('AI', 'MANUAL')
+          and 1 - (qe.embedding &lt;=&gt; cast(#{embedding} as vector)) &gt;= #{threshold}
+        order by qe.embedding &lt;=&gt; cast(#{embedding} as vector), qe.question_id
+    </select>
+
+    <select id="selectRegularQuestionEmbeddingCandidates" resultType="com.jt.learning.entity.QuestionEmbeddingCandidate">
+        select
+            q.id as question_id,
+            q.source_text,
+            q.context_text,
+            qe.content_hash,
+            qe.model_name
+        from questions q
+        left join question_embeddings qe on qe.question_id = q.id
+        where q.deleted = false
+          and q.source_type in ('AI', 'MANUAL')
+        order by q.id
+    </select>
+
+    <insert id="upsertQuestionEmbedding">
+        insert into question_embeddings (
+            question_id,
+            embedding,
+            content_hash,
+            model_name,
+            created_at,
+            updated_at
+        ) values (
+            #{questionId},
+            cast(#{embedding} as vector),
+            #{contentHash},
+            #{modelName},
+            #{updatedAt},
+            #{updatedAt}
+        )
+        on conflict (question_id) do update
+        set embedding = excluded.embedding,
+            content_hash = excluded.content_hash,
+            model_name = excluded.model_name,
+            updated_at = excluded.updated_at
+    </insert>
+</mapper>

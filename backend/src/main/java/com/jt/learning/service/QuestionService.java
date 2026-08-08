@@ -4,17 +4,21 @@ import com.jt.learning.dto.AiQuestionGenerationRequest;
 import com.jt.learning.dto.AiAnswerScoringRequest;
 import com.jt.learning.dto.QuestionCreateRequest;
 import com.jt.learning.dto.QuestionEnabledRequest;
+import com.jt.learning.dto.QuestionEmbeddingBackfillRequest;
 import com.jt.learning.dto.QuestionQueryRequest;
 import com.jt.learning.dto.QuestionUpdateRequest;
 import com.jt.learning.vo.AnswerReviewVO;
 import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.QuestionVO;
+import com.jt.learning.vo.QuestionEmbeddingBackfillVO;
 
 import java.util.List;
 
 public interface QuestionService {
 
     List<QuestionVO> generateQuestionsByAi(AiQuestionGenerationRequest request);
+
+    QuestionEmbeddingBackfillVO backfillQuestionEmbeddings(QuestionEmbeddingBackfillRequest request);
 
     QuestionVO createQuestion(QuestionCreateRequest request);
 

@@ -3,8 +3,10 @@ package com.jt.learning.config;
 import com.jt.learning.service.impl.GoogleAiAnswerScoringClient;
 import com.jt.learning.service.impl.AiProviderHttpResponse;
 import com.jt.learning.service.impl.GoogleAiQuestionClient;
+import com.jt.learning.service.impl.GoogleAiEmbeddingClient;
 import com.jt.learning.service.impl.MockAiAnswerScoringClient;
 import com.jt.learning.service.impl.MockAiQuestionClient;
+import com.jt.learning.service.impl.MockAiEmbeddingClient;
 import com.jt.learning.service.impl.GoogleAiReviewQuestionClient;
 import com.jt.learning.service.impl.GoogleAiReviewScoringClient;
 import com.jt.learning.service.impl.MockAiReviewQuestionClient;
@@ -60,6 +62,21 @@ class AiClientConfigTest {
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("不支持的 AI provider");
+    }
+
+    @Test
+    void aiEmbeddingClientShouldUseConfiguredProvider() {
+        var httpClient = (com.jt.learning.service.impl.AiProviderHttpClient)
+                (uri, headers, body) -> new AiProviderHttpResponse(200, "{}");
+        AiProperties mockProperties = new AiProperties();
+        mockProperties.setProvider("mock");
+        AiProperties googleProperties = new AiProperties();
+        googleProperties.setProvider("google");
+
+        assertThat(config.aiEmbeddingClient(mockProperties, objectMapper, httpClient))
+                .isInstanceOf(MockAiEmbeddingClient.class);
+        assertThat(config.aiEmbeddingClient(googleProperties, objectMapper, httpClient))
+                .isInstanceOf(GoogleAiEmbeddingClient.class);
     }
 
     @Test

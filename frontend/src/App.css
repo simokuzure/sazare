@@ -368,6 +368,22 @@ textarea:focus {
   line-height: 1.5;
 }
 
+.grammar-point {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.grammar-point button {
+  flex: 0 0 auto;
+}
+
+.grammar-point span {
+  min-width: 0;
+  padding-top: 7px;
+}
+
 .tag-chip-row {
   display: flex;
   flex-wrap: wrap;

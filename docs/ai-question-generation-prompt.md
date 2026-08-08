@@ -11,7 +11,7 @@
 - 默认策略：mock 优先。
 - 真实 AI 输出不能直接入库，必须经过 JSON 解析、字段校验、标签校验和默认值处理。
 - 标签必须来自后端提供的 `tags.code` 白名单，AI 不允许生成新标签。.\mvnw.cmd test
-- 当前题目生成不处理去重，后续可在保存前增加文本相似度或 Embedding 检查。
+- 当前 AI 生成在保存前执行语义去重：使用 `sourceText + contextText` 的 768 维嵌入，与未逻辑删除的 AI、人工题及同批候选按余弦相似度比较；达到 `0.90` 的候选会被剔除并在最多三轮内补生成。`REVIEW_DERIVED` 不参与该流程。
 
 ## 输入参数
 
@@ -26,6 +26,13 @@
 | `functionTagOptions` | 可选功能标签候选列表，来自 `tags` 表 |
 | `excludedSourceTexts` | 可选，需要避免重复生成的中文原文 |
 | `extraRequirements` | 可选，额外限制，例如“偏口语”“商务场景”“考试表达” |
+
+## 语义去重与历史回填
+
+- 嵌入模型由 `GOOGLE_AI_EMBEDDING_MODEL` 配置，默认 `gemini-embedding-001`；生成模型和嵌入模型使用同一个 Google API Key。
+- 既有数据库需在切换 pgvector 镜像后手工执行 `db/migrations/20260808_add_question_embeddings.sql`，不要重新执行整份 `schema.sql`。
+- 通过 `POST /api/questions/embedding-backfills` 传入 `{ "batchSize": 100 }` 分批回填，响应提供 `processedCount` 与 `remainingCount`；接口失败时本批数据库写入回滚，可重试。
+- 人工创建或编辑题目会同步刷新向量；复习衍生题不创建也不查询向量。
 
 标签候选列表只需要提供 AI 选择所需字段：
 

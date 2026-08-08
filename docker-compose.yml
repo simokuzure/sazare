@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:0.8.6-pg16-bookworm
     container_name: jt-postgres
     environment:
       POSTGRES_DB: jt_learning
@@ -32,4 +32,3 @@ services:
 volumes:
   postgres_data:
   redis_data:
-
