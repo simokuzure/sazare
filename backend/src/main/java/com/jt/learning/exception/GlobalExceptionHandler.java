@@ -9,6 +9,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.util.DisconnectedClientHelper;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -48,6 +49,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ApiResponse<Void> handleException(Exception exception) {
+        if (DisconnectedClientHelper.isClientDisconnectedException(exception)) {
+            return null;
+        }
         log.error("Unhandled exception", exception);
         return ApiResponse.error(ErrorCode.SYSTEM_ERROR.getCode(), ErrorCode.SYSTEM_ERROR.getMessage());
     }
