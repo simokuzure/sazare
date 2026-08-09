@@ -501,7 +501,7 @@ function QuestionMetadata({ detail }: { detail: ReviewCardDetail }) {
   const question = detail.currentQuestion
   if (!question) return null
   const flags = [question.spoken ? '口语' : null, question.business ? '商务' : null, question.exam ? '考试' : null].filter(Boolean)
-  return <div className="review-question-meta"><span>{question.level}</span><span>难度 {question.difficulty}</span>{question.grammarPoint ? <span>{question.grammarPoint}</span> : null}{flags.map((flag) => <span key={flag}>{flag}</span>)}{question.tags.map((tag) => <span key={tag.id}>{tag.name}</span>)}<span>已作答 {question.attemptCount} 次</span></div>
+  return <div className="review-question-meta"><span>{question.level}</span><span>难度 {question.difficulty}</span>{flags.map((flag) => <span key={flag}>{flag}</span>)}{question.tags.map((tag) => <span key={tag.id}>{tag.name}</span>)}<span>已作答 {question.attemptCount} 次</span></div>
 }
 
 function ReviewMetrics({ progress }: { progress: ReviewCycleProgress }) {

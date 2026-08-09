@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jt.learning.mapper.LearningStatisticsMapper">
+
+    <select id="selectOverview" resultType="com.jt.learning.dto.LearningStatisticsOverviewRow">
+        select
+            count(1) as answer_count,
+            count(*) filter (where answer_status = 'REVIEWED') as reviewed_answer_count,
+            avg(total_score) filter (where answer_status = 'REVIEWED') as average_total_score
+        from user_answers
+        where user_id = #{userId}
+          and deleted = false
+          and created_at &gt;= #{startAt}
+          and created_at &lt; #{endAt}
+    </select>
+
+    <select id="countConfirmedErrors" resultType="long">
+        select count(1)
+        from user_answer_errors answer_error
+        inner join user_answers user_answer
+            on user_answer.id = answer_error.user_answer_id
+           and user_answer.user_id = #{userId}
+           and user_answer.deleted = false
+        where answer_error.user_id = #{userId}
+          and answer_error.created_at &gt;= #{startAt}
+          and answer_error.created_at &lt; #{endAt}
+    </select>
+
+    <select id="selectDailyTrends" resultType="com.jt.learning.dto.LearningStatisticsDailyTrendRow">
+        select
+            created_at::date as day,
+            count(1) as answer_count,
+            avg(total_score) filter (where answer_status = 'REVIEWED') as average_total_score
+        from user_answers
+        where user_id = #{userId}
+          and deleted = false
+          and created_at &gt;= #{startAt}
+          and created_at &lt; #{endAt}
+        group by created_at::date
+        order by day
+    </select>
+
+    <select id="selectScoreDimensions" resultType="com.jt.learning.dto.LearningStatisticsScoreDimensionsRow">
+        select
+            avg(grammar_vocabulary_score) as grammar_vocabulary_score,
+            avg(natural_fluency_score) as natural_fluency_score,
+            avg(scenario_adaptation_score) as scenario_adaptation_score,
+            avg(information_completeness_score) as information_completeness_score
+        from user_answers
+        where user_id = #{userId}
+          and deleted = false
+          and answer_status = 'REVIEWED'
+          and created_at &gt;= #{startAt}
+          and created_at &lt; #{endAt}
+    </select>
+
+    <select id="selectTopWeaknesses" resultType="com.jt.learning.dto.LearningStatisticsWeaknessRow">
+        select
+            answer_error.user_error_type_id,
+            user_error_type.name as user_error_type_name,
+            user_error_type.status as user_error_type_status,
+            error_type.id as error_type_id,
+            error_type.code as error_type_code,
+            error_type.name as error_type_name,
+            count(1) as confirmed_count,
+            count(*) filter (where answer_error.severity = 'LOW') as low_severity_count,
+            count(*) filter (where answer_error.severity = 'MEDIUM') as medium_severity_count,
+            count(*) filter (where answer_error.severity = 'HIGH') as high_severity_count,
+            max(answer_error.created_at) as last_confirmed_at,
+            review_card.status as review_card_status,
+            review_card.due_at as review_card_due_at
+        from user_answer_errors answer_error
+        inner join user_answers user_answer
+            on user_answer.id = answer_error.user_answer_id
+           and user_answer.user_id = #{userId}
+           and user_answer.deleted = false
+        inner join user_error_types user_error_type
+            on user_error_type.id = answer_error.user_error_type_id
+           and user_error_type.user_id = #{userId}
+        inner join error_types error_type
+            on error_type.id = answer_error.error_type_id
+        left join review_cards review_card
+            on review_card.user_error_type_id = user_error_type.id
+           and review_card.user_id = #{userId}
+        where answer_error.user_id = #{userId}
+          and answer_error.created_at &gt;= #{startAt}
+          and answer_error.created_at &lt; #{endAt}
+        group by
+            answer_error.user_error_type_id,
+            user_error_type.name,
+            user_error_type.status,
+            error_type.id,
+            error_type.code,
+            error_type.name,
+            review_card.status,
+            review_card.due_at
+        order by confirmed_count desc, last_confirmed_at desc, answer_error.user_error_type_id desc
+        limit 10
+    </select>
+
+    <select id="selectCurrentReviewSummary" resultType="com.jt.learning.dto.LearningStatisticsCurrentReviewRow">
+        select
+            count(*) filter (where status = 'ACTIVE' and due_at &lt;= #{now}) as due_card_count,
+            count(*) filter (where status = 'ACTIVE') as active_card_count,
+            count(*) filter (where status = 'MASTERED') as mastered_card_count
+        from review_cards
+        where user_id = #{userId}
+    </select>
+
+    <select id="selectPeriodReviewSummary" resultType="com.jt.learning.dto.LearningStatisticsPeriodReviewRow">
+        select
+            count(1) as review_attempt_count,
+            count(*) filter (where result = 'PASS') as review_pass_count
+        from review_attempts
+        where user_id = #{userId}
+          and attempt_source = 'REVIEW'
+          and created_at &gt;= #{startAt}
+          and created_at &lt; #{endAt}
+    </select>
+
+    <select id="countCompletedReviewCycles" resultType="long">
+        select count(1)
+        from review_cycles review_cycle
+        inner join review_cards review_card
+            on review_card.id = review_cycle.review_card_id
+           and review_card.user_id = #{userId}
+        where review_cycle.status = 'COMPLETED'
+          and review_cycle.completed_at &gt;= #{startAt}
+          and review_cycle.completed_at &lt; #{endAt}
+    </select>
+</mapper>

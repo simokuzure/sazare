@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { fetchHealth } from './api/client'
 import AnswerRecordsPage from './pages/AnswerRecordsPage'
 import ErrorTypeManagementPage from './pages/ErrorTypeManagementPage'
+import LearningStatisticsPage from './pages/LearningStatisticsPage'
 import StatusBadge from './components/StatusBadge'
 import PracticePage from './pages/PracticePage'
 import QuestionManagementPage from './pages/QuestionManagementPage'
@@ -10,11 +11,12 @@ import TagManagementPage from './pages/TagManagementPage'
 import type { HealthResponse } from './types/api'
 import './App.css'
 
-type PageKey = 'practice' | 'answerRecords' | 'tags' | 'questions' | 'errorTypes' | 'reviews'
+type PageKey = 'practice' | 'answerRecords' | 'statistics' | 'tags' | 'questions' | 'errorTypes' | 'reviews'
 
 const NAV_ITEMS: { key: PageKey; label: string }[] = [
   { key: 'practice', label: '练习' },
   { key: 'answerRecords', label: '答题记录' },
+  { key: 'statistics', label: '学习分析' },
   { key: 'tags', label: '标签管理' },
   { key: 'questions', label: '问题管理' },
   { key: 'errorTypes', label: '错误类型管理' },
@@ -67,6 +69,7 @@ function App() {
           <PracticePage />
         </div>
         {activePage === 'answerRecords' ? <AnswerRecordsPage /> : null}
+        {activePage === 'statistics' ? <LearningStatisticsPage /> : null}
         {activePage === 'tags' ? <TagManagementPage /> : null}
         {activePage === 'questions' ? <QuestionManagementPage /> : null}
         {activePage === 'errorTypes' ? <ErrorTypeManagementPage /> : null}

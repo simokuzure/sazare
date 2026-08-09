@@ -105,12 +105,12 @@ public class QuestionController {
 
     @GetMapping("/random")
     public ApiResponse<QuestionVO> getRandomQuestion(
-            @Pattern(regexp = "TRANSLATION_ZH_TO_JA", message = "questionType 蜿ｪ閭ｽ譏ｯ TRANSLATION_ZH_TO_JA")
+            @Pattern(regexp = "TRANSLATION_ZH_TO_JA", message = "questionType 只能是 TRANSLATION_ZH_TO_JA")
             @RequestParam(defaultValue = "TRANSLATION_ZH_TO_JA") String questionType,
-            @Pattern(regexp = "N5|N4|N3|N2|N1", message = "level 蜿ｪ閭ｽ譏ｯ N5縲¨4縲¨3縲¨2縲¨1")
+            @Pattern(regexp = "N5|N4|N3|N2|N1", message = "level 只能是 N5、N4、N3、N2、N1")
             @RequestParam(required = false) String level,
-            @Min(value = 1, message = "difficulty 蠢・｡ｻ蝨ｨ 1 蛻ｰ 5 荵矩龍")
-            @Max(value = 5, message = "difficulty 蠢・｡ｻ蝨ｨ 1 蛻ｰ 5 荵矩龍")
+            @Min(value = 1, message = "difficulty 必须在 1 到 5 之间")
+            @Max(value = 5, message = "difficulty 必须在 1 到 5 之间")
             @RequestParam(required = false) Integer difficulty,
             @RequestParam(required = false) List<String> tagCodes,
             @RequestParam(required = false) Boolean spoken,
