@@ -1,16 +1,16 @@
 package com.jt.learning.config;
 
-import com.jt.learning.service.impl.GoogleAiAnswerScoringClient;
-import com.jt.learning.service.impl.AiProviderHttpResponse;
-import com.jt.learning.service.impl.GoogleAiQuestionClient;
-import com.jt.learning.service.impl.GoogleAiEmbeddingClient;
-import com.jt.learning.service.impl.MockAiAnswerScoringClient;
-import com.jt.learning.service.impl.MockAiQuestionClient;
-import com.jt.learning.service.impl.MockAiEmbeddingClient;
-import com.jt.learning.service.impl.GoogleAiReviewQuestionClient;
-import com.jt.learning.service.impl.GoogleAiReviewScoringClient;
-import com.jt.learning.service.impl.MockAiReviewQuestionClient;
-import com.jt.learning.service.impl.MockAiReviewScoringClient;
+import com.jt.learning.service.ai.client.GoogleAiAnswerScoringClient;
+import com.jt.learning.service.ai.client.AiProviderHttpResponse;
+import com.jt.learning.service.ai.client.GoogleAiQuestionClient;
+import com.jt.learning.service.ai.client.GoogleAiEmbeddingClient;
+import com.jt.learning.service.ai.client.MockAiAnswerScoringClient;
+import com.jt.learning.service.ai.client.MockAiQuestionClient;
+import com.jt.learning.service.ai.client.MockAiEmbeddingClient;
+import com.jt.learning.service.ai.client.GoogleAiReviewQuestionClient;
+import com.jt.learning.service.ai.client.GoogleAiReviewScoringClient;
+import com.jt.learning.service.ai.client.MockAiReviewQuestionClient;
+import com.jt.learning.service.ai.client.MockAiReviewScoringClient;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
@@ -66,7 +66,7 @@ class AiClientConfigTest {
 
     @Test
     void aiEmbeddingClientShouldUseConfiguredProvider() {
-        var httpClient = (com.jt.learning.service.impl.AiProviderHttpClient)
+        var httpClient = (com.jt.learning.service.ai.client.AiProviderHttpClient)
                 (uri, headers, body) -> new AiProviderHttpResponse(200, "{}");
         AiProperties mockProperties = new AiProperties();
         mockProperties.setProvider("mock");
@@ -111,7 +111,7 @@ class AiClientConfigTest {
     void reviewClientsShouldUseMockProvider() {
         AiProperties properties = new AiProperties();
         properties.setProvider("mock");
-        var httpClient = (com.jt.learning.service.impl.AiProviderHttpClient)
+        var httpClient = (com.jt.learning.service.ai.client.AiProviderHttpClient)
                 (uri, headers, body) -> new AiProviderHttpResponse(200, "{}");
 
         assertThat(config.aiReviewScoringClient(properties, objectMapper, httpClient))
@@ -124,7 +124,7 @@ class AiClientConfigTest {
     void reviewClientsShouldUseGoogleProvider() {
         AiProperties properties = new AiProperties();
         properties.setProvider("google");
-        var httpClient = (com.jt.learning.service.impl.AiProviderHttpClient)
+        var httpClient = (com.jt.learning.service.ai.client.AiProviderHttpClient)
                 (uri, headers, body) -> new AiProviderHttpResponse(200, "{}");
 
         assertThat(config.aiReviewScoringClient(properties, objectMapper, httpClient))
