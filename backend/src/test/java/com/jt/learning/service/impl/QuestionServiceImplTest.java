@@ -16,6 +16,7 @@ import com.jt.learning.entity.Tag;
 import com.jt.learning.entity.User;
 import com.jt.learning.entity.UserAnswer;
 import com.jt.learning.exception.BusinessException;
+import com.jt.learning.exception.ErrorCode;
 import com.jt.learning.mapper.QuestionAnswerMapper;
 import com.jt.learning.mapper.ErrorTypeMapper;
 import com.jt.learning.mapper.QuestionMapper;
@@ -532,18 +533,13 @@ class QuestionServiceImplTest {
     }
 
     @Test
-    void submitAnswerShouldMarkFailedWhenAiReviewIsInvalid() {
+    void submitAnswerShouldNotSaveAnswerWhenAiReviewIsInvalid() {
         Question question = question(100L);
         QuestionAnswer answer = answer(200L, "今日の午後、銀行へ振り込みに行きます。");
         when(questionMapper.selectActiveQuestionById(100L)).thenReturn(question);
         when(questionAnswerMapper.selectActiveAnswersByQuestionId(100L)).thenReturn(List.of(answer));
         when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user(10L));
         when(tagMapper.selectEnabledTagsByQuestionId(100L)).thenReturn(List.of());
-        when(userAnswerMapper.insertUserAnswer(any())).thenAnswer(invocation -> {
-            UserAnswer userAnswer = invocation.getArgument(0);
-            userAnswer.setId(300L);
-            return 1;
-        });
         when(aiAnswerScoringClient.scoreAnswer(any(), any(), any(), anyList(), anyList())).thenReturn("""
                 {
                   "review": {
@@ -575,7 +571,32 @@ class QuestionServiceImplTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("grammarVocabularyScore");
 
-        verify(userAnswerMapper).updateFailed(eq(300L), any(LocalDateTime.class));
+        verify(userAnswerMapper, never()).insertUserAnswer(any());
+        verify(userAnswerMapper, never()).updateReviewed(
+                any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void submitAnswerShouldNotSaveAnswerWhenAiApiCallFails() {
+        Question question = question(100L);
+        QuestionAnswer answer = answer(200L, "今日の午後、銀行へ振り込みに行きます。");
+        when(questionMapper.selectActiveQuestionById(100L)).thenReturn(question);
+        when(questionAnswerMapper.selectActiveAnswersByQuestionId(100L)).thenReturn(List.of(answer));
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user(10L));
+        when(tagMapper.selectEnabledTagsByQuestionId(100L)).thenReturn(List.of());
+        when(aiAnswerScoringClient.scoreAnswer(any(), any(), any(), anyList(), anyList()))
+                .thenThrow(new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分服务调用失败"));
+
+        assertThatThrownBy(() -> questionService.submitAnswer(
+                100L,
+                new AiAnswerScoringRequest("今日の午後、銀行に送金をしに行きます。")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("AI 评分服务调用失败");
+
+        verify(userAnswerMapper, never()).insertUserAnswer(any());
+        verify(userAnswerMapper, never()).updateReviewed(
+                any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

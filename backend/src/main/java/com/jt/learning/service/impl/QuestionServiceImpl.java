@@ -84,7 +84,6 @@ public class QuestionServiceImpl implements QuestionService {
     private static final String LOCAL_DEFAULT_USER_CODE = "LOCAL_DEFAULT";
     private static final String ANSWER_STATUS_SUBMITTED = "SUBMITTED";
     private static final String ANSWER_STATUS_REVIEWED = "REVIEWED";
-    private static final String ANSWER_STATUS_FAILED = "FAILED";
 
     private static final Set<String> VALID_ANSWER_TYPES = Set.of(ANSWER_TYPE_STANDARD, ANSWER_TYPE_REFERENCE);
     private static final Set<String> VALID_FORMALITIES = Set.of("CASUAL", "NEUTRAL", "POLITE", "BUSINESS");
@@ -363,7 +362,7 @@ public class QuestionServiceImpl implements QuestionService {
     }
 
     @Override
-    @Transactional(noRollbackFor = BusinessException.class)
+    @Transactional
     public AnswerReviewVO submitAnswer(Long questionId, AiAnswerScoringRequest request) {
         Question question = questionMapper.selectActiveQuestionById(questionId);
         if (question == null) {
@@ -391,45 +390,40 @@ public class QuestionServiceImpl implements QuestionService {
         }
         Map<String, AiErrorTypeOptionDTO> errorTypesByCode = errorTypeOptions.stream()
                 .collect(Collectors.toMap(AiErrorTypeOptionDTO::code, option -> option));
-        UserAnswer userAnswer = saveSubmittedAnswer(user.getId(), questionId, request.answerText().trim());
-
-        try {
-            AiQuestionPrompt prompt = answerScoringPromptBuilder.build(
-                    question,
-                    standardAnswers,
-                    tagOptions,
-                    errorTypeOptions,
-                    request
-            );
-            AiAnswerScoringResponseDTO aiResponse = parseAiAnswerScoringResponse(
-                    aiAnswerScoringClient.scoreAnswer(prompt, request, question, standardAnswers, tagOptions)
-            );
-            AiAnswerReviewDTO review = validateAnswerReview(aiResponse, errorTypesByCode, userAnswer.getAnswerText());
-            BigDecimal totalScore = calculateTotalScore(review.scores());
-            LocalDateTime updatedAt = LocalDateTime.now();
-            userAnswerMapper.updateReviewed(
-                    userAnswer.getId(),
-                    review.scores().grammarVocabularyScore(),
-                    review.scores().naturalFluencyScore(),
-                    review.scores().scenarioAdaptationScore(),
-                    review.scores().informationCompletenessScore(),
-                    totalScore,
-                    review.overallComment().trim(),
-                    updatedAt
-            );
-            userAnswer.setAnswerStatus(ANSWER_STATUS_REVIEWED);
-            userAnswer.setGrammarVocabularyScore(review.scores().grammarVocabularyScore());
-            userAnswer.setNaturalFluencyScore(review.scores().naturalFluencyScore());
-            userAnswer.setScenarioAdaptationScore(review.scores().scenarioAdaptationScore());
-            userAnswer.setInformationCompletenessScore(review.scores().informationCompletenessScore());
-            userAnswer.setTotalScore(totalScore);
-            userAnswer.setAiOverallComment(review.overallComment().trim());
-            userAnswer.setUpdatedAt(updatedAt);
-            return toAnswerReviewVO(userAnswer, review, errorTypesByCode);
-        } catch (BusinessException exception) {
-            markAnswerReviewFailed(userAnswer);
-            throw exception;
-        }
+        String answerText = request.answerText().trim();
+        AiQuestionPrompt prompt = answerScoringPromptBuilder.build(
+                question,
+                standardAnswers,
+                tagOptions,
+                errorTypeOptions,
+                request
+        );
+        AiAnswerScoringResponseDTO aiResponse = parseAiAnswerScoringResponse(
+                aiAnswerScoringClient.scoreAnswer(prompt, request, question, standardAnswers, tagOptions)
+        );
+        AiAnswerReviewDTO review = validateAnswerReview(aiResponse, errorTypesByCode, answerText);
+        BigDecimal totalScore = calculateTotalScore(review.scores());
+        UserAnswer userAnswer = saveSubmittedAnswer(user.getId(), questionId, answerText);
+        LocalDateTime updatedAt = LocalDateTime.now();
+        userAnswerMapper.updateReviewed(
+                userAnswer.getId(),
+                review.scores().grammarVocabularyScore(),
+                review.scores().naturalFluencyScore(),
+                review.scores().scenarioAdaptationScore(),
+                review.scores().informationCompletenessScore(),
+                totalScore,
+                review.overallComment().trim(),
+                updatedAt
+        );
+        userAnswer.setAnswerStatus(ANSWER_STATUS_REVIEWED);
+        userAnswer.setGrammarVocabularyScore(review.scores().grammarVocabularyScore());
+        userAnswer.setNaturalFluencyScore(review.scores().naturalFluencyScore());
+        userAnswer.setScenarioAdaptationScore(review.scores().scenarioAdaptationScore());
+        userAnswer.setInformationCompletenessScore(review.scores().informationCompletenessScore());
+        userAnswer.setTotalScore(totalScore);
+        userAnswer.setAiOverallComment(review.overallComment().trim());
+        userAnswer.setUpdatedAt(updatedAt);
+        return toAnswerReviewVO(userAnswer, review, errorTypesByCode);
     }
 
     private UserAnswer saveSubmittedAnswer(Long userId, Long questionId, String answerText) {
@@ -444,13 +438,6 @@ public class QuestionServiceImpl implements QuestionService {
         userAnswer.setUpdatedAt(now);
         userAnswerMapper.insertUserAnswer(userAnswer);
         return userAnswer;
-    }
-
-    private void markAnswerReviewFailed(UserAnswer userAnswer) {
-        LocalDateTime updatedAt = LocalDateTime.now();
-        userAnswerMapper.updateFailed(userAnswer.getId(), updatedAt);
-        userAnswer.setAnswerStatus(ANSWER_STATUS_FAILED);
-        userAnswer.setUpdatedAt(updatedAt);
     }
 
     private QuestionQueryRequest normalizeQueryRequest(QuestionQueryRequest request) {

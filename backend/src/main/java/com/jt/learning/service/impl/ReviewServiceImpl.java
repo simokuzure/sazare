@@ -194,7 +194,7 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     @Override
-    @Transactional(noRollbackFor = BusinessException.class)
+    @Transactional
     public ReviewAttemptVO submitReviewAttempt(Long cardId, ReviewAttemptRequest request) {
         User user = requireLocalUser();
         LocalDateTime now = LocalDateTime.now();
@@ -213,7 +213,6 @@ public class ReviewServiceImpl implements ReviewService {
         Map<String, AiErrorTypeOptionDTO> errorTypesByCode = errorTypeOptions.stream()
                 .collect(Collectors.toMap(AiErrorTypeOptionDTO::code, Function.identity()));
 
-        UserAnswer userAnswer = createSubmittedAnswer(user.getId(), question.getId(), request.answerText().trim(), now);
         AiReviewDTO review;
         try {
             AiQuestionPrompt prompt = scoringPromptBuilder.build(
@@ -221,7 +220,6 @@ public class ReviewServiceImpl implements ReviewService {
             review = aiResponseValidator.parseScoring(
                     scoringClient.scoreAnswer(prompt), errorTypesByCode, request.answerText().trim());
         } catch (RuntimeException exception) {
-            userAnswerMapper.updateFailed(userAnswer.getId(), LocalDateTime.now());
             if (exception instanceof BusinessException businessException) {
                 throw businessException;
             }
@@ -229,6 +227,8 @@ public class ReviewServiceImpl implements ReviewService {
         }
 
         BigDecimal totalScore = calculateTotalScore(review);
+        UserAnswer userAnswer = createSubmittedAnswer(
+                user.getId(), question.getId(), request.answerText().trim(), now);
         userAnswerMapper.updateReviewed(
                 userAnswer.getId(),
                 review.scores().grammarVocabularyScore(),

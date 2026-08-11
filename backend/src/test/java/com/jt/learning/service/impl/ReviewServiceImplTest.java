@@ -149,7 +149,7 @@ class ReviewServiceImplTest {
     }
 
     @Test
-    void scoringFailureShouldOnlyMarkAnswerFailed() {
+    void scoringFailureShouldNotSaveAnswerOrAttempt() {
         stubReadyAttempt("RETRY", "ORIGINAL", 0, 4);
         when(scoringClient.scoreAnswer(any())).thenThrow(new BusinessException(
                 com.jt.learning.exception.ErrorCode.BUSINESS_ERROR, "评分失败"));
@@ -159,7 +159,7 @@ class ReviewServiceImplTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("评分失败");
 
-        verify(userAnswerMapper).updateFailed(eq(40L), any());
+        verify(userAnswerMapper, never()).insertUserAnswer(any());
         verify(userAnswerMapper, never()).updateReviewed(
                 anyLong(), anyInt(), anyInt(), anyInt(), anyInt(),
                 any(BigDecimal.class), anyString(), any(LocalDateTime.class));

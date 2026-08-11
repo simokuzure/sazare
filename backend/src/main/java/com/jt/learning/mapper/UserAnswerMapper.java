@@ -27,11 +27,6 @@ public interface UserAnswerMapper {
             @Param("updatedAt") LocalDateTime updatedAt
     );
 
-    int updateFailed(
-            @Param("id") Long id,
-            @Param("updatedAt") LocalDateTime updatedAt
-    );
-
     long countUserAnswers(
             @Param("userId") Long userId,
             @Param("request") UserAnswerQueryRequest request
