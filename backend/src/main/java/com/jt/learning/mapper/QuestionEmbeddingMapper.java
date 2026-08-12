@@ -13,7 +13,8 @@ public interface QuestionEmbeddingMapper {
 
     List<QuestionEmbeddingMatch> selectSimilarQuestionEmbeddings(
             @Param("embedding") String embedding,
-            @Param("threshold") double threshold
+            @Param("threshold") double threshold,
+            @Param("questionType") String questionType
     );
 
     List<QuestionEmbeddingCandidate> selectRegularQuestionEmbeddingCandidates();

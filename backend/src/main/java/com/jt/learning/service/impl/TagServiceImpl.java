@@ -15,7 +15,7 @@ import java.util.Set;
 @Service
 public class TagServiceImpl implements TagService {
 
-    private static final Set<String> VALID_TAG_TYPES = Set.of("SCENE", "FUNCTION");
+    private static final Set<String> VALID_TAG_TYPES = Set.of("SCENE", "FUNCTION", "GENRE");
     private static final int MAX_PAGE_SIZE = 100;
 
     private final TagMapper tagMapper;

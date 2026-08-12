@@ -1,5 +1,6 @@
 package com.jt.learning.service.ai;
 
+import com.jt.learning.dto.AiArticleGenerationRequest;
 import com.jt.learning.dto.AiQuestionGenerationRequest;
 import com.jt.learning.dto.AiQuestionTagOptionDTO;
 
@@ -12,5 +13,10 @@ public interface AiQuestionClient {
             AiQuestionGenerationRequest request,
             List<AiQuestionTagOptionDTO> sceneTagOptions,
             List<AiQuestionTagOptionDTO> functionTagOptions
+    );
+
+    String generateArticle(
+            AiQuestionPrompt prompt,
+            AiArticleGenerationRequest request
     );
 }

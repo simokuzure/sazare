@@ -12,6 +12,9 @@
         inner join questions q on q.id = qe.question_id
         where q.deleted = false
           and q.source_type in ('AI', 'MANUAL')
+          <if test="questionType != null">
+              and q.question_type = #{questionType}
+          </if>
           and 1 - (qe.embedding &lt;=&gt; cast(#{embedding} as vector)) &gt;= #{threshold}
         order by qe.embedding &lt;=&gt; cast(#{embedding} as vector), qe.question_id
     </select>

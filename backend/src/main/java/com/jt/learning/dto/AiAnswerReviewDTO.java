@@ -8,6 +8,7 @@ public record AiAnswerReviewDTO(
         BigDecimal totalScore,
         String overallComment,
         AiAnswerReviewCommentsDTO comments,
+        List<AiArticleSentenceReviewDTO> sentenceReviews,
         List<AiAnswerErrorAnalysisDTO> errorAnalysis,
         List<String> revisionSuggestions,
         List<AiAnswerRecommendedExpressionDTO> recommendedExpressions

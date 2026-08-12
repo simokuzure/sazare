@@ -6,6 +6,7 @@ import com.jt.learning.dto.UserAnswerErrorConfirmRequest;
 import com.jt.learning.dto.UserAnswerListItemRow;
 import com.jt.learning.dto.UserAnswerQueryRequest;
 import com.jt.learning.entity.QuestionAnswer;
+import com.jt.learning.entity.Question;
 import com.jt.learning.entity.ErrorType;
 import com.jt.learning.entity.Tag;
 import com.jt.learning.entity.User;
@@ -13,6 +14,7 @@ import com.jt.learning.entity.UserAnswer;
 import com.jt.learning.entity.UserErrorType;
 import com.jt.learning.exception.BusinessException;
 import com.jt.learning.mapper.QuestionAnswerMapper;
+import com.jt.learning.mapper.QuestionMapper;
 import com.jt.learning.mapper.ErrorTypeMapper;
 import com.jt.learning.mapper.TagMapper;
 import com.jt.learning.mapper.UserAnswerErrorMapper;
@@ -47,6 +49,7 @@ class UserAnswerServiceImplTest {
     private UserAnswerMapper userAnswerMapper;
     private TagMapper tagMapper;
     private QuestionAnswerMapper questionAnswerMapper;
+    private QuestionMapper questionMapper;
     private ErrorTypeMapper errorTypeMapper;
     private UserErrorTypeMapper userErrorTypeMapper;
     private UserAnswerErrorMapper userAnswerErrorMapper;
@@ -59,15 +62,18 @@ class UserAnswerServiceImplTest {
         userAnswerMapper = mock(UserAnswerMapper.class);
         tagMapper = mock(TagMapper.class);
         questionAnswerMapper = mock(QuestionAnswerMapper.class);
+        questionMapper = mock(QuestionMapper.class);
         errorTypeMapper = mock(ErrorTypeMapper.class);
         userErrorTypeMapper = mock(UserErrorTypeMapper.class);
         userAnswerErrorMapper = mock(UserAnswerErrorMapper.class);
         reviewService = mock(ReviewService.class);
+        when(questionMapper.selectQuestionById(any())).thenReturn(shortQuestion());
         userAnswerService = new UserAnswerServiceImpl(
                 userMapper,
                 userAnswerMapper,
                 tagMapper,
                 questionAnswerMapper,
+                questionMapper,
                 errorTypeMapper,
                 userErrorTypeMapper,
                 userAnswerErrorMapper,
@@ -361,6 +367,66 @@ class UserAnswerServiceImplTest {
         verify(userAnswerErrorMapper, never()).insertUserAnswerError(any());
     }
 
+    @Test
+    void confirmArticleOmissionShouldCreateShortSentenceQuestionAndReuseReviewFlow() {
+        User user = localUser();
+        UserAnswer answer = reviewedUserAnswer();
+        Question article = articleQuestion();
+        UserErrorType userErrorType = new UserErrorType();
+        userErrorType.setId(20L);
+        userErrorType.setUserId(1L);
+        userErrorType.setErrorTypeId(9L);
+        userErrorType.setName("文章关键信息漏译");
+        userErrorType.setStatus("ACTIVE");
+        ErrorType omission = enabledLeafErrorType(9L);
+        omission.setCode("OMISSION");
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
+        when(questionMapper.selectQuestionById(100L)).thenReturn(article);
+        when(userErrorTypeMapper.selectActiveByIdAndUserId(20L, 1L)).thenReturn(userErrorType);
+        when(errorTypeMapper.selectEnabledLeafById(9L)).thenReturn(omission);
+        when(questionAnswerMapper.selectActiveAnswersByQuestionId(100L)).thenReturn(List.of(questionAnswer(
+                200L,
+                "STANDARD",
+                true,
+                "先週、友人と京都へ旅行しました。\n\n天気はよくありませんでしたが、楽しく過ごしました。",
+                0
+        )));
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(500L);
+            return 1;
+        });
+
+        List<UserAnswerErrorVO> result = userAnswerService.confirmUserAnswerErrors(
+                10L,
+                new UserAnswerErrorConfirmRequest(List.of(new UserAnswerErrorConfirmItemRequest(
+                        "EXISTING_USER_ERROR_TYPE",
+                        null,
+                        20L,
+                        null,
+                        null,
+                        "天气不太好，但我们过得很愉快。",
+                        "漏译了天气和感受信息。",
+                        "天気はよくありませんでしたが、楽しく過ごしました。",
+                        "HIGH",
+                        0
+                )))
+        );
+
+        assertThat(result).hasSize(1);
+        ArgumentCaptor<Question> questionCaptor = ArgumentCaptor.forClass(Question.class);
+        verify(questionMapper).insertQuestion(questionCaptor.capture());
+        assertThat(questionCaptor.getValue().getQuestionType()).isEqualTo("TRANSLATION_ZH_TO_JA");
+        assertThat(questionCaptor.getValue().getSourceType()).isEqualTo("REVIEW_DERIVED");
+        assertThat(questionCaptor.getValue().getSourceText()).isEqualTo("天气不太好，但我们过得很愉快。");
+        ArgumentCaptor<QuestionAnswer> answerCaptor = ArgumentCaptor.forClass(QuestionAnswer.class);
+        verify(questionAnswerMapper).insertQuestionAnswer(answerCaptor.capture());
+        assertThat(answerCaptor.getValue().getAnswerText())
+                .isEqualTo("天気はよくありませんでしたが、楽しく過ごしました。");
+        verify(reviewService).recordPracticeErrors(eq(1L), eq(10L), eq(List.of(500L)), eq(20L), any());
+    }
+
     private User localUser() {
         User user = new User();
         user.setId(1L);
@@ -424,6 +490,28 @@ class UserAnswerServiceImplTest {
         answer.setAnswerStatus("REVIEWED");
         answer.setDeleted(false);
         return answer;
+    }
+
+    private Question shortQuestion() {
+        Question question = new Question();
+        question.setId(100L);
+        question.setQuestionType("TRANSLATION_ZH_TO_JA");
+        question.setSourceText("我明天下午去公园散步。");
+        return question;
+    }
+
+    private Question articleQuestion() {
+        Question question = shortQuestion();
+        question.setQuestionType("TRANSLATION_ZH_TO_JA_ARTICLE");
+        question.setSourceText("上周，我和朋友去了京都旅行。\n\n天气不太好，但我们过得很愉快。");
+        question.setContextText("AI 原创叙事文。");
+        question.setLevel("N3");
+        question.setDifficulty(3);
+        question.setGrammarPoint("篇章衔接");
+        question.setSpoken(false);
+        question.setBusiness(false);
+        question.setExam(false);
+        return question;
     }
 
     private ErrorType enabledLeafErrorType(Long id) {

@@ -44,6 +44,23 @@ public class MockAiAnswerScoringClient implements AiAnswerScoringClient {
                 "naturalnessComment", "部分表达略显直译，可以更自然。",
                 "scenarioComment", "语体与题目场景基本匹配。"
         ));
+        if ("TRANSLATION_ZH_TO_JA_ARTICLE".equals(question.getQuestionType())) {
+            List<String> sourceSegments = splitSegments(question.getSourceText());
+            List<String> referenceSegments = splitSegments(standardAnswers.getFirst().getAnswerText());
+            List<Map<String, Object>> sentenceReviews = new java.util.ArrayList<>();
+            for (int index = 0; index < sourceSegments.size(); index++) {
+                Map<String, Object> sentenceReview = new LinkedHashMap<>();
+                sentenceReview.put("sourceSegmentIndex", index);
+                sentenceReview.put("sourceText", sourceSegments.get(index));
+                sentenceReview.put("referenceText", referenceSegments.get(index));
+                sentenceReview.put("answerExcerpt", request.answerText().trim());
+                sentenceReview.put("revisedText", referenceSegments.get(index));
+                sentenceReview.put("comment", "已按原文语义检查本句，并给出参考修订。" );
+                sentenceReviews.add(sentenceReview);
+            }
+            review.put("sentenceReviews", sentenceReviews);
+            review.put("errorAnalysis", List.of());
+        } else {
         review.put("errorAnalysis", List.of(Map.of(
                 "errorTypeCode", "UNNATURAL_EXPRESSION",
                 "original", request.answerText().trim(),
@@ -53,6 +70,7 @@ public class MockAiAnswerScoringClient implements AiAnswerScoringClient {
                 "suggestedUserErrorTypeName", "不自然表达",
                 "suggestedUserErrorTypeDescription", "使用符合日语习惯的表达，避免逐字翻译造成不自然的说法。"
         )));
+        }
         review.put("revisionSuggestions", List.of(
                 "检查句子是否受中文语序影响。",
                 "结合场景选择更自然的日语表达。"
@@ -69,5 +87,12 @@ public class MockAiAnswerScoringClient implements AiAnswerScoringClient {
         } catch (JacksonException exception) {
             throw new IllegalStateException("Mock AI JSON 序列化失败", exception);
         }
+    }
+
+    private List<String> splitSegments(String text) {
+        return List.of(text.replace("\r\n", "\n").replace('\r', '\n').split("\\n\\s*\\n"))
+                .stream()
+                .map(String::trim)
+                .toList();
     }
 }

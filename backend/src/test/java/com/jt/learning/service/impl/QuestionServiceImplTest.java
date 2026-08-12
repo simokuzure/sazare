@@ -1,6 +1,7 @@
 package com.jt.learning.service.impl;
 
 import com.jt.learning.dto.AiAnswerScoringRequest;
+import com.jt.learning.dto.AiArticleGenerationRequest;
 import com.jt.learning.dto.AiErrorTypeOptionDTO;
 import com.jt.learning.dto.AiQuestionGenerationRequest;
 import com.jt.learning.dto.QuestionAnswerRequest;
@@ -137,6 +138,38 @@ class QuestionServiceImplTest {
         verify(questionTagMapper).insertQuestionTag(100L, 1L);
         verify(questionTagMapper).insertQuestionTag(100L, 2L);
         verify(questionEmbeddingService).saveEmbedding(any(Question.class), anyList());
+    }
+
+    @Test
+    void generateArticleByAiShouldSaveOneArticleAndHideReferenceAnswer() {
+        Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
+        when(tagMapper.selectEnabledTagsByCodes("GENRE", List.of("NARRATIVE")))
+                .thenReturn(List.of(genreTag));
+        when(aiQuestionClient.generateArticle(any(), any())).thenReturn(validArticleJson());
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(101L);
+            return 1;
+        });
+        when(questionAnswerMapper.insertQuestionAnswer(any())).thenAnswer(invocation -> {
+            QuestionAnswer answer = invocation.getArgument(0);
+            answer.setId(201L);
+            return 1;
+        });
+
+        QuestionVO question = questionService.generateArticleByAi(
+                new AiArticleGenerationRequest("N3", 3, "NARRATIVE", "旅行", null)
+        );
+
+        assertThat(question.questionType()).isEqualTo("TRANSLATION_ZH_TO_JA_ARTICLE");
+        assertThat(question.sourceType()).isEqualTo("AI");
+        assertThat(question.sourceText()).contains("\n\n");
+        assertThat(question.tags()).extracting("code").containsExactly("NARRATIVE");
+        assertThat(question.answers()).isEmpty();
+        ArgumentCaptor<QuestionAnswer> answerCaptor = ArgumentCaptor.forClass(QuestionAnswer.class);
+        verify(questionAnswerMapper).insertQuestionAnswer(answerCaptor.capture());
+        assertThat(answerCaptor.getValue().getAnswerText()).contains("\n\n");
+        verify(questionTagMapper).insertQuestionTag(101L, 3L);
     }
 
     @Test
@@ -422,6 +455,35 @@ class QuestionServiceImplTest {
     }
 
     @Test
+    void getRandomArticleShouldNotReturnReferenceAnswer() {
+        Question question = articleQuestion(100L);
+        QuestionAnswer answer = answer(200L, "先週、友人と京都へ旅行しました。\n\n天気はよくありませんでしたが、楽しく過ごしました。");
+        QuestionTagRow tag = tagRow(100L, 3L, "GENRE", "NARRATIVE", "叙事文");
+        when(questionMapper.selectRandomQuestionId(any())).thenReturn(100L);
+        when(questionMapper.selectQuestionsByIds(List.of(100L))).thenReturn(List.of(question));
+        when(tagMapper.selectEnabledTagsByQuestionIds(List.of(100L))).thenReturn(List.of(tag));
+        when(questionAnswerMapper.selectActiveAnswersByQuestionIds(List.of(100L))).thenReturn(List.of(answer));
+
+        QuestionVO result = questionService.getRandomQuestion(new QuestionQueryRequest(
+                "TRANSLATION_ZH_TO_JA_ARTICLE",
+                null,
+                null,
+                List.of("NARRATIVE"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+
+        assertThat(result).isNotNull();
+        assertThat(result.questionType()).isEqualTo("TRANSLATION_ZH_TO_JA_ARTICLE");
+        assertThat(result.answers()).isEmpty();
+    }
+
+    @Test
     void getRandomQuestionShouldReturnNullWhenNoQuestionMatched() {
         when(questionMapper.selectRandomQuestionId(any())).thenReturn(null);
 
@@ -530,6 +592,39 @@ class QuestionServiceImplTest {
                 any(LocalDateTime.class)
         );
         assertThat(totalScoreCaptor.getValue()).isEqualByComparingTo(new BigDecimal("81.50"));
+    }
+
+    @Test
+    void submitArticleAnswerShouldSaveWholeAnswerOnceAndReturnSentenceReviews() {
+        Question question = articleQuestion(100L);
+        QuestionAnswer answer = answer(200L, "先週、友人と京都へ旅行しました。\n\n天気はよくありませんでしたが、楽しく過ごしました。");
+        when(questionMapper.selectActiveQuestionById(100L)).thenReturn(question);
+        when(questionAnswerMapper.selectActiveAnswersByQuestionId(100L)).thenReturn(List.of(answer));
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user(10L));
+        when(tagMapper.selectEnabledTagsByQuestionId(100L))
+                .thenReturn(List.of(tag(3L, "GENRE", "NARRATIVE", "叙事文")));
+        when(userAnswerMapper.insertUserAnswer(any())).thenAnswer(invocation -> {
+            UserAnswer userAnswer = invocation.getArgument(0);
+            assertThat(userAnswer.getAnswerText())
+                    .isEqualTo("先週、友達と京都へ旅行しました。天気は悪かったですが、楽しく過ごしました。");
+            userAnswer.setId(301L);
+            return 1;
+        });
+        when(aiAnswerScoringClient.scoreAnswer(any(), any(), any(), anyList(), anyList()))
+                .thenReturn(validArticleReviewJson());
+
+        AnswerReviewVO review = questionService.submitAnswer(
+                100L,
+                new AiAnswerScoringRequest(
+                        "\r\n先週、友達と京都へ旅行しました。天気は悪かったですが、楽しく過ごしました。\r\n"
+                )
+        );
+
+        assertThat(review.sentenceReviews()).hasSize(2);
+        assertThat(review.revisedAnswer()).isEqualTo(
+                "先週、友人と京都へ旅行しました。\n\n天気はよくありませんでしたが、楽しく過ごしました。"
+        );
+        verify(userAnswerMapper, times(1)).insertUserAnswer(any());
     }
 
     @Test
@@ -727,6 +822,32 @@ class QuestionServiceImplTest {
                 """;
     }
 
+    private String validArticleJson() {
+        return """
+                {
+                  "article": {
+                    "questionType": "TRANSLATION_ZH_TO_JA_ARTICLE",
+                    "contextText": "AI 原创叙事文，使用自然连贯的书面语。",
+                    "level": "N3",
+                    "difficulty": 3,
+                    "grammarPoint": "时态衔接、原因表达和篇章连贯",
+                    "spoken": false,
+                    "business": false,
+                    "exam": false,
+                    "sentences": [
+                      {"index":0,"chineseText":"上周末，我和朋友决定去郊外的一座小镇旅行。","japaneseReference":"先週末、友人と郊外の小さな町へ旅行することにしました。"},
+                      {"index":1,"chineseText":"我们原本计划乘早班电车出发，却因为看错时间错过了车。","japaneseReference":"朝早い電車で出発する予定でしたが、時間を見間違えて乗り遅れました。"},
+                      {"index":2,"chineseText":"下一班车要等一个小时，所以我们在车站附近吃了早餐。","japaneseReference":"次の電車まで一時間あったので、駅の近くで朝食を取りました。"},
+                      {"index":3,"chineseText":"到达小镇时，天空突然下起了大雨，我们只好先找地方避雨。","japaneseReference":"町に着くと急に大雨が降り始めたため、まず雨宿りできる場所を探しました。"},
+                      {"index":4,"chineseText":"我们跑进一家旧书店，店主热情地介绍了当地的历史和老街。","japaneseReference":"古い本屋に駆け込むと、店主が町の歴史と古い町並みを親切に紹介してくれました。"},
+                      {"index":5,"chineseText":"雨停以后，我们按照他的建议慢慢参观了老街，还品尝了当地的点心。","japaneseReference":"雨がやんだ後、彼の勧めに従って古い町並みを歩き、名物のお菓子も味わいました。"},
+                      {"index":6,"chineseText":"虽然行程和预想完全不同，但这些意外的经历让这次旅行更加难忘。","japaneseReference":"予定とはまったく違う旅になりましたが、思いがけない経験のおかげで忘れられない旅になりました。"}
+                    ]
+                  }
+                }
+                """;
+    }
+
     private List<Float> vector() {
         Float[] values = new Float[768];
         java.util.Arrays.fill(values, 0.1f);
@@ -778,6 +899,50 @@ class QuestionServiceImplTest {
                 """;
     }
 
+    private String validArticleReviewJson() {
+        return """
+                {
+                  "review": {
+                    "scores": {
+                      "grammarVocabularyScore": 85,
+                      "naturalFluencyScore": 82,
+                      "scenarioAdaptationScore": 88,
+                      "informationCompletenessScore": 90
+                    },
+                    "totalScore": 86.25,
+                    "overallComment": "全文信息完整，时态和语体一致，句间衔接基本自然。",
+                    "comments": {
+                      "grammarComment": "语法与用词基本准确。",
+                      "vocabularyComment": "词汇能够表达原意。",
+                      "naturalnessComment": "合并句仍保持了自然衔接。",
+                      "scenarioComment": "叙事文语体一致。"
+                    },
+                    "sentenceReviews": [
+                      {
+                        "sourceSegmentIndex": 0,
+                        "sourceText": "上周，我和朋友去了京都旅行。",
+                        "referenceText": "先週、友人と京都へ旅行しました。",
+                        "answerExcerpt": "先週、友達と京都へ旅行しました。天気は悪かったですが、楽しく過ごしました。",
+                        "revisedText": "先週、友人と京都へ旅行しました。",
+                        "comment": "意思准确，友達也可接受。"
+                      },
+                      {
+                        "sourceSegmentIndex": 1,
+                        "sourceText": "天气不太好，但我们过得很愉快。",
+                        "referenceText": "天気はよくありませんでしたが、楽しく過ごしました。",
+                        "answerExcerpt": "先週、友達と京都へ旅行しました。天気は悪かったですが、楽しく過ごしました。",
+                        "revisedText": "天気はよくありませんでしたが、楽しく過ごしました。",
+                        "comment": "合并作答不影响语义对应。"
+                      }
+                    ],
+                    "errorAnalysis": [],
+                    "revisionSuggestions": ["保持全文敬体和时态一致。"],
+                    "recommendedExpressions": []
+                  }
+                }
+                """;
+    }
+
     private Question question(Long id) {
         Question question = new Question();
         question.setId(id);
@@ -793,6 +958,16 @@ class QuestionServiceImplTest {
         question.setSourceType("AI");
         question.setEnabled(true);
         question.setDeleted(false);
+        return question;
+    }
+
+    private Question articleQuestion(Long id) {
+        Question question = question(id);
+        question.setQuestionType("TRANSLATION_ZH_TO_JA_ARTICLE");
+        question.setSourceText("上周，我和朋友去了京都旅行。\n\n天气不太好，但我们过得很愉快。");
+        question.setContextText("AI 原创叙事文。使用自然连贯的书面语。");
+        question.setGrammarPoint("时态和篇章衔接");
+        question.setSpoken(false);
         return question;
     }
 

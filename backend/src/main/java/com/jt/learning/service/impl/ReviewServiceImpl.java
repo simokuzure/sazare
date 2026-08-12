@@ -357,6 +357,48 @@ public class ReviewServiceImpl implements ReviewService {
         applyPracticeFailureToCurrentCycle(card, userAnswerId, questionId, occurredAt);
     }
 
+    @Override
+    @Transactional
+    public void recordPracticeErrors(
+            Long userId,
+            Long userAnswerId,
+            List<Long> questionIds,
+            Long userErrorTypeId,
+            LocalDateTime occurredAt
+    ) {
+        List<Long> distinctQuestionIds = questionIds.stream().distinct().toList();
+        if (distinctQuestionIds.isEmpty()) {
+            return;
+        }
+        distinctQuestionIds.forEach(this::requireQuestion);
+        recordPracticeError(
+                userId,
+                userAnswerId,
+                distinctQuestionIds.getFirst(),
+                userErrorTypeId,
+                occurredAt
+        );
+        if (distinctQuestionIds.size() == 1) {
+            return;
+        }
+
+        ReviewCard card = reviewCardMapper.selectForUpdateByUserErrorTypeId(userErrorTypeId);
+        ReviewCycle cycle = requireCurrentCycle(card.getId());
+        for (Long questionId : distinctQuestionIds.subList(1, distinctQuestionIds.size())) {
+            ReviewCycleQuestion cycleQuestion = newOriginalRetryQuestion(cycle.getId(), questionId, occurredAt);
+            reviewCycleQuestionMapper.insertQuestionIfAbsent(cycleQuestion);
+        }
+        ReviewCycleProgressRow progress = reviewCycleQuestionMapper.selectProgress(cycle.getId(), occurredAt);
+        int target = Math.max(4, progress.getOriginalQuestionCount() + 1);
+        reviewCycleMapper.updateProgress(
+                cycle.getId(),
+                target,
+                cycle.getSuccessfulReviewCount(),
+                occurredAt,
+                occurredAt
+        );
+    }
+
     private void createPracticeFailureCycle(
             ReviewCard card,
             Long userAnswerId,

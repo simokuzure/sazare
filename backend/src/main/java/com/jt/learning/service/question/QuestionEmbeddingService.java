@@ -41,8 +41,16 @@ public class QuestionEmbeddingService {
     }
 
     public List<QuestionEmbeddingMatch> findSimilarQuestions(List<Float> embedding) {
+        return findSimilarQuestions(embedding, null);
+    }
+
+    public List<QuestionEmbeddingMatch> findSimilarQuestions(List<Float> embedding, String questionType) {
         validateEmbedding(embedding);
-        return questionEmbeddingMapper.selectSimilarQuestionEmbeddings(toVectorLiteral(embedding), SIMILARITY_THRESHOLD);
+        return questionEmbeddingMapper.selectSimilarQuestionEmbeddings(
+                toVectorLiteral(embedding),
+                SIMILARITY_THRESHOLD,
+                questionType
+        );
     }
 
     public boolean isSimilar(List<Float> left, List<Float> right) {

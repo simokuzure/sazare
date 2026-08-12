@@ -8,6 +8,7 @@ import com.jt.learning.dto.UserAnswerQueryRequest;
 import com.jt.learning.dto.UserErrorTypeListItemRow;
 import com.jt.learning.dto.UserErrorTypeQueryRequest;
 import com.jt.learning.entity.ErrorType;
+import com.jt.learning.entity.Question;
 import com.jt.learning.entity.QuestionAnswer;
 import com.jt.learning.entity.Tag;
 import com.jt.learning.entity.User;
@@ -18,6 +19,7 @@ import com.jt.learning.exception.BusinessException;
 import com.jt.learning.exception.ErrorCode;
 import com.jt.learning.mapper.ErrorTypeMapper;
 import com.jt.learning.mapper.QuestionAnswerMapper;
+import com.jt.learning.mapper.QuestionMapper;
 import com.jt.learning.mapper.TagMapper;
 import com.jt.learning.mapper.UserAnswerErrorMapper;
 import com.jt.learning.mapper.UserAnswerMapper;
@@ -37,7 +39,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class UserAnswerServiceImpl implements UserAnswerService {
@@ -47,11 +51,15 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     private static final String USER_ERROR_TYPE_STATUS_ACTIVE = "ACTIVE";
     private static final String CONFIRM_MODE_NEW = "NEW_USER_ERROR_TYPE";
     private static final String CONFIRM_MODE_EXISTING = "EXISTING_USER_ERROR_TYPE";
+    private static final String ARTICLE_QUESTION_TYPE = "TRANSLATION_ZH_TO_JA_ARTICLE";
+    private static final String SHORT_QUESTION_TYPE = "TRANSLATION_ZH_TO_JA";
+    private static final String SOURCE_TYPE_REVIEW_DERIVED = "REVIEW_DERIVED";
 
     private final UserMapper userMapper;
     private final UserAnswerMapper userAnswerMapper;
     private final TagMapper tagMapper;
     private final QuestionAnswerMapper questionAnswerMapper;
+    private final QuestionMapper questionMapper;
     private final ErrorTypeMapper errorTypeMapper;
     private final UserErrorTypeMapper userErrorTypeMapper;
     private final UserAnswerErrorMapper userAnswerErrorMapper;
@@ -62,6 +70,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             UserAnswerMapper userAnswerMapper,
             TagMapper tagMapper,
             QuestionAnswerMapper questionAnswerMapper,
+            QuestionMapper questionMapper,
             ErrorTypeMapper errorTypeMapper,
             UserErrorTypeMapper userErrorTypeMapper,
             UserAnswerErrorMapper userAnswerErrorMapper,
@@ -71,6 +80,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         this.userAnswerMapper = userAnswerMapper;
         this.tagMapper = tagMapper;
         this.questionAnswerMapper = questionAnswerMapper;
+        this.questionMapper = questionMapper;
         this.errorTypeMapper = errorTypeMapper;
         this.userErrorTypeMapper = userErrorTypeMapper;
         this.userAnswerErrorMapper = userAnswerErrorMapper;
@@ -135,10 +145,19 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "仅已评分的作答可以确认错误");
         }
 
+        Question question = questionMapper.selectQuestionById(userAnswer.getQuestionId());
+        if (question == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "作答对应题目不存在");
+        }
+
         LocalDateTime now = LocalDateTime.now();
         List<UserAnswerErrorVO> savedErrors = request.errors().stream()
-                .map(item -> saveConfirmedError(user, userAnswer, item, now))
+                .map(item -> saveConfirmedError(user, userAnswer, question, item, now))
                 .toList();
+        if (ARTICLE_QUESTION_TYPE.equals(question.getQuestionType())) {
+            recordArticleReviewQuestions(user, userAnswer, question, savedErrors, now);
+            return savedErrors;
+        }
         savedErrors.stream()
                 .map(UserAnswerErrorVO::userErrorTypeId)
                 .distinct()
@@ -172,14 +191,13 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     private UserAnswerErrorVO saveConfirmedError(
             User user,
             UserAnswer userAnswer,
+            Question question,
             UserAnswerErrorConfirmItemRequest request,
             LocalDateTime now
     ) {
-        if (!userAnswer.getAnswerText().contains(request.originalText().trim())) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "originalText 必须属于本次作答");
-        }
-
         ResolvedUserErrorType resolvedType = resolveUserErrorType(user.getId(), request, now);
+        ErrorType errorType = errorTypeMapper.selectEnabledLeafById(resolvedType.errorTypeId());
+        validateConfirmedOriginal(question, userAnswer, errorType, request.originalText());
         UserAnswerError error = new UserAnswerError();
         error.setUserAnswerId(userAnswer.getId());
         error.setUserId(user.getId());
@@ -195,6 +213,126 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         error.setUpdatedAt(now);
         userAnswerErrorMapper.insertUserAnswerError(error);
         return toUserAnswerErrorVO(error);
+    }
+
+    private void validateConfirmedOriginal(
+            Question question,
+            UserAnswer userAnswer,
+            ErrorType errorType,
+            String originalText
+    ) {
+        String original = originalText.trim();
+        if (ARTICLE_QUESTION_TYPE.equals(question.getQuestionType()) && "OMISSION".equals(errorType.getCode())) {
+            if (!splitSegments(question.getSourceText()).contains(original)) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "漏译错误的 originalText 必须是文章中文原句");
+            }
+            return;
+        }
+        if (!userAnswer.getAnswerText().contains(original)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "originalText 必须属于本次作答");
+        }
+    }
+
+    private void recordArticleReviewQuestions(
+            User user,
+            UserAnswer userAnswer,
+            Question articleQuestion,
+            List<UserAnswerErrorVO> savedErrors,
+            LocalDateTime now
+    ) {
+        List<QuestionAnswer> answers = questionAnswerMapper.selectActiveAnswersByQuestionId(articleQuestion.getId());
+        if (answers.size() != 1) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "文章题标准答案不合法");
+        }
+        List<String> sourceSegments = splitSegments(articleQuestion.getSourceText());
+        List<String> referenceSegments = splitSegments(answers.getFirst().getAnswerText());
+        if (sourceSegments.size() != referenceSegments.size()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "文章题中日段落数不一致");
+        }
+
+        Map<String, Long> extractedQuestionIds = new LinkedHashMap<>();
+        Map<Long, List<Long>> questionIdsByUserErrorType = new LinkedHashMap<>();
+        for (UserAnswerErrorVO error : savedErrors) {
+            String referenceText = error.suggestion().trim();
+            int segmentIndex = referenceSegments.indexOf(referenceText);
+            if (segmentIndex < 0) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "文章错误 suggestion 必须是完整日文参考句");
+            }
+            Long extractedQuestionId = extractedQuestionIds.computeIfAbsent(
+                    referenceText,
+                    ignored -> createArticleSentenceQuestion(
+                            articleQuestion,
+                            sourceSegments.get(segmentIndex),
+                            referenceText,
+                            user.getId(),
+                            error.userErrorTypeId(),
+                            now
+                    )
+            );
+            questionIdsByUserErrorType
+                    .computeIfAbsent(error.userErrorTypeId(), ignored -> new java.util.ArrayList<>())
+                    .add(extractedQuestionId);
+        }
+        questionIdsByUserErrorType.forEach((userErrorTypeId, questionIds) ->
+                reviewService.recordPracticeErrors(
+                        user.getId(),
+                        userAnswer.getId(),
+                        questionIds,
+                        userErrorTypeId,
+                        now
+                ));
+    }
+
+    private Long createArticleSentenceQuestion(
+            Question articleQuestion,
+            String sourceText,
+            String referenceText,
+            Long userId,
+            Long userErrorTypeId,
+            LocalDateTime now
+    ) {
+        UserErrorType userErrorType = userErrorTypeMapper.selectActiveByIdAndUserId(
+                userErrorTypeId,
+                userId
+        );
+        if (userErrorType == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "用户错误类型不存在或已归档");
+        }
+        Question question = new Question();
+        question.setQuestionType(SHORT_QUESTION_TYPE);
+        question.setSourceText(sourceText);
+        question.setContextText(articleQuestion.getContextText() + "（文章错句复习）");
+        question.setLevel(articleQuestion.getLevel());
+        question.setDifficulty(articleQuestion.getDifficulty());
+        question.setGrammarPoint(userErrorType.getName());
+        question.setSpoken(articleQuestion.getSpoken());
+        question.setBusiness(articleQuestion.getBusiness());
+        question.setExam(articleQuestion.getExam());
+        question.setSourceType(SOURCE_TYPE_REVIEW_DERIVED);
+        question.setEnabled(true);
+        question.setDeleted(false);
+        question.setCreatedAt(now);
+        question.setUpdatedAt(now);
+        questionMapper.insertQuestion(question);
+
+        QuestionAnswer answer = new QuestionAnswer();
+        answer.setQuestionId(question.getId());
+        answer.setAnswerText(referenceText);
+        answer.setAnswerType("STANDARD");
+        answer.setPrimaryAnswer(true);
+        answer.setSortOrder(0);
+        answer.setDeleted(false);
+        answer.setCreatedAt(now);
+        answer.setUpdatedAt(now);
+        questionAnswerMapper.insertQuestionAnswer(answer);
+        return question.getId();
+    }
+
+    private List<String> splitSegments(String text) {
+        return List.of(text.replace("\r\n", "\n").replace('\r', '\n').split("\\n\\s*\\n"))
+                .stream()
+                .map(String::trim)
+                .toList();
     }
 
     private ResolvedUserErrorType resolveUserErrorType(
@@ -268,6 +406,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     private UserAnswerQueryRequest normalizeQueryRequest(UserAnswerQueryRequest request) {
         return new UserAnswerQueryRequest(
                 request.answerStatus(),
+                request.questionType(),
                 request.questionId(),
                 request.level(),
                 request.minTotalScore(),

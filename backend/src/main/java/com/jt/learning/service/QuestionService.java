@@ -1,5 +1,6 @@
 package com.jt.learning.service;
 
+import com.jt.learning.dto.AiArticleGenerationRequest;
 import com.jt.learning.dto.AiQuestionGenerationRequest;
 import com.jt.learning.dto.AiAnswerScoringRequest;
 import com.jt.learning.dto.QuestionCreateRequest;
@@ -17,6 +18,8 @@ import java.util.List;
 public interface QuestionService {
 
     List<QuestionVO> generateQuestionsByAi(AiQuestionGenerationRequest request);
+
+    QuestionVO generateArticleByAi(AiArticleGenerationRequest request);
 
     QuestionEmbeddingBackfillVO backfillQuestionEmbeddings(QuestionEmbeddingBackfillRequest request);
 

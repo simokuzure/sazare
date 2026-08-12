@@ -1,6 +1,10 @@
 package com.jt.learning.service.impl;
 
 import com.jt.learning.dto.AiAnswerErrorAnalysisDTO;
+import com.jt.learning.dto.AiArticleGenerationRequest;
+import com.jt.learning.dto.AiArticleGenerationResponseDTO;
+import com.jt.learning.dto.AiArticleSentenceDTO;
+import com.jt.learning.dto.AiArticleSentenceReviewDTO;
 import com.jt.learning.dto.AiErrorTypeOptionDTO;
 import com.jt.learning.dto.AiAnswerRecommendedExpressionDTO;
 import com.jt.learning.dto.AiAnswerReviewCommentsDTO;
@@ -8,6 +12,7 @@ import com.jt.learning.dto.AiAnswerReviewDTO;
 import com.jt.learning.dto.AiAnswerScoresDTO;
 import com.jt.learning.dto.AiAnswerScoringRequest;
 import com.jt.learning.dto.AiAnswerScoringResponseDTO;
+import com.jt.learning.dto.AiGeneratedArticleDTO;
 import com.jt.learning.dto.AiGeneratedQuestionDTO;
 import com.jt.learning.dto.AiQuestionAnswerDTO;
 import com.jt.learning.dto.AiQuestionGenerationRequest;
@@ -38,6 +43,7 @@ import com.jt.learning.service.ai.AiAnswerScoringClient;
 import com.jt.learning.service.ai.AiQuestionClient;
 import com.jt.learning.service.ai.AiQuestionPrompt;
 import com.jt.learning.service.ai.prompt.AiAnswerScoringPromptBuilder;
+import com.jt.learning.service.ai.prompt.AiArticleQuestionPromptBuilder;
 import com.jt.learning.service.ai.prompt.AiQuestionPromptBuilder;
 import com.jt.learning.service.ai.validation.AiErrorAnalysisValidator;
 import com.jt.learning.service.QuestionService;
@@ -47,6 +53,7 @@ import com.jt.learning.vo.AnswerRecommendedExpressionVO;
 import com.jt.learning.vo.AnswerReviewCommentsVO;
 import com.jt.learning.vo.AnswerReviewVO;
 import com.jt.learning.vo.AnswerScoresVO;
+import com.jt.learning.vo.ArticleSentenceReviewVO;
 import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.QuestionAnswerVO;
 import com.jt.learning.vo.QuestionVO;
@@ -74,11 +81,13 @@ import tools.jackson.databind.ObjectMapper;
 public class QuestionServiceImpl implements QuestionService {
 
     private static final String QUESTION_TYPE = "TRANSLATION_ZH_TO_JA";
+    private static final String ARTICLE_QUESTION_TYPE = "TRANSLATION_ZH_TO_JA_ARTICLE";
     private static final String SOURCE_TYPE_AI = "AI";
     private static final String SOURCE_TYPE_MANUAL = "MANUAL";
     private static final String SOURCE_TYPE_REVIEW_DERIVED = "REVIEW_DERIVED";
     private static final String TAG_TYPE_SCENE = "SCENE";
     private static final String TAG_TYPE_FUNCTION = "FUNCTION";
+    private static final String TAG_TYPE_GENRE = "GENRE";
     private static final String ANSWER_TYPE_STANDARD = "STANDARD";
     private static final String ANSWER_TYPE_REFERENCE = "REFERENCE";
     private static final String LOCAL_DEFAULT_USER_CODE = "LOCAL_DEFAULT";
@@ -89,6 +98,12 @@ public class QuestionServiceImpl implements QuestionService {
     private static final Set<String> VALID_FORMALITIES = Set.of("CASUAL", "NEUTRAL", "POLITE", "BUSINESS");
     private static final Pattern CHINESE_PATTERN = Pattern.compile(".*[\\u4e00-\\u9fff].*");
     private static final Pattern JAPANESE_TEXT_PATTERN = Pattern.compile(".*[\\u3040-\\u30ff\\u4e00-\\u9fff].*");
+    private static final Pattern JAPANESE_KANA_PATTERN = Pattern.compile(".*[\\u3040-\\u30ff].*");
+    private static final Pattern ARTICLE_END_PATTERN = Pattern.compile(".*[。？！]$");
+    private static final String ARTICLE_SEPARATOR = "\n\n";
+    private static final int ARTICLE_MIN_LENGTH = 150;
+    private static final int ARTICLE_MAX_LENGTH = 300;
+    private static final int ARTICLE_MAX_SENTENCES = 30;
 
     private final TagMapper tagMapper;
     private final QuestionMapper questionMapper;
@@ -191,6 +206,42 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    public QuestionVO generateArticleByAi(AiArticleGenerationRequest request) {
+        List<Tag> genreTags = tagMapper.selectEnabledTagsByCodes(
+                TAG_TYPE_GENRE,
+                List.of(request.genreTagCode())
+        );
+        if (genreTags.size() != 1) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "genreTagCode 不存在、未启用或不是 GENRE 标签");
+        }
+        Tag genreTag = genreTags.getFirst();
+        AiQuestionTagOptionDTO genreOption = new AiQuestionTagOptionDTO(
+                genreTag.getCode(),
+                genreTag.getName(),
+                genreTag.getDescription()
+        );
+        AiArticleQuestionPromptBuilder articlePromptBuilder = new AiArticleQuestionPromptBuilder(objectMapper);
+
+        for (int attempt = 0; attempt < 3; attempt++) {
+            AiQuestionPrompt prompt = articlePromptBuilder.build(request, genreOption);
+            AiArticleGenerationResponseDTO response = parseArticleResponse(
+                    aiQuestionClient.generateArticle(prompt, request)
+            );
+            ValidatedArticle article = validateArticleResponse(request, response);
+            List<Float> embedding = questionEmbeddingService.embedQuestion(
+                    article.sourceText(),
+                    article.article().contextText()
+            );
+            if (!questionEmbeddingService.findSimilarQuestions(embedding, ARTICLE_QUESTION_TYPE).isEmpty()) {
+                continue;
+            }
+            return saveArticle(article, genreTag, embedding);
+        }
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 生成文章存在近似重复，补生成后仍未获得可用文章");
+    }
+
+    @Override
+    @Transactional
     public QuestionEmbeddingBackfillVO backfillQuestionEmbeddings(QuestionEmbeddingBackfillRequest request) {
         return questionEmbeddingService.backfill(request.batchSize());
     }
@@ -205,7 +256,7 @@ public class QuestionServiceImpl implements QuestionService {
                 request.grammarPoint()
         );
         List<Tag> tags = loadQuestionTags(request.tagCodes());
-        validateSelectedTags(tags);
+        validateSelectedTags(request.questionType(), tags);
         List<AiQuestionAnswerDTO> answers = toAnswerDTOs(request.answers());
         validateAnswers(answers, "题目");
 
@@ -260,7 +311,31 @@ public class QuestionServiceImpl implements QuestionService {
         }
 
         List<QuestionVO> questions = loadQuestionVOs(List.of(questionId));
-        return questions.isEmpty() ? null : questions.getFirst();
+        if (questions.isEmpty()) {
+            return null;
+        }
+        QuestionVO question = questions.getFirst();
+        if (!ARTICLE_QUESTION_TYPE.equals(question.questionType())) {
+            return question;
+        }
+        return new QuestionVO(
+                question.id(),
+                question.questionType(),
+                question.sourceText(),
+                question.contextText(),
+                question.level(),
+                question.difficulty(),
+                question.grammarPoint(),
+                question.spoken(),
+                question.business(),
+                question.exam(),
+                question.sourceType(),
+                question.enabled(),
+                question.tags(),
+                List.of(),
+                question.createdAt(),
+                question.updatedAt()
+        );
     }
 
     private List<QuestionVO> loadQuestionVOs(List<Long> questionIds) {
@@ -302,6 +377,9 @@ public class QuestionServiceImpl implements QuestionService {
     @Transactional
     public QuestionVO updateQuestion(Long id, QuestionUpdateRequest request) {
         Question existingQuestion = loadExistingQuestion(id);
+        if (!existingQuestion.getQuestionType().equals(request.questionType())) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "编辑时不能修改 questionType");
+        }
         validateQuestionContent(
                 request.questionType(),
                 request.sourceText(),
@@ -309,14 +387,17 @@ public class QuestionServiceImpl implements QuestionService {
                 request.grammarPoint()
         );
         List<Tag> tags = loadQuestionTags(request.tagCodes());
-        validateSelectedTags(tags);
+        validateSelectedTags(request.questionType(), tags);
         List<AiQuestionAnswerDTO> answers = toAnswerDTOs(request.answers());
         validateAnswers(answers, "题目");
+        if (ARTICLE_QUESTION_TYPE.equals(request.questionType())) {
+            validateArticleEdit(request.sourceText(), answers);
+        }
 
         Question question = new Question();
         question.setId(id);
-        question.setQuestionType(QUESTION_TYPE);
-        question.setSourceText(request.sourceText().trim());
+        question.setQuestionType(existingQuestion.getQuestionType());
+        question.setSourceText(normalizeText(request.sourceText()));
         question.setContextText(request.contextText().trim());
         question.setLevel(request.level().trim());
         question.setDifficulty(request.difficulty());
@@ -390,18 +471,36 @@ public class QuestionServiceImpl implements QuestionService {
         }
         Map<String, AiErrorTypeOptionDTO> errorTypesByCode = errorTypeOptions.stream()
                 .collect(Collectors.toMap(AiErrorTypeOptionDTO::code, option -> option));
-        String answerText = request.answerText().trim();
+        String answerText = normalizeText(request.answerText());
+        int maxAnswerLength = ARTICLE_QUESTION_TYPE.equals(question.getQuestionType()) ? 5000 : 2000;
+        if (answerText.isBlank()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "答案不能为空");
+        }
+        if (answerText.length() > maxAnswerLength) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "答案长度不能超过 " + maxAnswerLength + " 个字符");
+        }
+        if (ARTICLE_QUESTION_TYPE.equals(question.getQuestionType())
+                && !JAPANESE_KANA_PATTERN.matcher(answerText).matches()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "文章答案必须包含日语假名");
+        }
+        AiAnswerScoringRequest normalizedRequest = new AiAnswerScoringRequest(answerText);
         AiQuestionPrompt prompt = answerScoringPromptBuilder.build(
                 question,
                 standardAnswers,
                 tagOptions,
                 errorTypeOptions,
-                request
+                normalizedRequest
         );
         AiAnswerScoringResponseDTO aiResponse = parseAiAnswerScoringResponse(
-                aiAnswerScoringClient.scoreAnswer(prompt, request, question, standardAnswers, tagOptions)
+                aiAnswerScoringClient.scoreAnswer(prompt, normalizedRequest, question, standardAnswers, tagOptions)
         );
-        AiAnswerReviewDTO review = validateAnswerReview(aiResponse, errorTypesByCode, answerText);
+        AiAnswerReviewDTO review = validateAnswerReview(
+                aiResponse,
+                errorTypesByCode,
+                answerText,
+                question,
+                standardAnswers
+        );
         BigDecimal totalScore = calculateTotalScore(review.scores());
         UserAnswer userAnswer = saveSubmittedAnswer(user.getId(), questionId, answerText);
         LocalDateTime updatedAt = LocalDateTime.now();
@@ -487,7 +586,7 @@ public class QuestionServiceImpl implements QuestionService {
             String contextText,
             String grammarPoint
     ) {
-        if (!QUESTION_TYPE.equals(questionType)) {
+        if (!QUESTION_TYPE.equals(questionType) && !ARTICLE_QUESTION_TYPE.equals(questionType)) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "questionType 不合法");
         }
         validateRequiredText(sourceText, "sourceText 不能为空");
@@ -518,12 +617,75 @@ public class QuestionServiceImpl implements QuestionService {
                 .toList();
     }
 
-    private void validateSelectedTags(List<Tag> tags) {
+    private void validateSelectedTags(String questionType, List<Tag> tags) {
+        if (ARTICLE_QUESTION_TYPE.equals(questionType)) {
+            long genreTagCount = tags.stream()
+                    .filter(tag -> TAG_TYPE_GENRE.equals(tag.getTagType()))
+                    .count();
+            if (genreTagCount != 1) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题必须且只能选择 1 个体裁标签");
+            }
+            return;
+        }
         boolean hasSceneTag = tags.stream()
                 .anyMatch(tag -> TAG_TYPE_SCENE.equals(tag.getTagType()));
         if (!hasSceneTag) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "tagCodes 至少需要 1 个场景标签");
         }
+    }
+
+    private void validateArticleEdit(String sourceText, List<AiQuestionAnswerDTO> answers) {
+        if (answers.size() != 1
+                || !ANSWER_TYPE_STANDARD.equals(answers.getFirst().answerType())
+                || !Boolean.TRUE.equals(answers.getFirst().primaryAnswer())) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题必须有且只有 1 个主标准答案");
+        }
+        List<String> sourceSegments = splitArticleSegments(sourceText, "sourceText");
+        List<String> referenceSegments = splitArticleSegments(answers.getFirst().answerText(), "answerText");
+        if (sourceSegments.size() != referenceSegments.size()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题中文题干与日文参考答案段落数必须一致");
+        }
+        int characterCount = sourceSegments.stream()
+                .flatMapToInt(String::codePoints)
+                .filter(codePoint -> !Character.isWhitespace(codePoint))
+                .map(codePoint -> 1)
+                .sum();
+        if (characterCount < ARTICLE_MIN_LENGTH || characterCount > ARTICLE_MAX_LENGTH) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题中文长度必须在 150 到 300 个非空白字符之间");
+        }
+        for (String sourceSegment : sourceSegments) {
+            if (!CHINESE_PATTERN.matcher(sourceSegment).matches()
+                    || JAPANESE_KANA_PATTERN.matcher(sourceSegment).matches()
+                    || !ARTICLE_END_PATTERN.matcher(sourceSegment).matches()) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题每个 sourceText 段落必须是无假名的完整中文句子");
+            }
+        }
+        Set<String> uniqueReferences = new LinkedHashSet<>();
+        for (String referenceSegment : referenceSegments) {
+            if (!JAPANESE_KANA_PATTERN.matcher(referenceSegment).matches()) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题每个 answerText 段落必须包含日语假名");
+            }
+            if (!uniqueReferences.add(referenceSegment)) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题日文参考句不能重复");
+            }
+        }
+    }
+
+    private List<String> splitArticleSegments(String text, String fieldName) {
+        String normalized = normalizeText(text);
+        List<String> segments = Pattern.compile("\\n\\s*\\n")
+                .splitAsStream(normalized)
+                .map(String::trim)
+                .toList();
+        if (segments.isEmpty() || segments.size() > ARTICLE_MAX_SENTENCES
+                || segments.stream().anyMatch(String::isBlank)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, fieldName + " 文章段落不合法");
+        }
+        return segments;
+    }
+
+    private String normalizeText(String text) {
+        return text.replace("\r\n", "\n").replace('\r', '\n').trim();
     }
 
     private List<AiQuestionAnswerDTO> toAnswerDTOs(List<QuestionAnswerRequest> requests) {
@@ -574,7 +736,9 @@ public class QuestionServiceImpl implements QuestionService {
     private AiAnswerReviewDTO validateAnswerReview(
             AiAnswerScoringResponseDTO aiResponse,
             Map<String, AiErrorTypeOptionDTO> errorTypesByCode,
-            String answerText
+            String answerText,
+            Question question,
+            List<QuestionAnswer> standardAnswers
     ) {
         if (aiResponse.review() == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 review 不能为空");
@@ -589,10 +753,59 @@ public class QuestionServiceImpl implements QuestionService {
         }
         validateRequiredText(review.overallComment(), "AI 评分 overallComment 不能为空");
         validateComments(review.comments());
-        aiErrorAnalysisValidator.validate(review.errorAnalysis(), errorTypesByCode, answerText);
+        if (ARTICLE_QUESTION_TYPE.equals(question.getQuestionType())) {
+            List<String> sourceSegments = splitArticleSegments(question.getSourceText(), "sourceText");
+            List<String> referenceSegments = splitArticleSegments(
+                    standardAnswers.getFirst().getAnswerText(),
+                    "answerText"
+            );
+            validateArticleSentenceReviews(review.sentenceReviews(), sourceSegments, referenceSegments, answerText);
+            aiErrorAnalysisValidator.validateArticle(
+                    review.errorAnalysis(),
+                    errorTypesByCode,
+                    answerText,
+                    sourceSegments,
+                    referenceSegments
+            );
+        } else {
+            aiErrorAnalysisValidator.validate(review.errorAnalysis(), errorTypesByCode, answerText);
+        }
         validateRevisionSuggestions(review.revisionSuggestions());
         validateRecommendedExpressions(review.recommendedExpressions());
         return review;
+    }
+
+    private void validateArticleSentenceReviews(
+            List<AiArticleSentenceReviewDTO> sentenceReviews,
+            List<String> sourceSegments,
+            List<String> referenceSegments,
+            String answerText
+    ) {
+        if (sourceSegments.size() != referenceSegments.size()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "文章题中文与日文参考段落数不一致");
+        }
+        if (sentenceReviews == null || sentenceReviews.size() != sourceSegments.size()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 sentenceReviews 数量不一致");
+        }
+        for (int index = 0; index < sentenceReviews.size(); index++) {
+            AiArticleSentenceReviewDTO review = sentenceReviews.get(index);
+            if (review == null || review.sourceSegmentIndex() == null
+                    || review.sourceSegmentIndex() != index) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 sentenceReviews 索引不连续");
+            }
+            if (!sourceSegments.get(index).equals(review.sourceText())
+                    || !referenceSegments.get(index).equals(review.referenceText())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分逐句原文或参考答案不一致");
+            }
+            if (review.answerExcerpt() != null && !review.answerExcerpt().isBlank()
+                    && !answerText.contains(review.answerExcerpt())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 answerExcerpt 不属于用户完整答案");
+            }
+            if (!referenceSegments.get(index).equals(review.revisedText())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 revisedText 必须是对应完整参考句");
+            }
+            validateRequiredText(review.comment(), "AI 评分 sentenceReviews.comment 不能为空");
+        }
     }
 
     private void validateScores(AiAnswerScoresDTO scores) {
@@ -695,6 +908,132 @@ public class QuestionServiceImpl implements QuestionService {
     private Map<String, Tag> toTagMap(List<Tag> tags) {
         return tags.stream()
                 .collect(Collectors.toMap(Tag::getCode, tag -> tag, (left, right) -> left, LinkedHashMap::new));
+    }
+
+    private AiArticleGenerationResponseDTO parseArticleResponse(String aiContent) {
+        if (aiContent == null || aiContent.isBlank()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章输出为空");
+        }
+        try {
+            JsonNode root = objectMapper.readTree(aiContent);
+            if (!root.isObject()
+                    || !new LinkedHashSet<>(root.propertyNames()).equals(Set.of("article"))
+                    || root.get("article") == null
+                    || !root.get("article").isObject()) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 JSON 顶层只能包含 article 对象");
+            }
+            return objectMapper.treeToValue(root, AiArticleGenerationResponseDTO.class);
+        } catch (JacksonException exception) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章输出不是合法 JSON");
+        }
+    }
+
+    private ValidatedArticle validateArticleResponse(
+            AiArticleGenerationRequest request,
+            AiArticleGenerationResponseDTO response
+    ) {
+        if (response.article() == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 article 不能为空");
+        }
+        var article = response.article();
+        if (!ARTICLE_QUESTION_TYPE.equals(article.questionType())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 questionType 不合法");
+        }
+        if (!request.level().equals(article.level()) || !request.difficulty().equals(article.difficulty())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章等级或难度与请求不一致");
+        }
+        validateRequiredText(article.contextText(), "AI 文章 contextText 不能为空");
+        validateRequiredText(article.grammarPoint(), "AI 文章 grammarPoint 不能为空");
+        if (article.spoken() == null || article.business() == null || article.exam() == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 spoken、business、exam 必须是布尔值");
+        }
+        if (article.sentences() == null || article.sentences().isEmpty()
+                || article.sentences().size() > ARTICLE_MAX_SENTENCES) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章句子数量必须在 1 到 30 之间");
+        }
+
+        List<String> sourceSegments = new ArrayList<>();
+        List<String> referenceSegments = new ArrayList<>();
+        Set<String> uniqueReferences = new LinkedHashSet<>();
+        for (int index = 0; index < article.sentences().size(); index++) {
+            AiArticleSentenceDTO sentence = article.sentences().get(index);
+            if (sentence == null || sentence.index() == null || sentence.index() != index) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章句子索引必须从 0 连续递增");
+            }
+            String chinese = requireArticleText(sentence.chineseText(), "AI 文章 chineseText 不能为空");
+            if (containsLineBreak(chinese)
+                    || !CHINESE_PATTERN.matcher(chinese).matches()
+                    || JAPANESE_KANA_PATTERN.matcher(chinese).matches()
+                    || !ARTICLE_END_PATTERN.matcher(chinese).matches()) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 chineseText 必须是无换行、无假名的完整中文句子");
+            }
+            String japanese = requireArticleText(sentence.japaneseReference(), "AI 文章 japaneseReference 不能为空");
+            if (containsLineBreak(japanese) || !JAPANESE_KANA_PATTERN.matcher(japanese).matches()) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 japaneseReference 必须是无换行的日语句子");
+            }
+            if (!uniqueReferences.add(japanese)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 japaneseReference 不能重复");
+            }
+            sourceSegments.add(chinese);
+            referenceSegments.add(japanese);
+        }
+
+        int characterCount = sourceSegments.stream()
+                .flatMapToInt(String::codePoints)
+                .filter(codePoint -> !Character.isWhitespace(codePoint))
+                .map(codePoint -> 1)
+                .sum();
+        if (characterCount < ARTICLE_MIN_LENGTH || characterCount > ARTICLE_MAX_LENGTH) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 中文文章长度必须在 150 到 300 个非空白字符之间");
+        }
+        return new ValidatedArticle(
+                article,
+                String.join(ARTICLE_SEPARATOR, sourceSegments),
+                String.join(ARTICLE_SEPARATOR, referenceSegments)
+        );
+    }
+
+    private QuestionVO saveArticle(ValidatedArticle article, Tag genreTag, List<Float> embedding) {
+        LocalDateTime now = LocalDateTime.now();
+        Question question = new Question();
+        question.setQuestionType(ARTICLE_QUESTION_TYPE);
+        question.setSourceText(article.sourceText());
+        question.setContextText("AI 原创；" + article.article().contextText().trim());
+        question.setLevel(article.article().level());
+        question.setDifficulty(article.article().difficulty());
+        question.setGrammarPoint(article.article().grammarPoint().trim());
+        question.setSpoken(article.article().spoken());
+        question.setBusiness(article.article().business());
+        question.setExam(article.article().exam());
+        question.setSourceType(SOURCE_TYPE_AI);
+        question.setEnabled(true);
+        question.setDeleted(false);
+        question.setCreatedAt(now);
+        question.setUpdatedAt(now);
+        questionMapper.insertQuestion(question);
+        questionEmbeddingService.saveEmbedding(question, embedding);
+
+        QuestionAnswer answer = new QuestionAnswer();
+        answer.setQuestionId(question.getId());
+        answer.setAnswerText(article.referenceText());
+        answer.setAnswerType(ANSWER_TYPE_STANDARD);
+        answer.setPrimaryAnswer(true);
+        answer.setSortOrder(0);
+        answer.setDeleted(false);
+        answer.setCreatedAt(now);
+        answer.setUpdatedAt(now);
+        questionAnswerMapper.insertQuestionAnswer(answer);
+        questionTagMapper.insertQuestionTag(question.getId(), genreTag.getId());
+        return toQuestionVO(question, List.of(genreTag), List.of());
+    }
+
+    private String requireArticleText(String value, String message) {
+        validateRequiredText(value, message);
+        return value.trim();
+    }
+
+    private boolean containsLineBreak(String value) {
+        return value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0;
     }
 
     private AiQuestionGenerationResponseDTO parseAiResponse(String aiContent) {
@@ -1041,6 +1380,16 @@ public class QuestionServiceImpl implements QuestionService {
                 userAnswer.getTotalScore(),
                 userAnswer.getAiOverallComment(),
                 toAnswerReviewCommentsVO(review.comments()),
+                review.sentenceReviews() == null
+                        ? null
+                        : review.sentenceReviews().stream()
+                                .map(AiArticleSentenceReviewDTO::revisedText)
+                                .collect(Collectors.joining(ARTICLE_SEPARATOR)),
+                review.sentenceReviews() == null
+                        ? List.of()
+                        : review.sentenceReviews().stream()
+                                .map(this::toArticleSentenceReviewVO)
+                                .toList(),
                 review.errorAnalysis().stream()
                         .map(error -> toAnswerErrorAnalysisVO(error, errorTypesByCode))
                         .toList(),
@@ -1048,6 +1397,17 @@ public class QuestionServiceImpl implements QuestionService {
                 review.recommendedExpressions().stream().map(this::toAnswerRecommendedExpressionVO).toList(),
                 userAnswer.getCreatedAt(),
                 userAnswer.getUpdatedAt()
+        );
+    }
+
+    private ArticleSentenceReviewVO toArticleSentenceReviewVO(AiArticleSentenceReviewDTO review) {
+        return new ArticleSentenceReviewVO(
+                review.sourceSegmentIndex(),
+                review.sourceText(),
+                review.referenceText(),
+                review.answerExcerpt(),
+                review.revisedText(),
+                review.comment().trim()
         );
     }
 
@@ -1116,6 +1476,13 @@ public class QuestionServiceImpl implements QuestionService {
     private record PreparedGeneratedQuestion(
             ValidatedGeneratedQuestion question,
             List<Float> embedding
+    ) {
+    }
+
+    private record ValidatedArticle(
+            AiGeneratedArticleDTO article,
+            String sourceText,
+            String referenceText
     ) {
     }
 }

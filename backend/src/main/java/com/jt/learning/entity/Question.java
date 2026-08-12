@@ -15,12 +15,12 @@ public class Question {
     private Long id;
 
     /**
-     * 题目类型：TRANSLATION_ZH_TO_JA=中译日
+     * 题目类型：TRANSLATION_ZH_TO_JA=中译日短句，TRANSLATION_ZH_TO_JA_ARTICLE=中译日文章
      */
     private String questionType;
 
     /**
-     * 题目原文，当前为中文句子
+     * 中文题目原文，文章题按句使用双换行分隔
      */
     private String sourceText;
 

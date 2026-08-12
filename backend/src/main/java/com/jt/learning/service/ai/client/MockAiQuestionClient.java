@@ -1,5 +1,6 @@
 package com.jt.learning.service.ai.client;
 
+import com.jt.learning.dto.AiArticleGenerationRequest;
 import com.jt.learning.dto.AiQuestionGenerationRequest;
 import com.jt.learning.dto.AiQuestionTagOptionDTO;
 import com.jt.learning.service.ai.AiQuestionClient;
@@ -36,6 +37,53 @@ public class MockAiQuestionClient implements AiQuestionClient {
             return objectMapper.writeValueAsString(Map.of("questions", questions));
         } catch (JacksonException exception) {
             throw new IllegalStateException("Mock AI JSON 序列化失败", exception);
+        }
+    }
+
+    @Override
+    public String generateArticle(AiQuestionPrompt prompt, AiArticleGenerationRequest request) {
+        List<String> chineseSentences = List.of(
+                "上周末，我和朋友决定去郊外的一座小镇旅行。",
+                "我们原本计划乘早班电车出发，却因为看错时间错过了车。",
+                "下一班车要等一个小时，所以我们在车站附近吃了早餐。",
+                "到达小镇时，天空突然下起了大雨。",
+                "我们没有带伞，只好跑进一家旧书店避雨。",
+                "店主热情地介绍了当地的历史，还推荐了一家安静的咖啡馆。",
+                "雨停以后，我们按照他的建议慢慢参观了老街。",
+                "虽然行程和预想完全不同，但这次意外让旅行变得更加难忘。"
+        );
+        List<String> japaneseSentences = List.of(
+                "先週末、友人と郊外の小さな町へ旅行することにしました。",
+                "朝早い電車で出発する予定でしたが、時間を見間違えて乗り遅れてしまいました。",
+                "次の電車まで一時間あったので、駅の近くで朝食を取りました。",
+                "町に着くと、空から急に激しい雨が降り始めました。",
+                "傘を持っていなかったため、古い本屋に駆け込んで雨宿りをしました。",
+                "店主は親切に町の歴史を教え、静かな喫茶店も紹介してくれました。",
+                "雨がやんだ後、私たちは彼の勧めに従って古い町並みをゆっくり見て回りました。",
+                "予定とはまったく違う旅になりましたが、その偶然のおかげで忘れられない思い出になりました。"
+        );
+        List<Map<String, Object>> sentences = new ArrayList<>();
+        for (int index = 0; index < chineseSentences.size(); index++) {
+            sentences.add(Map.of(
+                    "index", index,
+                    "chineseText", chineseSentences.get(index),
+                    "japaneseReference", japaneseSentences.get(index)
+            ));
+        }
+        Map<String, Object> article = new LinkedHashMap<>();
+        article.put("questionType", "TRANSLATION_ZH_TO_JA_ARTICLE");
+        article.put("contextText", "叙事文，使用自然且连贯的书面语。");
+        article.put("level", request.level());
+        article.put("difficulty", request.difficulty());
+        article.put("grammarPoint", "时态衔接、原因表达和篇章连贯");
+        article.put("spoken", false);
+        article.put("business", false);
+        article.put("exam", false);
+        article.put("sentences", sentences);
+        try {
+            return objectMapper.writeValueAsString(Map.of("article", article));
+        } catch (JacksonException exception) {
+            throw new IllegalStateException("Mock 文章 AI JSON 序列化失败", exception);
         }
     }
 

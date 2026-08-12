@@ -7,7 +7,10 @@ import jakarta.validation.constraints.Pattern;
 import java.util.List;
 
 public record QuestionQueryRequest(
-        @Pattern(regexp = "TRANSLATION_ZH_TO_JA", message = "questionType 只能是 TRANSLATION_ZH_TO_JA")
+        @Pattern(
+                regexp = "TRANSLATION_ZH_TO_JA|TRANSLATION_ZH_TO_JA_ARTICLE",
+                message = "questionType 只能是 TRANSLATION_ZH_TO_JA 或 TRANSLATION_ZH_TO_JA_ARTICLE"
+        )
         String questionType,
 
         @Pattern(regexp = "N5|N4|N3|N2|N1", message = "level 只能是 N5、N4、N3、N2、N1")

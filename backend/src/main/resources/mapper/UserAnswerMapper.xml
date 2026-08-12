@@ -50,6 +50,9 @@
         <if test="request.answerStatus != null">
             and ua.answer_status = #{request.answerStatus}
         </if>
+        <if test="request.questionType != null">
+            and q.question_type = #{request.questionType}
+        </if>
         <if test="request.questionId != null">
             and ua.question_id = #{request.questionId}
         </if>

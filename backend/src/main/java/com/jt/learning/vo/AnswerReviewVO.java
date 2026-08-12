@@ -13,6 +13,8 @@ public record AnswerReviewVO(
         BigDecimal totalScore,
         String overallComment,
         AnswerReviewCommentsVO comments,
+        String revisedAnswer,
+        List<ArticleSentenceReviewVO> sentenceReviews,
         List<AnswerErrorAnalysisVO> errorAnalysis,
         List<String> revisionSuggestions,
         List<AnswerRecommendedExpressionVO> recommendedExpressions,

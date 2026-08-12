@@ -1,6 +1,7 @@
 package com.jt.learning.service.ai.client;
 
 import com.jt.learning.config.AiProperties;
+import com.jt.learning.dto.AiArticleGenerationRequest;
 import com.jt.learning.dto.AiQuestionGenerationRequest;
 import com.jt.learning.dto.AiQuestionTagOptionDTO;
 import com.jt.learning.exception.BusinessException;
@@ -43,6 +44,15 @@ public class GoogleAiQuestionClient implements AiQuestionClient {
             List<AiQuestionTagOptionDTO> sceneTagOptions,
             List<AiQuestionTagOptionDTO> functionTagOptions
     ) {
+        return generate(prompt);
+    }
+
+    @Override
+    public String generateArticle(AiQuestionPrompt prompt, AiArticleGenerationRequest request) {
+        return generate(prompt);
+    }
+
+    private String generate(AiQuestionPrompt prompt) {
         validateProperties();
         AiProviderHttpResponse response = httpClient.postJson(
                 buildUri(),

@@ -12,13 +12,18 @@ create table if not exists tags (
     updated_at timestamp not null default current_timestamp,
 
     constraint uq_tags_code unique (code),
-    constraint ck_tags_type check (tag_type in ('SCENE', 'FUNCTION')),
+    constraint ck_tags_type check (tag_type in ('SCENE', 'FUNCTION', 'GENRE')),
     constraint ck_tags_parent_not_self check (parent_id is null or parent_id <> id)
 );
 
 comment on table tags is '标签表';
 comment on column tags.id is '主键ID';
-comment on column tags.tag_type is '标签类型：SCENE=场景标签，FUNCTION=功能标签';
+alter table tags drop constraint if exists ck_tags_type;
+alter table tags
+    add constraint ck_tags_type
+    check (tag_type in ('SCENE', 'FUNCTION', 'GENRE'));
+
+comment on column tags.tag_type is '标签类型：SCENE=场景标签，FUNCTION=功能标签，GENRE=文章体裁标签';
 comment on column tags.parent_id is '父标签ID，用于一级、二级标签层级关系，由代码维护有效性';
 comment on column tags.code is '标签编码，供后端和AI稳定识别使用';
 comment on column tags.name is '标签中文名称';
@@ -402,6 +407,33 @@ where child.code = seed.code
 
 drop table seed_tags;
 
+insert into tags (
+    tag_type,
+    parent_id,
+    code,
+    name,
+    description,
+    sort_order,
+    enabled,
+    deleted,
+    created_at,
+    updated_at
+)
+values
+    ('GENRE', null, 'NARRATIVE', '叙事文', '按时间或事件发展叙述经历和故事', 30000, true, false, current_timestamp, current_timestamp),
+    ('GENRE', null, 'EXPOSITORY', '说明文', '说明事物、方法、现象或知识', 30010, true, false, current_timestamp, current_timestamp),
+    ('GENRE', null, 'OPINION', '观点文', '表达观点并说明理由', 30020, true, false, current_timestamp, current_timestamp),
+    ('GENRE', null, 'PRACTICAL', '实用文', '通知、邮件、报告等实际用途文章', 30030, true, false, current_timestamp, current_timestamp)
+on conflict (code) do update set
+    tag_type = excluded.tag_type,
+    parent_id = excluded.parent_id,
+    name = excluded.name,
+    description = excluded.description,
+    sort_order = excluded.sort_order,
+    enabled = true,
+    deleted = false,
+    updated_at = current_timestamp;
+
 create extension if not exists vector;
 
 create table if not exists questions (
@@ -421,7 +453,7 @@ create table if not exists questions (
     created_at timestamp not null default current_timestamp,
     updated_at timestamp not null default current_timestamp,
 
-    constraint ck_questions_type check (question_type in ('TRANSLATION_ZH_TO_JA')),
+    constraint ck_questions_type check (question_type in ('TRANSLATION_ZH_TO_JA', 'TRANSLATION_ZH_TO_JA_ARTICLE')),
     constraint ck_questions_level check (level is null or level in ('N5', 'N4', 'N3', 'N2', 'N1')),
     constraint ck_questions_difficulty check (difficulty between 1 and 5),
     constraint ck_questions_source_type check (source_type in ('AI', 'MANUAL', 'REVIEW_DERIVED'))
@@ -432,10 +464,15 @@ alter table questions
     add constraint ck_questions_source_type
     check (source_type in ('AI', 'MANUAL', 'REVIEW_DERIVED'));
 
+alter table questions drop constraint if exists ck_questions_type;
+alter table questions
+    add constraint ck_questions_type
+    check (question_type in ('TRANSLATION_ZH_TO_JA', 'TRANSLATION_ZH_TO_JA_ARTICLE'));
+
 comment on table questions is '题目表';
 comment on column questions.id is '主键ID';
-comment on column questions.question_type is '题目类型：TRANSLATION_ZH_TO_JA=中译日';
-comment on column questions.source_text is '题目原文，当前为中文句子';
+comment on column questions.question_type is '题目类型：TRANSLATION_ZH_TO_JA=中译日短句，TRANSLATION_ZH_TO_JA_ARTICLE=中译日文章';
+comment on column questions.source_text is '中文题目原文，文章题按句使用双换行分隔';
 comment on column questions.context_text is '题目语境说明';
 comment on column questions.level is 'JLPT等级：N5、N4、N3、N2、N1';
 comment on column questions.difficulty is '难度等级，范围1到5';

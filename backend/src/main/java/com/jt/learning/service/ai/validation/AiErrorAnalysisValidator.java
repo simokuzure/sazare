@@ -56,6 +56,55 @@ public class AiErrorAnalysisValidator {
         }
     }
 
+    public void validateArticle(
+            List<AiAnswerErrorAnalysisDTO> errorAnalysis,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode,
+            String answerText,
+            List<String> sourceSegments,
+            List<String> referenceSegments
+    ) {
+        if (errorAnalysis == null) {
+            throw invalid("errorAnalysis 不能为空");
+        }
+        Set<String> errorKeys = new LinkedHashSet<>();
+        for (AiAnswerErrorAnalysisDTO error : errorAnalysis) {
+            if (error == null) {
+                throw invalid("errorAnalysis 项不能为空");
+            }
+            if (!errorTypesByCode.containsKey(error.errorTypeCode())) {
+                throw invalid("errorAnalysis.errorTypeCode 不合法");
+            }
+            requireText(error.original(), "errorAnalysis.original 不能为空");
+            String original = error.original().trim();
+            if ("OMISSION".equals(error.errorTypeCode())) {
+                if (!sourceSegments.contains(original)) {
+                    throw invalid("漏译错误的 original 必须是对应中文原句");
+                }
+            } else if (!answerText.contains(original)) {
+                throw invalid("errorAnalysis.original 不属于用户答案");
+            }
+            requireText(error.issue(), "errorAnalysis.issue 不能为空");
+            requireText(error.suggestion(), "errorAnalysis.suggestion 不能为空");
+            if (!referenceSegments.contains(error.suggestion().trim())) {
+                throw invalid("文章错误 suggestion 必须是对应的完整日文参考句");
+            }
+            if (!VALID_SEVERITIES.contains(error.severity())) {
+                throw invalid("errorAnalysis.severity 不合法");
+            }
+            requireText(error.suggestedUserErrorTypeName(), "errorAnalysis.suggestedUserErrorTypeName 不能为空");
+            requireText(error.suggestedUserErrorTypeDescription(), "errorAnalysis.suggestedUserErrorTypeDescription 不能为空");
+            if (error.suggestedUserErrorTypeName().trim().length() > 128) {
+                throw invalid("建议的用户错误类型名称过长");
+            }
+            if (error.suggestedUserErrorTypeDescription().trim().length() > 255) {
+                throw invalid("建议的用户错误类型说明过长");
+            }
+            if (!errorKeys.add(error.errorTypeCode() + "\u0000" + original)) {
+                throw invalid("errorAnalysis 存在重复错误");
+            }
+        }
+    }
+
     private void requireText(String value, String message) {
         if (value == null || value.isBlank()) {
             throw invalid(message);

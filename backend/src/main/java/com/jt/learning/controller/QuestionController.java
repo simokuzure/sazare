@@ -1,6 +1,7 @@
 package com.jt.learning.controller;
 
 import com.jt.learning.common.ApiResponse;
+import com.jt.learning.dto.AiArticleGenerationRequest;
 import com.jt.learning.dto.AiAnswerScoringRequest;
 import com.jt.learning.dto.AiQuestionGenerationRequest;
 import com.jt.learning.dto.QuestionCreateRequest;
@@ -50,6 +51,13 @@ public class QuestionController {
         return ApiResponse.success(questionService.generateQuestionsByAi(request));
     }
 
+    @PostMapping("/article-ai-generations")
+    public ApiResponse<QuestionVO> generateArticleByAi(
+            @Valid @RequestBody AiArticleGenerationRequest request
+    ) {
+        return ApiResponse.success(questionService.generateArticleByAi(request));
+    }
+
     @PostMapping("/embedding-backfills")
     public ApiResponse<QuestionEmbeddingBackfillVO> backfillQuestionEmbeddings(
             @Valid @RequestBody(required = false) QuestionEmbeddingBackfillRequest request
@@ -67,7 +75,8 @@ public class QuestionController {
 
     @GetMapping
     public ApiResponse<PageVO<QuestionVO>> listQuestions(
-            @Pattern(regexp = "TRANSLATION_ZH_TO_JA", message = "questionType 只能是 TRANSLATION_ZH_TO_JA")
+            @Pattern(regexp = "TRANSLATION_ZH_TO_JA|TRANSLATION_ZH_TO_JA_ARTICLE",
+                    message = "questionType 只能是 TRANSLATION_ZH_TO_JA 或 TRANSLATION_ZH_TO_JA_ARTICLE")
             @RequestParam(defaultValue = "TRANSLATION_ZH_TO_JA") String questionType,
             @Pattern(regexp = "N5|N4|N3|N2|N1", message = "level 只能是 N5、N4、N3、N2、N1")
             @RequestParam(required = false) String level,
@@ -105,7 +114,8 @@ public class QuestionController {
 
     @GetMapping("/random")
     public ApiResponse<QuestionVO> getRandomQuestion(
-            @Pattern(regexp = "TRANSLATION_ZH_TO_JA", message = "questionType 只能是 TRANSLATION_ZH_TO_JA")
+            @Pattern(regexp = "TRANSLATION_ZH_TO_JA|TRANSLATION_ZH_TO_JA_ARTICLE",
+                    message = "questionType 只能是 TRANSLATION_ZH_TO_JA 或 TRANSLATION_ZH_TO_JA_ARTICLE")
             @RequestParam(defaultValue = "TRANSLATION_ZH_TO_JA") String questionType,
             @Pattern(regexp = "N5|N4|N3|N2|N1", message = "level 只能是 N5、N4、N3、N2、N1")
             @RequestParam(required = false) String level,

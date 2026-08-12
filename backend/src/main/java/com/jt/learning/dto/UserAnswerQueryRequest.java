@@ -13,6 +13,12 @@ public record UserAnswerQueryRequest(
         @Pattern(regexp = "SUBMITTED|REVIEWED|FAILED", message = "answerStatus 只能是 SUBMITTED、REVIEWED、FAILED")
         String answerStatus,
 
+        @Pattern(
+                regexp = "TRANSLATION_ZH_TO_JA|TRANSLATION_ZH_TO_JA_ARTICLE",
+                message = "questionType 只能是 TRANSLATION_ZH_TO_JA 或 TRANSLATION_ZH_TO_JA_ARTICLE"
+        )
+        String questionType,
+
         @Positive(message = "questionId 必须大于 0")
         Long questionId,
 
@@ -36,9 +42,22 @@ public record UserAnswerQueryRequest(
 ) {
     public UserAnswerQueryRequest {
         answerStatus = answerStatus == null || answerStatus.isBlank() ? null : answerStatus.trim();
+        questionType = questionType == null || questionType.isBlank() ? null : questionType.trim();
         level = level == null || level.isBlank() ? null : level.trim();
         page = page == null ? 1 : page;
         size = size == null ? 20 : size;
+    }
+
+    public UserAnswerQueryRequest(
+            String answerStatus,
+            Long questionId,
+            String level,
+            BigDecimal minTotalScore,
+            BigDecimal maxTotalScore,
+            Integer page,
+            Integer size
+    ) {
+        this(answerStatus, null, questionId, level, minTotalScore, maxTotalScore, page, size);
     }
 
     public String getAnswerStatus() {
@@ -47,6 +66,10 @@ public record UserAnswerQueryRequest(
 
     public Long getQuestionId() {
         return questionId;
+    }
+
+    public String getQuestionType() {
+        return questionType;
     }
 
     public String getLevel() {

@@ -9,6 +9,7 @@ import com.jt.learning.vo.ReviewCardListVO;
 import com.jt.learning.vo.ReviewDerivedQuestionGenerationVO;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public interface ReviewService {
 
@@ -24,6 +25,14 @@ public interface ReviewService {
             Long userId,
             Long userAnswerId,
             Long questionId,
+            Long userErrorTypeId,
+            LocalDateTime occurredAt
+    );
+
+    void recordPracticeErrors(
+            Long userId,
+            Long userAnswerId,
+            List<Long> questionIds,
             Long userErrorTypeId,
             LocalDateTime occurredAt
     );
