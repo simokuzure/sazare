@@ -163,6 +163,7 @@ class QuestionServiceImplTest {
 
         assertThat(question.questionType()).isEqualTo("TRANSLATION_ZH_TO_JA_ARTICLE");
         assertThat(question.sourceType()).isEqualTo("AI");
+        assertThat(question.contextText()).isEqualTo("叙事文，使用自然连贯的书面语。");
         assertThat(question.sourceText()).contains("\n\n");
         assertThat(question.grammarPoint()).contains("郊外：郊外（こうがい）", "避雨：雨宿り（あまやどり）");
         assertThat(question.tags()).extracting("code").containsExactly("NARRATIVE");
@@ -927,7 +928,7 @@ class QuestionServiceImplTest {
                 {
                   "article": {
                     "questionType": "TRANSLATION_ZH_TO_JA_ARTICLE",
-                    "contextText": "AI 原创叙事文，使用自然连贯的书面语。",
+                    "contextText": "叙事文，使用自然连贯的书面语。",
                     "level": "N3",
                     "difficulty": 3,
                     "grammarPoint": "郊外：郊外（こうがい）\\n避雨：雨宿り（あまやどり）\\n老街：古い町並み（ふるいまちなみ）",

@@ -22,6 +22,7 @@ public interface ReviewCycleMapper {
     int updateProgress(@Param("id") Long id,
                        @Param("targetSuccessCount") int targetSuccessCount,
                        @Param("successfulReviewCount") int successfulReviewCount,
+                       @Param("failedReviewCount") int failedReviewCount,
                        @Param("verificationRequiredAfter") LocalDateTime verificationRequiredAfter,
                        @Param("updatedAt") LocalDateTime updatedAt);
 

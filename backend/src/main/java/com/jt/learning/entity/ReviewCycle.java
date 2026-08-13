@@ -21,13 +21,16 @@ public class ReviewCycle {
     /** 周期状态：IN_PROGRESS=进行中，COMPLETED=已完成。 */
     private String status;
 
-    /** 本周期最低成功次数。 */
+    /** 本周期目标净成功次数，固定为4。 */
     private Integer targetSuccessCount;
 
     /** 本周期累计成功作答次数。 */
     private Integer successfulReviewCount;
 
-    /** 最终衍生题通过时间必须晚于该时间。 */
+    /** 本周期累计失败次数，不包含创建新卡片的首次错误。 */
+    private Integer failedReviewCount;
+
+    /** 兼容字段，记录最近新增或再次答错原题的时间。 */
     private LocalDateTime verificationRequiredAfter;
 
     /** 周期开始时间。 */

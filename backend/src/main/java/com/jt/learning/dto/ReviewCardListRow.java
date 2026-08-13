@@ -20,6 +20,7 @@ public class ReviewCardListRow {
     private LocalDateTime dueAt;
     private Integer cycleNo;
     private Integer successfulReviewCount;
+    private Integer failedReviewCount;
     private Integer targetSuccessCount;
     private Integer originalQuestionCount;
     private Integer originalPassedCount;

@@ -30,6 +30,7 @@
             card.due_at,
             cycle.cycle_no,
             coalesce(cycle.successful_review_count, 0) as successful_review_count,
+            coalesce(cycle.failed_review_count, 0) as failed_review_count,
             coalesce(cycle.target_success_count, 0) as target_success_count,
             coalesce(progress.original_question_count, 0) as original_question_count,
             coalesce(progress.original_passed_count, 0) as original_passed_count,

@@ -162,7 +162,7 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     @Override
-    public ReviewCardDetailVO getReviewCard(Long cardId) {
+    public ReviewCardDetailVO getReviewCard(Long cardId, boolean earlyReview) {
         User user = requireLocalUser();
         ReviewCard card = requireCard(reviewCardMapper.selectByIdAndUserId(cardId, user.getId()));
         UserErrorType userErrorType = requireUserErrorType(card, user.getId());
@@ -174,7 +174,7 @@ public class ReviewServiceImpl implements ReviewService {
         ReviewQuestionVO question = null;
         if (CARD_MASTERED.equals(card.getStatus())) {
             state = "MASTERED";
-        } else if (card.getDueAt().isAfter(LocalDateTime.now())) {
+        } else if (!earlyReview && card.getDueAt().isAfter(LocalDateTime.now())) {
             state = "WAITING";
         } else {
             ReviewCycleQuestion selected = selectCurrentQuestion(cycle);
@@ -199,7 +199,7 @@ public class ReviewServiceImpl implements ReviewService {
         User user = requireLocalUser();
         LocalDateTime now = LocalDateTime.now();
         ReviewCard card = requireCard(reviewCardMapper.selectForUpdateByIdAndUserId(cardId, user.getId()));
-        requireReadyCard(card, now);
+        requireReadyCard(card, now, request.earlyReview());
         ReviewCycle cycle = requireCurrentCycle(card.getId());
         ReviewCycleQuestion cycleQuestion = reviewCycleQuestionMapper
                 .selectByIdAndCycleId(request.cycleQuestionId(), cycle.getId());
@@ -241,13 +241,15 @@ public class ReviewServiceImpl implements ReviewService {
         );
         boolean passed = review.quality() >= 3;
         int successfulCount = cycle.getSuccessfulReviewCount() + (passed ? 1 : 0);
+        int failedCount = cycle.getFailedReviewCount() + (passed ? 0 : 1);
         reviewCycleQuestionMapper.markAttempt(
                 cycleQuestion.getId(), passed ? STATUS_PASSED : STATUS_RETRY,
                 cycleQuestion.getAttemptCount() + 1, review.quality(), now, passed ? now : null, now);
         reviewCycleMapper.updateProgress(
-                cycle.getId(), cycle.getTargetSuccessCount(), successfulCount,
+                cycle.getId(), cycle.getTargetSuccessCount(), successfulCount, failedCount,
                 cycle.getVerificationRequiredAfter(), now);
         cycle.setSuccessfulReviewCount(successfulCount);
+        cycle.setFailedReviewCount(failedCount);
 
         Sm2Result sm2 = sm2Scheduler.schedule(
                 card.getEaseFactor(), card.getRepetitionCount(), card.getIntervalDays(), card.getLapseCount(),
@@ -346,12 +348,12 @@ public class ReviewServiceImpl implements ReviewService {
         }
 
         if (newCard) {
-            createPracticeFailureCycle(card, userAnswerId, questionId, 1, occurredAt);
+            createPracticeFailureCycle(card, userAnswerId, questionId, 1, 0, occurredAt);
             return;
         }
         if (CARD_MASTERED.equals(card.getStatus())) {
             int cycleNo = reviewCycleMapper.selectMaxCycleNo(card.getId()) + 1;
-            createPracticeFailureCycle(card, userAnswerId, questionId, cycleNo, occurredAt);
+            createPracticeFailureCycle(card, userAnswerId, questionId, cycleNo, 1, occurredAt);
             return;
         }
         applyPracticeFailureToCurrentCycle(card, userAnswerId, questionId, occurredAt);
@@ -388,12 +390,11 @@ public class ReviewServiceImpl implements ReviewService {
             ReviewCycleQuestion cycleQuestion = newOriginalRetryQuestion(cycle.getId(), questionId, occurredAt);
             reviewCycleQuestionMapper.insertQuestionIfAbsent(cycleQuestion);
         }
-        ReviewCycleProgressRow progress = reviewCycleQuestionMapper.selectProgress(cycle.getId(), occurredAt);
-        int target = Math.max(4, progress.getOriginalQuestionCount() + 1);
         reviewCycleMapper.updateProgress(
                 cycle.getId(),
-                target,
+                4,
                 cycle.getSuccessfulReviewCount(),
+                cycle.getFailedReviewCount(),
                 occurredAt,
                 occurredAt
         );
@@ -404,6 +405,7 @@ public class ReviewServiceImpl implements ReviewService {
             Long userAnswerId,
             Long questionId,
             int cycleNo,
+            int initialFailureCount,
             LocalDateTime occurredAt
     ) {
         ReviewCycle cycle = new ReviewCycle();
@@ -412,6 +414,7 @@ public class ReviewServiceImpl implements ReviewService {
         cycle.setStatus(CYCLE_IN_PROGRESS);
         cycle.setTargetSuccessCount(4);
         cycle.setSuccessfulReviewCount(0);
+        cycle.setFailedReviewCount(initialFailureCount);
         cycle.setVerificationRequiredAfter(occurredAt);
         cycle.setStartedAt(occurredAt);
         cycle.setCompletedAt(null);
@@ -442,12 +445,11 @@ public class ReviewServiceImpl implements ReviewService {
                     cycleQuestion.getId(), cycleQuestion.getAttemptCount() + 1, occurredAt);
             cycleQuestion.setAttemptCount(cycleQuestion.getAttemptCount() + 1);
         }
-        ReviewCycleProgressRow progress = reviewCycleQuestionMapper
-                .selectProgress(cycle.getId(), occurredAt);
-        int target = Math.max(4, progress.getOriginalQuestionCount() + 1);
+        int failedCount = cycle.getFailedReviewCount() + 1;
         reviewCycleMapper.updateProgress(
-                cycle.getId(), target, cycle.getSuccessfulReviewCount(), occurredAt, occurredAt);
-        cycle.setTargetSuccessCount(target);
+                cycle.getId(), 4, cycle.getSuccessfulReviewCount(), failedCount, occurredAt, occurredAt);
+        cycle.setTargetSuccessCount(4);
+        cycle.setFailedReviewCount(failedCount);
         cycle.setVerificationRequiredAfter(occurredAt);
         applyPracticeFailureSchedule(card, cycle, cycleQuestion, userAnswerId, occurredAt);
     }
@@ -540,18 +542,18 @@ public class ReviewServiceImpl implements ReviewService {
         boolean allOriginalsPassed = progress.getOriginalQuestionCount() > 0
                 && progress.getOriginalQuestionCount().equals(progress.getOriginalPassedCount());
         boolean noUnfinishedQuestion = progress.getActiveQuestionCount() == 0;
-        boolean needsSuccess = cycle.getSuccessfulReviewCount() < cycle.getTargetSuccessCount();
-        boolean needsVerification = progress.getVerifiedDerivedPassedCount() == 0;
-        return allOriginalsPassed && noUnfinishedQuestion && (needsSuccess || needsVerification);
+        return allOriginalsPassed && noUnfinishedQuestion && netSuccessCount(cycle) < cycle.getTargetSuccessCount();
     }
 
     private boolean isCycleComplete(ReviewCycle cycle, ReviewCycleProgressRow progress) {
         return progress.getOriginalQuestionCount() > 0
                 && progress.getOriginalQuestionCount().equals(progress.getOriginalPassedCount())
-                && cycle.getSuccessfulReviewCount() >= cycle.getTargetSuccessCount()
-                && progress.getDerivedQuestionCount() > 0
-                && progress.getVerifiedDerivedPassedCount() > 0
+                && netSuccessCount(cycle) >= cycle.getTargetSuccessCount()
                 && progress.getActiveQuestionCount() == 0;
+    }
+
+    private int netSuccessCount(ReviewCycle cycle) {
+        return cycle.getSuccessfulReviewCount() - cycle.getFailedReviewCount();
     }
 
     private void validateAttemptVersionAndEligibility(
@@ -607,7 +609,8 @@ public class ReviewServiceImpl implements ReviewService {
 
     private ReviewCardListVO toCardListVO(ReviewCardListRow row) {
         ReviewCycleProgressVO progress = new ReviewCycleProgressVO(
-                row.getCycleNo(), row.getSuccessfulReviewCount(), row.getTargetSuccessCount(),
+                row.getCycleNo(), row.getSuccessfulReviewCount(), row.getFailedReviewCount(),
+                row.getSuccessfulReviewCount() - row.getFailedReviewCount(), row.getTargetSuccessCount(),
                 row.getOriginalQuestionCount(), row.getOriginalPassedCount(), row.getRetryQuestionCount(),
                 row.getPendingQuestionCount());
         return new ReviewCardListVO(
@@ -621,7 +624,8 @@ public class ReviewServiceImpl implements ReviewService {
             return null;
         }
         return new ReviewCycleProgressVO(
-                cycle.getCycleNo(), cycle.getSuccessfulReviewCount(), cycle.getTargetSuccessCount(),
+                cycle.getCycleNo(), cycle.getSuccessfulReviewCount(), cycle.getFailedReviewCount(),
+                netSuccessCount(cycle), cycle.getTargetSuccessCount(),
                 progress.getOriginalQuestionCount(), progress.getOriginalPassedCount(),
                 progress.getRetryQuestionCount(), progress.getPendingQuestionCount());
     }
@@ -642,11 +646,11 @@ public class ReviewServiceImpl implements ReviewService {
         return progress;
     }
 
-    private void requireReadyCard(ReviewCard card, LocalDateTime now) {
+    private void requireReadyCard(ReviewCard card, LocalDateTime now, boolean earlyReview) {
         if (!CARD_ACTIVE.equals(card.getStatus())) {
             throw business("复习卡片已掌握");
         }
-        if (card.getDueAt() == null || card.getDueAt().isAfter(now)) {
+        if (card.getDueAt() == null || (!earlyReview && card.getDueAt().isAfter(now))) {
             throw business("复习卡片尚未到期");
         }
     }

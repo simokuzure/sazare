@@ -1136,7 +1136,7 @@ public class QuestionServiceImpl implements QuestionService {
         Question question = new Question();
         question.setQuestionType(ARTICLE_QUESTION_TYPE);
         question.setSourceText(article.sourceText());
-        question.setContextText("AI 原创；" + article.article().contextText().trim());
+        question.setContextText(article.article().contextText().trim());
         question.setLevel(article.article().level());
         question.setDifficulty(article.article().difficulty());
         question.setGrammarPoint(article.article().grammarPoint().trim());

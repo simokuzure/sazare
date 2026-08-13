@@ -15,7 +15,7 @@ public interface ReviewService {
 
     PageVO<ReviewCardListVO> listReviewCards(ReviewCardQueryRequest request);
 
-    ReviewCardDetailVO getReviewCard(Long cardId);
+    ReviewCardDetailVO getReviewCard(Long cardId, boolean earlyReview);
 
     ReviewAttemptVO submitReviewAttempt(Long cardId, ReviewAttemptRequest request);
 

@@ -39,6 +39,7 @@ export default function ReviewPage() {
   const [listReloadToken, setListReloadToken] = useState(0)
   const [view, setView] = useState<WorkbenchView>('LIST')
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null)
+  const [earlyReview, setEarlyReview] = useState(false)
   const [detail, setDetail] = useState<ReviewCardDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState<string | null>(null)
@@ -79,7 +80,7 @@ export default function ReviewPage() {
     const controller = new AbortController()
     setDetailLoading(true)
     setDetailError(null)
-    fetchReviewCard(selectedCardId, controller.signal)
+    fetchReviewCard(selectedCardId, earlyReview, controller.signal)
       .then(setDetail)
       .catch((error: unknown) => {
         if (isAbortError(error)) return
@@ -89,7 +90,7 @@ export default function ReviewPage() {
         if (!controller.signal.aborted) setDetailLoading(false)
       })
     return () => controller.abort()
-  }, [detailReloadToken, selectedCardId])
+  }, [detailReloadToken, earlyReview, selectedCardId])
 
   const totalPages = Math.max(1, Math.ceil(cards.total / filters.size))
   const firstItemNo = cards.total === 0 ? 0 : (filters.page - 1) * filters.size + 1
@@ -107,8 +108,13 @@ export default function ReviewPage() {
     setFilters((current) => ({ ...current, size, page: 1 }))
   }
 
-  function openCard(cardId: number, nextView: Extract<WorkbenchView, 'CARD_DETAIL' | 'REVIEW'>) {
+  function openCard(
+    cardId: number,
+    nextView: Extract<WorkbenchView, 'CARD_DETAIL' | 'REVIEW'>,
+    nextEarlyReview = false,
+  ) {
     setSelectedCardId(cardId)
+    setEarlyReview(nextEarlyReview)
     setDetail(null)
     setDetailError(null)
     setAnswerText('')
@@ -125,6 +131,10 @@ export default function ReviewPage() {
     openCard(cardId, 'REVIEW')
   }
 
+  function startEarlyReview(cardId: number) {
+    openCard(cardId, 'REVIEW', true)
+  }
+
   function viewCard(cardId: number) {
     openCard(cardId, 'CARD_DETAIL')
   }
@@ -137,10 +147,19 @@ export default function ReviewPage() {
     setDetailReloadToken((value) => value + 1)
   }
 
+  function startEarlyReviewFromDetail() {
+    setDetail(null)
+    setAnswerText('')
+    setActionNotice(null)
+    setEarlyReview(true)
+    setView('REVIEW')
+  }
+
   function returnToList() {
     if (submitting) return
     setView('LIST')
     setSelectedCardId(null)
+    setEarlyReview(false)
     setDetail(null)
     setAttemptResult(null)
     setActionNotice(null)
@@ -167,6 +186,7 @@ export default function ReviewPage() {
         cycleQuestionId: detail.currentQuestion.cycleQuestionId,
         expectedAttemptCount: detail.currentQuestion.attemptCount,
         answerText: normalizedAnswer,
+        earlyReview,
       })
       setSubmittedAnswer(normalizedAnswer)
       setAttemptResult(result)
@@ -219,6 +239,18 @@ export default function ReviewPage() {
     } finally {
       setNextCardLoading(false)
     }
+  }
+
+  function continueEarlyReview() {
+    if (selectedCardId === null) return
+    setAnswerText('')
+    setSubmittedAnswer('')
+    setAttemptResult(null)
+    setActionNotice(null)
+    setErrorCandidates([])
+    setEarlyReview(true)
+    setView('REVIEW')
+    setDetailReloadToken((value) => value + 1)
   }
 
   async function loadActiveUserErrorTypes() {
@@ -297,6 +329,7 @@ export default function ReviewPage() {
       loading={detailLoading}
       error={detailError}
       onStart={startReviewFromDetail}
+      onStartEarly={startEarlyReviewFromDetail}
       onReload={reloadDetail}
       onBack={returnToList}
     />
@@ -310,6 +343,7 @@ export default function ReviewPage() {
       answerText={answerText}
       submitting={submitting}
       derivedGenerating={derivedGenerating}
+      earlyReview={earlyReview}
       notice={actionNotice}
       onAnswerChange={(value) => { setAnswerText(value); setActionNotice(null) }}
       onSubmit={handleSubmitAttempt}
@@ -330,6 +364,7 @@ export default function ReviewPage() {
       nextCardLoading={nextCardLoading}
       onGenerate={handleGenerateDerivedQuestion}
       onOpenErrorConfirmation={openErrorConfirmation}
+      onContinueEarly={continueEarlyReview}
       onNext={handleNextDueCard}
       onBack={returnToList}
     >
@@ -378,7 +413,7 @@ export default function ReviewPage() {
               <td data-label="原题">{card.progress.originalPassedCount} / {card.progress.originalQuestionCount}</td>
               <td data-label="待重试">{card.progress.retryQuestionCount}</td>
               <td data-label="最近活动">{formatDateTime(card.status === 'MASTERED' ? card.masteredAt : card.lastReviewedAt)}</td>
-              <td data-label="操作"><div className="review-card-actions"><button type="button" className="compact-button" onClick={() => viewCard(card.id)}>查看</button>{due ? <button type="button" className="primary-button compact-button" onClick={() => startReview(card.id)}>开始复习</button> : null}</div></td>
+              <td data-label="操作"><div className="review-card-actions"><button type="button" className="compact-button" onClick={() => viewCard(card.id)}>查看</button>{due ? <button type="button" className="primary-button compact-button" onClick={() => startReview(card.id)}>开始复习</button> : filters.mode === 'ACTIVE' ? <button type="button" className="primary-button compact-button" onClick={() => startEarlyReview(card.id)}>提前复习</button> : null}</div></td>
             </tr>
           })}</tbody>
         </table>
@@ -392,11 +427,12 @@ export default function ReviewPage() {
   </section>
 }
 
-function ReviewCardOverview({ detail, loading, error, onStart, onReload, onBack }: {
+function ReviewCardOverview({ detail, loading, error, onStart, onStartEarly, onReload, onBack }: {
   detail: ReviewCardDetail | null
   loading: boolean
   error: string | null
   onStart: () => void
+  onStartEarly: () => void
   onReload: () => void
   onBack: () => void
 }) {
@@ -410,21 +446,22 @@ function ReviewCardOverview({ detail, loading, error, onStart, onReload, onBack 
         {detail.progress ? <ReviewMetrics progress={detail.progress} /> : null}
         <ReviewSchedule detail={detail} />
         {detail.reviewState === 'READY' ? <StateMessage title="卡片已到期" message="当前卡片已经可以复习。进入复习后才会显示题目和答案输入。" actionLabel="开始复习" onAction={onStart} /> : null}
-        {detail.reviewState === 'WAITING' ? <StateMessage title="等待下次复习" message={`下次到期时间：${formatDateTime(detail.dueAt)}。`} /> : null}
-        {detail.reviewState === 'DERIVED_GENERATION_REQUIRED' ? <StateMessage title="需要继续本周期" message="本周期原题已经通过，下一步需要生成并完成衍生题。" actionLabel="继续复习" onAction={onStart} /> : null}
+        {detail.reviewState === 'WAITING' ? <StateMessage title="等待下次复习" message={`下次到期时间：${formatDateTime(detail.dueAt)}。也可以现在提前复习，计划将从本次实际作答日期重新计算。`} actionLabel="提前复习" onAction={onStartEarly} /> : null}
+        {detail.reviewState === 'DERIVED_GENERATION_REQUIRED' ? <StateMessage title="需要继续本周期" message="本周期原题已经通过，但净成功尚未达到 4，需要生成衍生题继续复习。" actionLabel="继续复习" onAction={onStart} /> : null}
         {detail.reviewState === 'MASTERED' ? <StateMessage title="本周期已掌握" message={`完成时间：${formatDateTime(detail.masteredAt)}。再次在普通练习中确认同类错误时，会开启下一周期。`} /> : null}
       </> : null}
     </section>
   </section>
 }
 
-function ReviewDetailView({ detail, loading, error, answerText, submitting, derivedGenerating, notice, onAnswerChange, onSubmit, onGenerate, onReload, onBack }: {
+function ReviewDetailView({ detail, loading, error, answerText, submitting, derivedGenerating, earlyReview, notice, onAnswerChange, onSubmit, onGenerate, onReload, onBack }: {
   detail: ReviewCardDetail | null
   loading: boolean
   error: string | null
   answerText: string
   submitting: boolean
   derivedGenerating: boolean
+  earlyReview: boolean
   notice: PracticeNotice | null
   onAnswerChange: (value: string) => void
   onSubmit: () => void
@@ -441,13 +478,14 @@ function ReviewDetailView({ detail, loading, error, answerText, submitting, deri
         <ReviewCardHeading detail={detail} showDescription={false} />
         {detail.progress ? <ReviewMetrics progress={detail.progress} /> : null}
         <ReviewSchedule detail={detail} />
+        {earlyReview ? <div className="notice"><strong>提前复习</strong><p>本次作答会正式更新周期进度，下次复习时间从今天开始计算。</p></div> : null}
         {notice ? <Notice notice={notice} /> : null}
         {detail.reviewState === 'READY' && detail.currentQuestion ? <div className="review-attempt-grid">
           <section className="review-question-block"><div className="section-title"><span className="label">{detail.currentQuestion.questionRole === 'DERIVED' ? '衍生题' : '原题'}</span><strong>请翻译为日语</strong></div><p className="review-question-source">{detail.currentQuestion.sourceText}</p>{detail.currentQuestion.contextText ? <p className="review-question-context">{detail.currentQuestion.contextText}</p> : null}<QuestionMetadata detail={detail} /></section>
-          <section className="review-answer-block"><div className="section-title"><span className="label">作答</span><strong>输入日语答案</strong></div><textarea value={answerText} maxLength={2000} disabled={submitting} placeholder="请输入日语答案" onChange={(event) => onAnswerChange(event.target.value)} /><div className="action-row"><button type="button" className="primary-button" disabled={submitting || !answerText.trim()} onClick={onSubmit}>{submitting ? '评分中' : '提交答案'}</button><span className="answer-length">{answerText.length} / 2000</span></div></section>
+          <section className="review-answer-block"><div className="section-title"><span className="label">作答</span><strong>输入日语答案</strong></div><textarea value={answerText} maxLength={2000} disabled={submitting} placeholder="请输入日语答案" onChange={(event) => onAnswerChange(event.target.value)} /><div className="action-row"><button type="button" className="primary-button" disabled={submitting || !answerText.trim()} onClick={onSubmit}>{submitting ? '评分中' : earlyReview ? '提交提前复习' : '提交答案'}</button><span className="answer-length">{answerText.length} / 2000</span></div></section>
         </div> : null}
         {detail.reviewState === 'WAITING' ? <StateMessage title="等待下次复习" message={`下次到期时间：${formatDateTime(detail.dueAt)}。到期前不能提交答案。`} /> : null}
-        {detail.reviewState === 'DERIVED_GENERATION_REQUIRED' ? <StateMessage title="需要生成衍生题" message="本周期原题已通过，生成一道衍生题完成最终验证。" actionLabel={derivedGenerating ? '生成中' : '生成衍生题'} actionDisabled={derivedGenerating} onAction={onGenerate} /> : null}
+        {detail.reviewState === 'DERIVED_GENERATION_REQUIRED' ? <StateMessage title="需要生成衍生题" message="本周期原题已通过，但净成功尚未达到 4，生成一道衍生题继续积累净成功。" actionLabel={derivedGenerating ? '生成中' : '生成衍生题'} actionDisabled={derivedGenerating} onAction={onGenerate} /> : null}
         {detail.reviewState === 'MASTERED' ? <StateMessage title="本周期已掌握" message={`完成时间：${formatDateTime(detail.masteredAt)}。再次在普通练习中确认同类错误时，会开启下一周期。`} /> : null}
       </> : null}
     </section>
@@ -462,7 +500,7 @@ function ReviewSchedule({ detail }: { detail: ReviewCardDetail }) {
   return <dl className="review-sm2-grid"><div><dt>难度因子</dt><dd>{detail.easeFactor.toFixed(4)}</dd></div><div><dt>连续成功</dt><dd>{detail.repetitionCount}</dd></div><div><dt>当前间隔</dt><dd>{detail.intervalDays} 天</dd></div><div><dt>累计失败</dt><dd>{detail.lapseCount}</dd></div><div><dt>最近复习</dt><dd>{formatDateTime(detail.lastReviewedAt)}</dd></div><div><dt>下次到期</dt><dd>{formatDateTime(detail.dueAt)}</dd></div></dl>
 }
 
-function ReviewResultView({ card, result, submittedAnswer, candidates, notice, derivedGenerating, nextCardLoading, onGenerate, onOpenErrorConfirmation, onNext, onBack, children }: {
+function ReviewResultView({ card, result, submittedAnswer, candidates, notice, derivedGenerating, nextCardLoading, onGenerate, onOpenErrorConfirmation, onContinueEarly, onNext, onBack, children }: {
   card: ReviewCardDetail | null
   result: ReviewAttemptResult
   submittedAnswer: string
@@ -472,6 +510,7 @@ function ReviewResultView({ card, result, submittedAnswer, candidates, notice, d
   nextCardLoading: boolean
   onGenerate: () => void
   onOpenErrorConfirmation: () => void
+  onContinueEarly: () => void
   onNext: () => void
   onBack: () => void
   children: ReactNode
@@ -490,7 +529,7 @@ function ReviewResultView({ card, result, submittedAnswer, candidates, notice, d
       {result.errorAnalysis.length > 0 ? <div className="error-record-action"><span>{savedCount} / {result.errorAnalysis.length} 条错误已记录</span><button type="button" className="primary-button" disabled={candidates.every((candidate) => candidate.saved)} onClick={onOpenErrorConfirmation}>记录错误</button></div> : null}
       {result.derivedGenerationStatus === 'FAILED' ? <div className="review-generation-row"><div><strong>衍生题生成失败</strong><p>本次评分和复习进度已经保存，可单独重试生成。</p></div><button type="button" className="primary-button" disabled={derivedGenerating} onClick={onGenerate}>{derivedGenerating ? '生成中' : '重试生成'}</button></div> : null}
       {result.derivedGenerationStatus === 'SUCCEEDED' ? <div className="notice"><strong>衍生题已生成</strong><p>卡片已准备好后续复习题。</p></div> : null}
-      <div className="review-result-actions"><button type="button" className="primary-button" disabled={nextCardLoading || derivedGenerating} onClick={onNext}>{nextCardLoading ? '加载中' : '复习下一张'}</button><button type="button" disabled={nextCardLoading || derivedGenerating} onClick={onBack}>返回列表</button><span>{result.cardStatus === 'MASTERED' ? '当前卡片已掌握' : `下次到期：${formatDateTime(result.nextDueAt)}`}</span></div>
+      <div className="review-result-actions">{result.cardStatus === 'ACTIVE' ? <button type="button" className="primary-button" disabled={nextCardLoading || derivedGenerating} onClick={onContinueEarly}>继续提前复习当前卡片</button> : null}<button type="button" className={result.cardStatus === 'MASTERED' ? 'primary-button' : undefined} disabled={nextCardLoading || derivedGenerating} onClick={onNext}>{nextCardLoading ? '加载中' : '复习下一张'}</button><button type="button" disabled={nextCardLoading || derivedGenerating} onClick={onBack}>返回列表</button><span>{result.cardStatus === 'MASTERED' ? '当前卡片已掌握' : `下次到期：${formatDateTime(result.nextDueAt)}`}</span></div>
       {card ? <p className="review-result-context">{card.userErrorTypeName} · 第 {result.progress.cycleNo} 周期</p> : null}
       {children}
     </section>
@@ -505,12 +544,12 @@ function QuestionMetadata({ detail }: { detail: ReviewCardDetail }) {
 }
 
 function ReviewMetrics({ progress }: { progress: ReviewCycleProgress }) {
-  return <div className="review-metric-grid"><div><span>当前周期</span><strong>第 {progress.cycleNo} 轮</strong></div><div><span>成功进度</span><strong>{progress.successfulReviewCount} / {progress.targetSuccessCount}</strong><ProgressBar progress={progress} /></div><div><span>原题通过</span><strong>{progress.originalPassedCount} / {progress.originalQuestionCount}</strong></div><div><span>待处理</span><strong>{progress.retryQuestionCount + progress.pendingQuestionCount}</strong><small>{progress.retryQuestionCount} 道重试</small></div></div>
+  return <div className="review-metric-grid"><div><span>当前周期</span><strong>第 {progress.cycleNo} 轮</strong></div><div><span>净成功进度</span><strong>{progress.netSuccessCount} / {progress.targetSuccessCount}</strong><ProgressBar progress={progress} /><small>成功 {progress.successfulReviewCount} · 失败 {progress.failedReviewCount}</small></div><div><span>原题通过</span><strong>{progress.originalPassedCount} / {progress.originalQuestionCount}</strong></div><div><span>待处理</span><strong>{progress.retryQuestionCount + progress.pendingQuestionCount}</strong><small>{progress.retryQuestionCount} 道重试</small></div></div>
 }
 
 function ProgressBar({ progress }: { progress: ReviewCycleProgress }) {
-  const percentage = progress.targetSuccessCount === 0 ? 0 : Math.min(100, Math.round(progress.successfulReviewCount / progress.targetSuccessCount * 100))
-  return <div className="review-progress" aria-label={`成功进度 ${percentage}%`}><div className="review-progress-track"><span style={{ width: `${percentage}%` }} /></div><small>{progress.successfulReviewCount} / {progress.targetSuccessCount}</small></div>
+  const percentage = progress.targetSuccessCount === 0 ? 0 : Math.max(0, Math.min(100, Math.round(progress.netSuccessCount / progress.targetSuccessCount * 100)))
+  return <div className="review-progress" aria-label={`净成功进度 ${percentage}%`}><div className="review-progress-track"><span style={{ width: `${percentage}%` }} /></div><small>{progress.netSuccessCount} / {progress.targetSuccessCount}</small></div>
 }
 
 function StateMessage({ title, message, actionLabel, actionDisabled = false, onAction }: { title: string; message: string; actionLabel?: string; actionDisabled?: boolean; onAction?: () => void }) {

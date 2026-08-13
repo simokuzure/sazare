@@ -164,7 +164,7 @@ function StatisticsContent({ statistics, scoreDimensions, correctionScoreDimensi
             <Tooltip labelFormatter={formatDateLabel} />
             <Legend />
             <Bar yAxisId="count" dataKey="answerCount" name="作答数" fill="#2563eb" radius={[3, 3, 0, 0]} />
-            <Line yAxisId="score" type="monotone" dataKey="averageTotalScore" name="平均总分" stroke="#16a34a" strokeWidth={2} connectNulls={false} dot={false} />
+            <Line yAxisId="score" type="monotone" dataKey="averageTotalScore" name="平均总分" stroke="#16a34a" strokeWidth={2} connectNulls dot={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </ChartSurface>
@@ -199,7 +199,7 @@ function StatisticsContent({ statistics, scoreDimensions, correctionScoreDimensi
             <Tooltip labelFormatter={formatDateLabel} />
             <Legend />
             <Bar yAxisId="count" dataKey="answerCount" name="纠错数" fill="#0f766e" radius={[3, 3, 0, 0]} />
-            <Line yAxisId="score" type="monotone" dataKey="averageTotalScore" name="平均总分" stroke="#d97706" strokeWidth={2} connectNulls={false} dot={false} />
+            <Line yAxisId="score" type="monotone" dataKey="averageTotalScore" name="平均总分" stroke="#d97706" strokeWidth={2} connectNulls dot={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </ChartSurface>

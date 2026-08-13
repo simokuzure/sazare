@@ -24,8 +24,13 @@ export async function fetchReviewCards(
   return result.data ?? { items: [], page: filters.page, size: filters.size, total: 0 }
 }
 
-export async function fetchReviewCard(cardId: number, signal?: AbortSignal): Promise<ReviewCardDetail> {
-  const response = await fetch(`/api/review-cards/${cardId}`, { signal })
+export async function fetchReviewCard(
+  cardId: number,
+  earlyReview = false,
+  signal?: AbortSignal,
+): Promise<ReviewCardDetail> {
+  const searchParams = new URLSearchParams({ earlyReview: String(earlyReview) })
+  const response = await fetch(`/api/review-cards/${cardId}?${searchParams.toString()}`, { signal })
   const result = await readApiResponse<ReviewCardDetail>(response)
   if (!result.data) {
     throw new Error('后端没有返回复习卡片详情')

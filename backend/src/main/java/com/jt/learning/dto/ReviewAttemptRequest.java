@@ -17,6 +17,12 @@ public record ReviewAttemptRequest(
 
         @NotBlank(message = "answerText 不能为空")
         @Size(max = 2000, message = "answerText 长度不能超过 2000")
-        String answerText
+        String answerText,
+
+        boolean earlyReview
 ) {
+
+    public ReviewAttemptRequest(Long cycleQuestionId, Integer expectedAttemptCount, String answerText) {
+        this(cycleQuestionId, expectedAttemptCount, answerText, false);
+    }
 }

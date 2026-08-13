@@ -100,6 +100,8 @@ export type DerivedGenerationStatus = 'NOT_REQUIRED' | 'SUCCEEDED' | 'FAILED'
 export type ReviewCycleProgress = {
   cycleNo: number
   successfulReviewCount: number
+  failedReviewCount: number
+  netSuccessCount: number
   targetSuccessCount: number
   originalQuestionCount: number
   originalPassedCount: number
@@ -163,6 +165,7 @@ export type ReviewAttemptPayload = {
   cycleQuestionId: number
   expectedAttemptCount: number
   answerText: string
+  earlyReview?: boolean
 }
 
 export type ReviewAttemptResult = {

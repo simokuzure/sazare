@@ -116,6 +116,29 @@ class ReviewServiceImplTest {
     }
 
     @Test
+    void earlyReviewShouldAllowWaitingCardAndScheduleFromActualDate() {
+        ReviewCard card = stubReadyAttempt("RETRY", "ORIGINAL", 0, 4);
+        card.setDueAt(LocalDateTime.now().plusDays(10));
+        when(scoringClient.scoreAnswer(any())).thenReturn("""
+                {"review":{"quality":4,"targetErrorResolved":true,"feedback":"目标错误已解决。","scores":{"grammarVocabularyScore":88,"naturalFluencyScore":86,"scenarioAdaptationScore":90,"informationCompletenessScore":92},"errorAnalysis":[]}}
+                """);
+        when(cycleQuestionMapper.selectProgress(eq(20L), any()))
+                .thenReturn(progress(2, 1, 0, 1, 1, 0, 0));
+
+        var result = service.submitReviewAttempt(
+                1L, new ReviewAttemptRequest(30L, 0, "電車に間に合いました", true));
+
+        ArgumentCaptor<LocalDateTime> dueAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        ArgumentCaptor<LocalDateTime> reviewedAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(cardMapper).updateSchedule(
+                eq(1L), eq("ACTIVE"), any(), eq(1), eq(1), eq(0), dueAtCaptor.capture(),
+                reviewedAtCaptor.capture(), eq(null), any());
+        assertThat(dueAtCaptor.getValue())
+                .isEqualTo(reviewedAtCaptor.getValue().toLocalDate().plusDays(1).atTime(7, 0));
+        assertThat(result.progress().netSuccessCount()).isEqualTo(1);
+    }
+
+    @Test
     void submitShouldRejectExpiredAttemptVersion() {
         stubLocalUser();
         ReviewCard card = card("ACTIVE", LocalDateTime.now().minusMinutes(1));
@@ -180,6 +203,8 @@ class ReviewServiceImplTest {
         var result = service.submitReviewAttempt(1L, new ReviewAttemptRequest(30L, 0, "電車を間に合いました"));
 
         assertThat(result.result()).isEqualTo("FAIL");
+        assertThat(result.progress().failedReviewCount()).isEqualTo(1);
+        assertThat(result.progress().netSuccessCount()).isEqualTo(-1);
         assertThat(result.totalScore()).isEqualByComparingTo("80.25");
         assertThat(result.scores().informationCompletenessScore()).isEqualTo(81);
         verify(userAnswerMapper).updateReviewed(
@@ -213,6 +238,42 @@ class ReviewServiceImplTest {
         verify(cycleMapper).completeCycle(eq(20L), any());
         verify(cardMapper).updateSchedule(
                 eq(1L), eq("MASTERED"), any(), eq(1), eq(1), eq(0), eq(null), any(), any(), any());
+    }
+
+    @Test
+    void fourPassedOriginalQuestionsShouldCompleteWithoutDerivedQuestion() {
+        stubReadyAttempt("RETRY", "ORIGINAL", 3, 4);
+        when(scoringClient.scoreAnswer(any())).thenReturn("""
+                {"review":{"quality":4,"targetErrorResolved":true,"feedback":"目标错误已解决。","scores":{"grammarVocabularyScore":88,"naturalFluencyScore":86,"scenarioAdaptationScore":90,"informationCompletenessScore":92},"errorAnalysis":[]}}
+                """);
+        when(cycleQuestionMapper.selectProgress(eq(20L), any()))
+                .thenReturn(progress(4, 4, 0, 0, 0, 0, 0));
+
+        var result = service.submitReviewAttempt(
+                1L, new ReviewAttemptRequest(30L, 0, "電車に間に合いました"));
+
+        assertThat(result.cardStatus()).isEqualTo("MASTERED");
+        assertThat(result.progress().netSuccessCount()).isEqualTo(4);
+        verify(questionClient, never()).generateQuestion(any());
+    }
+
+    @Test
+    void failureShouldRequireAdditionalSuccessBeforeMastery() {
+        stubReadyAttempt("RETRY", "DERIVED", 4, 4);
+        when(cycleMapper.selectCurrentForUpdateByCardId(1L)).thenReturn(cycle(4, 4, 1));
+        when(scoringClient.scoreAnswer(any())).thenReturn("""
+                {"review":{"quality":4,"targetErrorResolved":true,"feedback":"目标错误已解决。","scores":{"grammarVocabularyScore":88,"naturalFluencyScore":86,"scenarioAdaptationScore":90,"informationCompletenessScore":92},"errorAnalysis":[]}}
+                """);
+        when(cycleQuestionMapper.selectProgress(eq(20L), any()))
+                .thenReturn(progress(1, 1, 0, 0, 0, 1, 0));
+
+        var result = service.submitReviewAttempt(
+                1L, new ReviewAttemptRequest(30L, 0, "電車に間に合いました"));
+
+        assertThat(result.progress().successfulReviewCount()).isEqualTo(5);
+        assertThat(result.progress().failedReviewCount()).isEqualTo(1);
+        assertThat(result.progress().netSuccessCount()).isEqualTo(4);
+        assertThat(result.cardStatus()).isEqualTo("MASTERED");
     }
 
     @Test
@@ -254,10 +315,31 @@ class ReviewServiceImplTest {
         ArgumentCaptor<ReviewCycle> cycleCaptor = ArgumentCaptor.forClass(ReviewCycle.class);
         verify(cycleMapper).insertCycle(cycleCaptor.capture());
         assertThat(cycleCaptor.getValue().getCycleNo()).isEqualTo(2);
+        assertThat(cycleCaptor.getValue().getFailedReviewCount()).isEqualTo(1);
         ArgumentCaptor<LocalDateTime> dueAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         verify(cardMapper).updateSchedule(
                 eq(1L), eq("ACTIVE"), any(), eq(0), eq(1), eq(1), dueAtCaptor.capture(), any(), eq(null), any());
         assertThat(dueAtCaptor.getValue()).isEqualTo(LocalDateTime.of(2026, 9, 1, 7, 0));
+    }
+
+    @Test
+    void activePracticeFailureShouldIncrementCycleFailureCountOnce() {
+        ReviewCard card = card("ACTIVE", LocalDateTime.now().plusDays(3));
+        ReviewCycle cycle = cycle(2, 4, 1);
+        ReviewCycleQuestion cycleQuestion = cycleQuestion("PASSED", "ORIGINAL", 1);
+        when(userErrorTypeMapper.selectActiveByIdAndUserId(2L, 1L)).thenReturn(userErrorType());
+        when(questionMapper.selectActiveQuestionById(100L)).thenReturn(question());
+        when(cardMapper.selectForUpdateByUserErrorTypeId(2L)).thenReturn(card);
+        when(attemptMapper.existsByCardIdAndUserAnswerId(1L, 50L)).thenReturn(false);
+        when(cycleMapper.selectCurrentForUpdateByCardId(1L)).thenReturn(cycle);
+        when(cycleQuestionMapper.selectByCycleIdAndQuestionId(20L, 100L)).thenReturn(cycleQuestion);
+        when(cycleQuestionMapper.selectProgress(eq(20L), any()))
+                .thenReturn(progress(1, 0, 1, 0, 1, 0, 0));
+
+        service.recordPracticeError(
+                1L, 50L, 100L, 2L, LocalDateTime.of(2026, 8, 6, 18, 30));
+
+        verify(cycleMapper).updateProgress(eq(20L), eq(4), eq(2), eq(2), any(), any());
     }
 
     @Test
@@ -289,6 +371,9 @@ class ReviewServiceImplTest {
         service.recordPracticeError(1L, 50L, 100L, 2L, occurredAt);
 
         assertThat(insertedCard.get().getDueAt()).isEqualTo(LocalDateTime.of(2027, 1, 1, 7, 0));
+        ArgumentCaptor<ReviewCycle> cycleCaptor = ArgumentCaptor.forClass(ReviewCycle.class);
+        verify(cycleMapper).insertCycle(cycleCaptor.capture());
+        assertThat(cycleCaptor.getValue().getFailedReviewCount()).isZero();
         ArgumentCaptor<LocalDateTime> dueAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         verify(cardMapper).updateSchedule(
                 eq(1L), eq("ACTIVE"), eq(new BigDecimal("2.1800")), eq(0), eq(1), eq(1),
@@ -381,12 +466,17 @@ class ReviewServiceImplTest {
     }
 
     private ReviewCycle cycle(int successfulCount, int targetCount) {
+        return cycle(successfulCount, targetCount, 0);
+    }
+
+    private ReviewCycle cycle(int successfulCount, int targetCount, int failedCount) {
         ReviewCycle cycle = new ReviewCycle();
         cycle.setId(20L);
         cycle.setReviewCardId(1L);
         cycle.setCycleNo(1);
         cycle.setStatus("IN_PROGRESS");
         cycle.setSuccessfulReviewCount(successfulCount);
+        cycle.setFailedReviewCount(failedCount);
         cycle.setTargetSuccessCount(targetCount);
         cycle.setVerificationRequiredAfter(LocalDateTime.now().minusDays(1));
         return cycle;

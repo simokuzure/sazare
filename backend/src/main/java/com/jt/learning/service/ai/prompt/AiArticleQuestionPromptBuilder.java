@@ -20,6 +20,7 @@ public class AiArticleQuestionPromptBuilder {
             chineseText 必须包含中文，不得包含平假名或片假名，并以。？！之一结束。
             japaneseReference 必须包含平假名或片假名，不得换行，并忠实对应 chineseText。
             日语参考句不得重复。
+            contextText 只描述文章背景、体裁和语体，不得包含“AI 原创”等题目来源信息。
             grammarPoint 字段用于生词提示，不是语法点。选择文章中相对当前 JLPT 等级较难的 3 到 6 个词语和专用名称，提供对应日语；每行格式为“中文词语：日语表达（读音）”，总长度不超过 255 个字符。
             生词提示只列词语或短语，不得提供完整句子的日语翻译；相同词语不得重复。专用名称出现时应优先提示。
             """;

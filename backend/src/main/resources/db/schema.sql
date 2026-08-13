@@ -924,6 +924,7 @@ create table if not exists review_cycles (
     status varchar(16) not null default 'IN_PROGRESS',
     target_success_count integer not null default 4,
     successful_review_count integer not null default 0,
+    failed_review_count integer not null default 0,
     verification_required_after timestamp not null default current_timestamp,
     started_at timestamp not null default current_timestamp,
     completed_at timestamp null,
@@ -933,22 +934,30 @@ create table if not exists review_cycles (
     constraint uq_review_cycles_card_cycle_no unique (review_card_id, cycle_no),
     constraint ck_review_cycles_cycle_no check (cycle_no >= 1),
     constraint ck_review_cycles_status check (status in ('IN_PROGRESS', 'COMPLETED')),
-    constraint ck_review_cycles_target_success_count check (target_success_count >= 4),
+    constraint ck_review_cycles_target_success_count check (target_success_count = 4),
     constraint ck_review_cycles_successful_review_count check (successful_review_count >= 0),
+    constraint ck_review_cycles_failed_review_count check (failed_review_count >= 0),
     constraint ck_review_cycles_status_time check (
         (status = 'IN_PROGRESS' and completed_at is null)
         or (status = 'COMPLETED' and completed_at is not null)
     )
 );
 
+alter table review_cycles
+    add column if not exists failed_review_count integer not null default 0;
+alter table review_cycles drop constraint if exists ck_review_cycles_failed_review_count;
+alter table review_cycles
+    add constraint ck_review_cycles_failed_review_count check (failed_review_count >= 0);
+
 comment on table review_cycles is '复习卡片周期表';
 comment on column review_cycles.id is '复习周期主键ID';
 comment on column review_cycles.review_card_id is '所属复习卡片ID，对应 review_cards.id，由代码维护有效性';
 comment on column review_cycles.cycle_no is '卡片周期序号，从1开始递增';
 comment on column review_cycles.status is '周期状态：IN_PROGRESS=进行中，COMPLETED=已完成';
-comment on column review_cycles.target_success_count is '本周期最低成功次数，取4与原题数量加1中的较大值';
+comment on column review_cycles.target_success_count is '本周期目标净成功次数，固定为4';
 comment on column review_cycles.successful_review_count is '本周期累计成功作答次数，失败时不清零';
-comment on column review_cycles.verification_required_after is '最终衍生题通过时间必须晚于该时间，新增或再次答错原题时更新';
+comment on column review_cycles.failed_review_count is '本周期累计失败次数，不包含创建新卡片的首次错误';
+comment on column review_cycles.verification_required_after is '兼容字段，记录最近新增或再次答错原题的时间';
 comment on column review_cycles.started_at is '周期开始时间';
 comment on column review_cycles.completed_at is '周期完成时间，进行中时为空';
 comment on column review_cycles.created_at is '创建时间';
@@ -1075,6 +1084,100 @@ create index if not exists idx_review_attempts_user_answer_id
 create index if not exists idx_review_attempts_user_created_at
     on review_attempts (user_id, created_at);
 
+update review_cycles
+set target_success_count = 4
+where target_success_count <> 4;
+
+alter table review_cycles drop constraint if exists ck_review_cycles_target_success_count;
+alter table review_cycles
+    add constraint ck_review_cycles_target_success_count check (target_success_count = 4);
+
+update review_cycles cycle
+set failed_review_count = (
+    select count(*)::integer
+    from review_attempts attempt
+    where attempt.review_cycle_id = cycle.id
+      and attempt.result = 'FAIL'
+      and not (
+          attempt.attempt_source = 'PRACTICE_ERROR'
+          and cycle.cycle_no = 1
+          and attempt.created_at = cycle.started_at
+          and attempt.id = (
+              select min(first_attempt.id)
+              from review_attempts first_attempt
+              where first_attempt.review_cycle_id = cycle.id
+          )
+      )
+)
+where cycle.status = 'IN_PROGRESS';
+
+update review_cards
+set due_at = due_at::date + time '07:00',
+    updated_at = current_timestamp
+where status = 'ACTIVE'
+  and due_at is not null
+  and due_at::time <> time '07:00';
+
+with completable_cycles as (
+    select cycle.id, cycle.review_card_id
+    from review_cycles cycle
+    inner join review_cards card
+        on card.id = cycle.review_card_id
+       and card.status = 'ACTIVE'
+    where cycle.status = 'IN_PROGRESS'
+      and cycle.successful_review_count - cycle.failed_review_count >= cycle.target_success_count
+      and exists (
+          select 1
+          from review_cycle_questions question
+          where question.review_cycle_id = cycle.id
+            and question.question_role = 'ORIGINAL'
+      )
+      and not exists (
+          select 1
+          from review_cycle_questions question
+          where question.review_cycle_id = cycle.id
+            and (
+                (question.question_role = 'ORIGINAL' and question.review_status <> 'PASSED')
+                or question.review_status in ('PENDING', 'RETRY')
+            )
+      )
+)
+update review_cards card
+set status = 'MASTERED',
+    due_at = null,
+    mastered_at = current_timestamp,
+    updated_at = current_timestamp
+from completable_cycles completable
+where card.id = completable.review_card_id;
+
+with completable_cycles as (
+    select cycle.id
+    from review_cycles cycle
+    where cycle.status = 'IN_PROGRESS'
+      and cycle.successful_review_count - cycle.failed_review_count >= cycle.target_success_count
+      and exists (
+          select 1
+          from review_cycle_questions question
+          where question.review_cycle_id = cycle.id
+            and question.question_role = 'ORIGINAL'
+      )
+      and not exists (
+          select 1
+          from review_cycle_questions question
+          where question.review_cycle_id = cycle.id
+            and (
+                (question.question_role = 'ORIGINAL' and question.review_status <> 'PASSED')
+                or question.review_status in ('PENDING', 'RETRY')
+            )
+      )
+)
+update review_cycles cycle
+set status = 'COMPLETED',
+    completed_at = current_timestamp,
+    updated_at = current_timestamp
+from completable_cycles completable
+where cycle.id = completable.id;
+
 with eligible_errors as (
     select answer_error.*
     from user_answer_errors answer_error
@@ -1109,7 +1212,7 @@ with eligible_errors as (
         0,
         1,
         0,
-        max(answer_error.created_at) + interval '1 day',
+        (max(answer_error.created_at)::date + 1) + time '07:00',
         null,
         null,
         current_timestamp,
@@ -1128,6 +1231,7 @@ with eligible_errors as (
         status,
         target_success_count,
         successful_review_count,
+        failed_review_count,
         verification_required_after,
         started_at,
         completed_at,
@@ -1138,7 +1242,8 @@ with eligible_errors as (
         inserted_card.id,
         1,
         'IN_PROGRESS',
-        greatest(4, count(distinct answer_error.question_id)::integer + 1),
+        4,
+        0,
         0,
         max(answer_error.created_at),
         current_timestamp,

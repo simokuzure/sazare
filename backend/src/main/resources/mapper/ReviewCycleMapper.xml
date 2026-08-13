@@ -3,16 +3,16 @@
 <mapper namespace="com.jt.learning.mapper.ReviewCycleMapper">
 
     <sql id="cycleColumns">
-        id, review_card_id, cycle_no, status, target_success_count, successful_review_count,
+        id, review_card_id, cycle_no, status, target_success_count, successful_review_count, failed_review_count,
         verification_required_after, started_at, completed_at, created_at, updated_at
     </sql>
 
     <insert id="insertCycle" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
         insert into review_cycles (
-            review_card_id, cycle_no, status, target_success_count, successful_review_count,
+            review_card_id, cycle_no, status, target_success_count, successful_review_count, failed_review_count,
             verification_required_after, started_at, completed_at, created_at, updated_at
         ) values (
-            #{reviewCardId}, #{cycleNo}, #{status}, #{targetSuccessCount}, #{successfulReviewCount},
+            #{reviewCardId}, #{cycleNo}, #{status}, #{targetSuccessCount}, #{successfulReviewCount}, #{failedReviewCount},
             #{verificationRequiredAfter}, #{startedAt}, #{completedAt}, #{createdAt}, #{updatedAt}
         )
     </insert>
@@ -48,6 +48,7 @@
         update review_cycles
         set target_success_count = #{targetSuccessCount},
             successful_review_count = #{successfulReviewCount},
+            failed_review_count = #{failedReviewCount},
             verification_required_after = #{verificationRequiredAfter},
             updated_at = #{updatedAt}
         where id = #{id} and status = 'IN_PROGRESS'
