@@ -1,10 +1,12 @@
 package com.jt.learning.config;
 
 import com.jt.learning.service.ai.client.GoogleAiAnswerScoringClient;
+import com.jt.learning.service.ai.client.GoogleAiJapaneseCorrectionClient;
 import com.jt.learning.service.ai.client.AiProviderHttpResponse;
 import com.jt.learning.service.ai.client.GoogleAiQuestionClient;
 import com.jt.learning.service.ai.client.GoogleAiEmbeddingClient;
 import com.jt.learning.service.ai.client.MockAiAnswerScoringClient;
+import com.jt.learning.service.ai.client.MockAiJapaneseCorrectionClient;
 import com.jt.learning.service.ai.client.MockAiQuestionClient;
 import com.jt.learning.service.ai.client.MockAiEmbeddingClient;
 import com.jt.learning.service.ai.client.GoogleAiReviewQuestionClient;
@@ -105,6 +107,21 @@ class AiClientConfigTest {
         );
 
         assertThat(client).isInstanceOf(GoogleAiAnswerScoringClient.class);
+    }
+
+    @Test
+    void japaneseCorrectionClientShouldUseConfiguredProvider() {
+        var httpClient = (com.jt.learning.service.ai.client.AiProviderHttpClient)
+                (uri, headers, body) -> new AiProviderHttpResponse(200, "{}");
+        AiProperties mockProperties = new AiProperties();
+        mockProperties.setProvider("mock");
+        AiProperties googleProperties = new AiProperties();
+        googleProperties.setProvider("google");
+
+        assertThat(config.aiJapaneseCorrectionClient(mockProperties, objectMapper, httpClient))
+                .isInstanceOf(MockAiJapaneseCorrectionClient.class);
+        assertThat(config.aiJapaneseCorrectionClient(googleProperties, objectMapper, httpClient))
+                .isInstanceOf(GoogleAiJapaneseCorrectionClient.class);
     }
 
     @Test

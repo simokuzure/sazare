@@ -14,6 +14,7 @@ public record UserAnswerListItemVO(
         String answerStatus,
         AnswerScoresVO scores,
         BigDecimal totalScore,
+        String revisedText,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

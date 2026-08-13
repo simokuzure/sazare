@@ -18,6 +18,7 @@
         ua.scenario_adaptation_score,
         ua.information_completeness_score,
         ua.total_score,
+        ua.ai_revised_text as revised_text,
         ua.created_at,
         ua.updated_at
     </sql>
@@ -39,6 +40,7 @@
         ua.information_completeness_score,
         ua.total_score,
         ua.ai_overall_comment as overall_comment,
+        ua.ai_revised_text as revised_text,
         ua.created_at,
         ua.updated_at
     </sql>
@@ -46,12 +48,19 @@
     <sql id="userAnswerFilterClause">
         where ua.user_id = #{userId}
           and ua.deleted = false
-          and q.deleted = false
+          and (ua.question_id is null or q.deleted = false)
         <if test="request.answerStatus != null">
             and ua.answer_status = #{request.answerStatus}
         </if>
         <if test="request.questionType != null">
-            and q.question_type = #{request.questionType}
+            <choose>
+                <when test="request.questionType == 'JAPANESE_CORRECTION'">
+                    and ua.question_id is null
+                </when>
+                <otherwise>
+                    and q.question_type = #{request.questionType}
+                </otherwise>
+            </choose>
         </if>
         <if test="request.questionId != null">
             and ua.question_id = #{request.questionId}
@@ -87,6 +96,41 @@
         )
     </insert>
 
+
+    <insert id="insertReviewedCorrection" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        insert into user_answers (
+            user_id,
+            question_id,
+            answer_text,
+            answer_status,
+            grammar_vocabulary_score,
+            natural_fluency_score,
+            scenario_adaptation_score,
+            information_completeness_score,
+            total_score,
+            ai_overall_comment,
+            ai_revised_text,
+            deleted,
+            created_at,
+            updated_at
+        ) values (
+            #{userId},
+            null,
+            #{answerText},
+            'REVIEWED',
+            #{grammarVocabularyScore},
+            #{naturalFluencyScore},
+            #{scenarioAdaptationScore},
+            #{informationCompletenessScore},
+            #{totalScore},
+            #{aiOverallComment},
+            #{aiRevisedText},
+            #{deleted},
+            #{createdAt},
+            #{updatedAt}
+        )
+    </insert>
+
     <update id="updateReviewed">
         update user_answers
         set answer_status = 'REVIEWED',
@@ -104,7 +148,7 @@
     <select id="countUserAnswers" resultType="long">
         select count(1)
         from user_answers ua
-        inner join questions q on q.id = ua.question_id
+        left join questions q on q.id = ua.question_id
         <include refid="userAnswerFilterClause" />
     </select>
 
@@ -112,7 +156,7 @@
         select
             <include refid="userAnswerListColumns" />
         from user_answers ua
-        inner join questions q on q.id = ua.question_id
+        left join questions q on q.id = ua.question_id
         <include refid="userAnswerFilterClause" />
         order by ua.created_at desc, ua.id desc
         limit #{limit}
@@ -123,11 +167,11 @@
         select
             <include refid="userAnswerDetailColumns" />
         from user_answers ua
-        inner join questions q on q.id = ua.question_id
+        left join questions q on q.id = ua.question_id
         where ua.id = #{id}
           and ua.user_id = #{userId}
           and ua.deleted = false
-          and q.deleted = false
+          and (ua.question_id is null or q.deleted = false)
     </select>
 
     <select id="selectActiveUserAnswerById" resultType="com.jt.learning.entity.UserAnswer">
@@ -143,6 +187,7 @@
             information_completeness_score,
             total_score,
             ai_overall_comment,
+            ai_revised_text,
             deleted,
             created_at,
             updated_at

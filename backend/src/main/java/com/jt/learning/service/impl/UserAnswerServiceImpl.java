@@ -42,6 +42,8 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 @Service
 public class UserAnswerServiceImpl implements UserAnswerService {
@@ -54,6 +56,13 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     private static final String ARTICLE_QUESTION_TYPE = "TRANSLATION_ZH_TO_JA_ARTICLE";
     private static final String SHORT_QUESTION_TYPE = "TRANSLATION_ZH_TO_JA";
     private static final String SOURCE_TYPE_REVIEW_DERIVED = "REVIEW_DERIVED";
+    private static final String DEFAULT_CORRECTION_REVIEW_LEVEL = "N3";
+    private static final int DEFAULT_CORRECTION_REVIEW_DIFFICULTY = 3;
+    private static final Set<String> TRANSLATION_ONLY_ERROR_CODES = Set.of(
+            "OMISSION", "MISTRANSLATION", "ADDITION", "FALSE_FRIEND", "CHINESE_CALQUE"
+    );
+    private static final Pattern JAPANESE_KANA_PATTERN = Pattern.compile("[\\p{IsHiragana}\\p{IsKatakana}]");
+    private static final Pattern HAN_PATTERN = Pattern.compile("\\p{IsHan}");
 
     private final UserMapper userMapper;
     private final UserAnswerMapper userAnswerMapper;
@@ -119,14 +128,15 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "答题记录不存在或已删除");
         }
 
-        List<TagVO> tags = tagMapper.selectEnabledTagsByQuestionId(row.getQuestionId())
-                .stream()
-                .map(this::toTagVO)
-                .toList();
-        List<QuestionAnswerVO> answers = questionAnswerMapper.selectActiveAnswersByQuestionId(row.getQuestionId())
-                .stream()
-                .map(this::toQuestionAnswerVO)
-                .toList();
+        List<TagVO> tags = row.getQuestionId() == null
+                ? List.of()
+                : tagMapper.selectEnabledTagsByQuestionId(row.getQuestionId()).stream().map(this::toTagVO).toList();
+        List<QuestionAnswerVO> answers = row.getQuestionId() == null
+                ? List.of()
+                : questionAnswerMapper.selectActiveAnswersByQuestionId(row.getQuestionId())
+                        .stream()
+                        .map(this::toQuestionAnswerVO)
+                        .toList();
         return toDetailVO(row, tags, answers);
     }
 
@@ -145,12 +155,20 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "仅已评分的作答可以确认错误");
         }
 
+        LocalDateTime now = LocalDateTime.now();
+        if (userAnswer.getQuestionId() == null) {
+            List<SavedCorrectionError> savedErrors = request.errors().stream()
+                    .map(item -> saveConfirmedCorrectionError(user, userAnswer, item, now))
+                    .toList();
+            recordCorrectionReviewQuestions(user, userAnswer, savedErrors, now);
+            return savedErrors.stream().map(SavedCorrectionError::error).toList();
+        }
+
         Question question = questionMapper.selectQuestionById(userAnswer.getQuestionId());
         if (question == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "作答对应题目不存在");
         }
 
-        LocalDateTime now = LocalDateTime.now();
         List<UserAnswerErrorVO> savedErrors = request.errors().stream()
                 .map(item -> saveConfirmedError(user, userAnswer, question, item, now))
                 .toList();
@@ -165,6 +183,131 @@ public class UserAnswerServiceImpl implements UserAnswerService {
                 .forEach(userErrorTypeId -> reviewService.recordPracticeError(
                         user.getId(), userAnswer.getId(), userAnswer.getQuestionId(), userErrorTypeId, now));
         return savedErrors;
+    }
+
+    private SavedCorrectionError saveConfirmedCorrectionError(
+            User user,
+            UserAnswer userAnswer,
+            UserAnswerErrorConfirmItemRequest request,
+            LocalDateTime now
+    ) {
+        ResolvedUserErrorType resolvedType = resolveUserErrorType(user.getId(), request, now);
+        ErrorType errorType = errorTypeMapper.selectEnabledLeafById(resolvedType.errorTypeId());
+        if (errorType == null || TRANSLATION_ONLY_ERROR_CODES.contains(errorType.getCode())) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "该错误类型不适用于纯日语纠错");
+        }
+        validateCorrectionErrorSource(userAnswer, request);
+
+        UserAnswerError error = new UserAnswerError();
+        error.setUserAnswerId(userAnswer.getId());
+        error.setUserId(user.getId());
+        error.setQuestionId(null);
+        error.setErrorTypeId(resolvedType.errorTypeId());
+        error.setUserErrorTypeId(resolvedType.userErrorTypeId());
+        error.setOriginalText(request.originalText().trim());
+        error.setIssue(request.issue().trim());
+        error.setSuggestion(request.suggestion().trim());
+        error.setSeverity(request.severity());
+        error.setSortOrder(request.sortOrder());
+        error.setCreatedAt(now);
+        error.setUpdatedAt(now);
+        userAnswerErrorMapper.insertUserAnswerError(error);
+        return new SavedCorrectionError(toUserAnswerErrorVO(error), request.reviewSourceText().trim());
+    }
+
+    private void validateCorrectionErrorSource(
+            UserAnswer userAnswer,
+            UserAnswerErrorConfirmItemRequest request
+    ) {
+        String original = request.originalText().trim();
+        if (!userAnswer.getAnswerText().contains(original)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "originalText 必须属于本次纠错原文");
+        }
+        String suggestion = request.suggestion().trim();
+        if (userAnswer.getAiRevisedText() == null || !userAnswer.getAiRevisedText().contains(suggestion)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "suggestion 必须属于本次完整纠正文稿");
+        }
+        String reviewSourceText = requireText(
+                request.reviewSourceText(),
+                "日语纠错错误的 reviewSourceText 不能为空"
+        );
+        if (reviewSourceText.length() > 1000
+                || !HAN_PATTERN.matcher(reviewSourceText).find()
+                || JAPANESE_KANA_PATTERN.matcher(reviewSourceText).find()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "reviewSourceText 必须是不超过 1000 字符的中文文本");
+        }
+    }
+
+    private void recordCorrectionReviewQuestions(
+            User user,
+            UserAnswer userAnswer,
+            List<SavedCorrectionError> savedErrors,
+            LocalDateTime now
+    ) {
+        Map<String, Long> questionIdsByContent = new LinkedHashMap<>();
+        Map<Long, List<Long>> questionIdsByUserErrorType = new LinkedHashMap<>();
+        for (SavedCorrectionError savedError : savedErrors) {
+            UserAnswerErrorVO error = savedError.error();
+            String key = savedError.reviewSourceText() + "\u0000" + error.suggestion();
+            Long questionId = questionIdsByContent.computeIfAbsent(
+                    key,
+                    ignored -> createCorrectionReviewQuestion(
+                            savedError.reviewSourceText(),
+                            error.suggestion(),
+                            user.getId(),
+                            error.userErrorTypeId(),
+                            now
+                    )
+            );
+            questionIdsByUserErrorType
+                    .computeIfAbsent(error.userErrorTypeId(), ignored -> new java.util.ArrayList<>())
+                    .add(questionId);
+        }
+        questionIdsByUserErrorType.forEach((userErrorTypeId, questionIds) ->
+                reviewService.recordPracticeErrors(
+                        user.getId(), userAnswer.getId(), questionIds, userErrorTypeId, now));
+    }
+
+    private Long createCorrectionReviewQuestion(
+            String sourceText,
+            String referenceText,
+            Long userId,
+            Long userErrorTypeId,
+            LocalDateTime now
+    ) {
+        UserErrorType userErrorType = userErrorTypeMapper.selectActiveByIdAndUserId(userErrorTypeId, userId);
+        if (userErrorType == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "用户错误类型不存在或已归档");
+        }
+
+        Question question = new Question();
+        question.setQuestionType(SHORT_QUESTION_TYPE);
+        question.setSourceText(sourceText);
+        question.setContextText("日语纠错错句复习");
+        question.setLevel(DEFAULT_CORRECTION_REVIEW_LEVEL);
+        question.setDifficulty(DEFAULT_CORRECTION_REVIEW_DIFFICULTY);
+        question.setGrammarPoint(userErrorType.getName());
+        question.setSpoken(false);
+        question.setBusiness(false);
+        question.setExam(false);
+        question.setSourceType(SOURCE_TYPE_REVIEW_DERIVED);
+        question.setEnabled(true);
+        question.setDeleted(false);
+        question.setCreatedAt(now);
+        question.setUpdatedAt(now);
+        questionMapper.insertQuestion(question);
+
+        QuestionAnswer answer = new QuestionAnswer();
+        answer.setQuestionId(question.getId());
+        answer.setAnswerText(referenceText);
+        answer.setAnswerType("STANDARD");
+        answer.setPrimaryAnswer(true);
+        answer.setSortOrder(0);
+        answer.setDeleted(false);
+        answer.setCreatedAt(now);
+        answer.setUpdatedAt(now);
+        questionAnswerMapper.insertQuestionAnswer(answer);
+        return question.getId();
     }
 
     @Override
@@ -449,6 +592,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
                         row.getInformationCompletenessScore()
                 ),
                 row.getTotalScore(),
+                row.getRevisedText(),
                 row.getCreatedAt(),
                 row.getUpdatedAt()
         );
@@ -480,6 +624,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
                 ),
                 row.getTotalScore(),
                 row.getOverallComment(),
+                row.getRevisedText(),
                 row.getCreatedAt(),
                 row.getUpdatedAt()
         );
@@ -537,5 +682,8 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     }
 
     private record ResolvedUserErrorType(Long errorTypeId, Long userErrorTypeId) {
+    }
+
+    private record SavedCorrectionError(UserAnswerErrorVO error, String reviewSourceText) {
     }
 }

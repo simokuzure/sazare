@@ -66,6 +66,11 @@ public class UserAnswer {
     private String aiOverallComment;
 
     /**
+     * AI修订后的完整日语文本，纯日语纠错记录使用
+     */
+    private String aiRevisedText;
+
+    /**
      * 是否删除
      */
     private Boolean deleted;

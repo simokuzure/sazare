@@ -63,6 +63,8 @@ public class LearningStatisticsServiceImpl implements LearningStatisticsService 
 
         LearningStatisticsOverviewRow overview = learningStatisticsMapper.selectOverview(
                 user.getId(), period.startAt(), period.endAt());
+        LearningStatisticsOverviewRow correctionOverview = learningStatisticsMapper.selectCorrectionOverview(
+                user.getId(), period.startAt(), period.endAt());
         long confirmedErrorCount = learningStatisticsMapper.countConfirmedErrors(
                 user.getId(), period.startAt(), period.endAt());
         LearningStatisticsScoreDimensionsRow scoreDimensions = learningStatisticsMapper.selectScoreDimensions(
@@ -83,7 +85,12 @@ public class LearningStatisticsServiceImpl implements LearningStatisticsService 
                         .stream()
                         .map(row -> toWeakness(row, LocalDateTime.now(learningStatisticsClock)))
                         .toList(),
-                toReviewOverview(currentReview, periodReview, completedCycleCount)
+                toReviewOverview(currentReview, periodReview, completedCycleCount),
+                toOverview(correctionOverview, 0),
+                fillDailyTrends(period, learningStatisticsMapper.selectCorrectionDailyTrends(
+                        user.getId(), period.startAt(), period.endAt())),
+                toScoreDimensions(learningStatisticsMapper.selectCorrectionScoreDimensions(
+                        user.getId(), period.startAt(), period.endAt()))
         );
     }
 
@@ -123,6 +130,9 @@ public class LearningStatisticsServiceImpl implements LearningStatisticsService 
     }
 
     private LearningStatisticsOverviewVO toOverview(LearningStatisticsOverviewRow row, long confirmedErrorCount) {
+        if (row == null) {
+            return new LearningStatisticsOverviewVO(0L, 0L, null, confirmedErrorCount);
+        }
         return new LearningStatisticsOverviewVO(
                 zeroIfNull(row.answerCount()),
                 zeroIfNull(row.reviewedAnswerCount()),
@@ -136,7 +146,9 @@ public class LearningStatisticsServiceImpl implements LearningStatisticsService 
             List<LearningStatisticsDailyTrendRow> rows
     ) {
         Map<LocalDate, LearningStatisticsDailyTrendRow> rowsByDay = new HashMap<>();
-        rows.forEach(row -> rowsByDay.put(row.day(), row));
+        if (rows != null) {
+            rows.forEach(row -> rowsByDay.put(row.day(), row));
+        }
         return period.startDate().datesUntil(period.endDate().plusDays(1))
                 .map(day -> {
                     LearningStatisticsDailyTrendRow row = rowsByDay.get(day);
@@ -150,6 +162,9 @@ public class LearningStatisticsServiceImpl implements LearningStatisticsService 
     }
 
     private LearningStatisticsScoreDimensionsVO toScoreDimensions(LearningStatisticsScoreDimensionsRow row) {
+        if (row == null) {
+            return new LearningStatisticsScoreDimensionsVO(null, null, null, null);
+        }
         return new LearningStatisticsScoreDimensionsVO(
                 row.grammarVocabularyScore(),
                 row.naturalFluencyScore(),

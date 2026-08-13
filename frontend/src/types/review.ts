@@ -23,9 +23,38 @@ export type AnswerErrorAnalysis = {
   original: string
   issue: string
   suggestion: string
+  reviewSourceText?: string | null
   severity: 'LOW' | 'MEDIUM' | 'HIGH'
   suggestedUserErrorTypeName: string
   suggestedUserErrorTypeDescription: string
+}
+
+export type JapaneseCorrectionComments = {
+  grammarVocabularyComment: string
+  naturalFluencyComment: string
+  styleConsistencyComment: string
+  writingCompletenessComment: string
+}
+
+export type JapaneseCorrectionError = AnswerErrorAnalysis & {
+  reviewSourceText: string
+}
+
+export type JapaneseCorrectionReview = {
+  userAnswerId: number
+  questionId: null
+  answerText: string
+  answerStatus: 'REVIEWED'
+  scores: AnswerScores
+  totalScore: number
+  overallComment: string
+  revisedText: string
+  comments: JapaneseCorrectionComments
+  errorAnalysis: JapaneseCorrectionError[]
+  revisionSuggestions: string[]
+  recommendedExpressions: AnswerRecommendedExpression[]
+  createdAt: string
+  updatedAt: string
 }
 
 export type AnswerRecommendedExpression = {

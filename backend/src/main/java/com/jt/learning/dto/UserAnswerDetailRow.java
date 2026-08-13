@@ -42,6 +42,8 @@ public class UserAnswerDetailRow {
 
     private String overallComment;
 
+    private String revisedText;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

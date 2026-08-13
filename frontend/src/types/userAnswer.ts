@@ -7,7 +7,7 @@ export type AnswerStatus = '' | 'SUBMITTED' | 'REVIEWED' | 'FAILED'
 
 export type UserAnswerFilterState = {
   answerStatus: AnswerStatus
-  questionType: '' | QuestionType
+  questionType: '' | QuestionType | 'JAPANESE_CORRECTION'
   questionId: string
   level: string
   minTotalScore: string
@@ -18,9 +18,9 @@ export type UserAnswerFilterState = {
 
 export type UserAnswerRecord = {
   id: number
-  questionId: number
-  questionType: QuestionType
-  sourceText: string
+  questionId: number | null
+  questionType: QuestionType | null
+  sourceText: string | null
   level: string | null
   difficulty: number | null
   answerText: string
@@ -29,13 +29,14 @@ export type UserAnswerRecord = {
     [Key in keyof AnswerScores]: AnswerScores[Key] | null
   }
   totalScore: number | null
+  revisedText: string | null
   createdAt: string
   updatedAt: string
 }
 
 export type UserAnswerDetail = UserAnswerRecord & {
-  contextText: string
-  grammarPoint: string
+  contextText: string | null
+  grammarPoint: string | null
   tags: Tag[]
   answers: QuestionAnswer[]
   overallComment: string | null

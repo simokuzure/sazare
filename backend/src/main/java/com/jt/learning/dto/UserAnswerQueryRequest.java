@@ -14,8 +14,8 @@ public record UserAnswerQueryRequest(
         String answerStatus,
 
         @Pattern(
-                regexp = "TRANSLATION_ZH_TO_JA|TRANSLATION_ZH_TO_JA_ARTICLE",
-                message = "questionType 只能是 TRANSLATION_ZH_TO_JA 或 TRANSLATION_ZH_TO_JA_ARTICLE"
+                regexp = "TRANSLATION_ZH_TO_JA|TRANSLATION_ZH_TO_JA_ARTICLE|JAPANESE_CORRECTION",
+                message = "questionType 只能是 TRANSLATION_ZH_TO_JA、TRANSLATION_ZH_TO_JA_ARTICLE 或 JAPANESE_CORRECTION"
         )
         String questionType,
 

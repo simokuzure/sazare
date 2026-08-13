@@ -117,6 +117,7 @@ export default function AnswerRecordsPage() {
               <option value="">全部</option>
               <option value="TRANSLATION_ZH_TO_JA">短句翻译</option>
               <option value="TRANSLATION_ZH_TO_JA_ARTICLE">文章翻译</option>
+              <option value="JAPANESE_CORRECTION">日语纠错</option>
             </select>
           </label>
           <label>
@@ -205,9 +206,9 @@ export default function AnswerRecordsPage() {
               {records.map((record) => (
                 <tr key={record.id}>
                   <td data-label="记录">#{record.id}</td>
-                  <td data-label="题目">#{record.questionId}</td>
+                  <td data-label="题目">{record.questionId == null ? '-' : `#${record.questionId}`}</td>
                   <td data-label="题型"><span className="question-type-badge">{formatQuestionType(record.questionType)}</span></td>
-                  <td className="table-question-answer-cell" data-label="中文原文" title={record.sourceText}>{record.sourceText}</td>
+                  <td className="table-question-answer-cell" data-label="中文原文" title={record.sourceText ?? undefined}>{record.sourceText ?? '-'}</td>
                   <td data-label="等级/难度">{formatLevelDifficulty(record)}</td>
                   <td className="table-question-answer-cell" data-label="用户答案" title={record.answerText}>{record.answerText}</td>
                   <td data-label="状态">{STATUS_LABELS[record.answerStatus]}</td>
@@ -300,7 +301,12 @@ export default function AnswerRecordsPage() {
                 <strong>答题记录 #{detail.id}</strong>
               </div>
 
-              <dl className="question-details">
+              {detail.questionId == null ? (
+                <dl className="question-details">
+                  <div><dt>题型</dt><dd>日语纠错</dd></div>
+                  <div><dt>提交时间</dt><dd>{formatDateTime(detail.createdAt)}</dd></div>
+                </dl>
+              ) : <dl className="question-details">
                 <div>
                   <dt>题目</dt>
                   <dd>#{detail.questionId}</dd>
@@ -312,16 +318,16 @@ export default function AnswerRecordsPage() {
                 <div>
                   <dt>中文原文</dt>
                   <dd>{detail.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE'
-                    ? <ArticleSegments text={detail.sourceText} />
-                    : detail.sourceText}</dd>
+                    ? <ArticleSegments text={detail.sourceText ?? ''} />
+                    : detail.sourceText ?? '-'}</dd>
                 </div>
                 <div>
                   <dt>语境</dt>
-                  <dd>{detail.contextText}</dd>
+                  <dd>{detail.contextText ?? '-'}</dd>
                 </div>
                 <div>
                   <dt>{detail.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? '生词提示' : '语法点'}</dt>
-                  <dd className={detail.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? 'pre-wrap-text' : undefined}>{detail.grammarPoint}</dd>
+                  <dd className={detail.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? 'pre-wrap-text' : undefined}>{detail.grammarPoint ?? '-'}</dd>
                 </div>
                 <div>
                   <dt>等级/难度</dt>
@@ -341,14 +347,19 @@ export default function AnswerRecordsPage() {
                   <dt>提交时间</dt>
                   <dd>{formatDateTime(detail.createdAt)}</dd>
                 </div>
-              </dl>
+              </dl>}
 
               <section className="submitted-answer pre-wrap-text">
-                <span className="label">{detail.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? '用户完整译文' : '用户答案'}</span>
+                <span className="label">{detail.questionId == null ? '日语原文' : detail.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? '用户完整译文' : '用户答案'}</span>
                 <p>{detail.answerText}</p>
               </section>
 
-              <section className="answer-reference">
+              {detail.questionId == null ? (
+                <section className="article-revised-answer pre-wrap-text">
+                  <strong>完整纠正文稿</strong>
+                  <p>{detail.revisedText ?? '-'}</p>
+                </section>
+              ) : <section className="answer-reference">
                 <strong>标准/参考答案</strong>
                 <ol>
                   {detail.answers.map((answer) => (
@@ -360,7 +371,7 @@ export default function AnswerRecordsPage() {
                     </li>
                   ))}
                 </ol>
-              </section>
+              </section>}
 
               <div className="score-summary">
                 <span>总分</span>
@@ -369,19 +380,19 @@ export default function AnswerRecordsPage() {
 
               <dl className="score-grid">
                 <div>
-                  <dt>{detail.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? '语法与用词' : '语法与词汇'}</dt>
+                  <dt>{detail.questionId == null ? '语法与词汇准确性' : detail.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? '语法与用词' : '语法与词汇'}</dt>
                   <dd>{formatReviewedScore(detail.answerStatus, detail.scores.grammarVocabularyScore)}</dd>
                 </div>
                 <div>
-                  <dt>{detail.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? '自然度与篇章连贯' : '自然度与流畅度'}</dt>
+                  <dt>{detail.questionId == null ? '自然度与篇章连贯' : detail.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? '自然度与篇章连贯' : '自然度与流畅度'}</dt>
                   <dd>{formatReviewedScore(detail.answerStatus, detail.scores.naturalFluencyScore)}</dd>
                 </div>
                 <div>
-                  <dt>{detail.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? '体裁与语域' : '敬语与场景'}</dt>
+                  <dt>{detail.questionId == null ? '语体与风格一致性' : detail.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? '体裁与语域' : '敬语与场景'}</dt>
                   <dd>{formatReviewedScore(detail.answerStatus, detail.scores.scenarioAdaptationScore)}</dd>
                 </div>
                 <div>
-                  <dt>{detail.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? '忠实度与完整性' : '表达完整性'}</dt>
+                  <dt>{detail.questionId == null ? '表记与输入完整性' : detail.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? '忠实度与完整性' : '表达完整性'}</dt>
                   <dd>{formatReviewedScore(detail.answerStatus, detail.scores.informationCompletenessScore)}</dd>
                 </div>
               </dl>
@@ -433,6 +444,7 @@ function formatDateTime(value: string) {
 }
 
 function formatQuestionType(questionType: UserAnswerRecord['questionType']) {
+  if (questionType == null) return '日语纠错'
   return questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? '文章' : '短句'
 }
 

@@ -31,6 +31,7 @@ export type UserAnswerErrorConfirmation = {
   originalText: string
   issue: string
   suggestion: string
+  reviewSourceText?: string
   severity: AnswerErrorAnalysis['severity']
   sortOrder: number
 }

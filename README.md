@@ -1,228 +1,62 @@
-# 日语学习应用项目说明
+# 日语翻译练习
 
-## 项目目标
+面向个人本地使用的日语练习项目，覆盖中译日短句、文章翻译和纯日语内容纠错。系统使用结构化 AI 输出完成题目生成、评分与纠错，并将用户确认的错误接入复习和学习统计。
 
-开发一个个人练手项目，用于日语翻译练习。
+## 当前功能
 
-核心功能：
+### 练习与评分
 
--   AI生成翻译题目（中→日）
--   用户输入日语答案
--   AI评分、纠错、解释
--   自动记录错误
--   根据错误生成复习内容
--   后续逐步沉淀题库
+- 中译日短句：AI 生成、人工维护、随机抽题和结构化评分。
+- 中译日文章：按体裁生成或随机抽取，支持逐句评语、错误分析和完整译文评分。
+- 纯日语纠错：直接提交日语文本，返回完整修订稿、四项评分、错误候选和修改建议。
+- AI 提供 `mock` 与 Google 两种实现，由统一的 `AI_PROVIDER` 配置切换。
+- AI 返回内容使用固定 JSON 契约，后端负责字段、枚举、分数、错误类型和业务关系校验。
 
-项目优先完成 MVP，不追求一次实现所有功能。
+### 错误、复习与统计
 
-------------------------------------------------------------------------
+- AI 错误分析默认是候选，只有用户确认的错误才会保存为个人错误并计入薄弱项统计。
+- 已确认错误可生成复习题，并通过复习卡片、复习周期和 SM-2 调度持续练习。
+- 答题记录支持短句、文章和日语纠错筛选，以及列表/详情页内切换。
+- 学习统计展示翻译与日语纠错的作答趋势、评分维度、已确认薄弱项和复习状态；两类评分分开统计。
 
-## 已确定技术栈
+### 题库管理
 
-### 前端
+- 标签分页查询，以及短句、文章题目的创建、分页、详情、编辑、启停和逻辑删除。
+- PostgreSQL `pgvector` 语义向量检索，用于 AI 生成题目的近似去重。
+- 历史题目向量可通过 `POST /api/questions/embedding-backfills` 分批回填。
 
--   React
+## 当前边界
 
-### 后端
+- 当前是单机、单用户练习项目，业务数据统一归属内置用户 `LOCAL_DEFAULT`，尚未实现登录和真实用户隔离。
+- Redis 已纳入本地基础设施，但不作为主数据库。
+- Google AI 客户端已经实现；真实 API、本地数据库全流程和浏览器端到端回归仍需按 [TODO](TODO.md) 完成。
+- 项目不包含社区、排行榜或复杂推荐算法。
 
--   Java
--   Spring Boot
--   MyBatis
+## 技术栈
 
-### 数据库
+- 后端：Java 25、Spring Boot 4、MyBatis、Maven Wrapper。
+- 前端：React 19、TypeScript 5、Vite 7、Recharts。
+- 数据：PostgreSQL 16 + pgvector、Redis 7。
+- 本地环境：Docker Compose、Windows PowerShell。
 
--   PostgreSQL
--   Redis
+## 项目结构
 
-项目定位：
-
--   单机运行
--   不考虑高并发
--   保持良好的分层设计
--   保留后续扩展能力
-
-------------------------------------------------------------------------
-
-## MVP业务流程
-
-``` text
-AI生成题目
-      ↓
-用户回答
-      ↓
-AI评分
-      ↓
-AI纠错
-      ↓
-记录错误
-      ↓
-加入复习
+```text
+jt/
+├─ backend/                  Spring Boot 后端
+│  └─ src/main/resources/
+│     ├─ db/schema.sql       全新数据库基线
+│     ├─ db/migrations/      已有数据库增量 SQL
+│     └─ mapper/             MyBatis XML
+├─ frontend/                 React 前端
+├─ docs/                     API 与 AI Prompt 设计
+├─ docker-compose.yml        PostgreSQL、Redis
+└─ TODO.md                   已完成事项与后续任务
 ```
 
-当前阶段暂不考虑：
+## 启动项目
 
--   登录系统
--   多用户
--   社区功能
--   排行榜
--   复杂推荐算法
-
-------------------------------------------------------------------------
-
-## AI调用流程
-
-### 第一次调用
-
-生成题目，输出：
-
--   中文
--   标准答案
--   JLPT等级
--   场景
--   语境
--   标签
-
-### 第二次调用
-
-用户提交答案后返回：
-
--   综合评分
--   语法评价
--   词汇评价
--   自然度评价
--   场景适合度评价
--   错误分析
--   修改建议
--   推荐表达
-
-------------------------------------------------------------------------
-
-## AI评分维度
-
-1.  语法与词汇
-2.  自然度与流畅度
-3.  敬语与场景适配
-4.  表达完整性
-
-输出：
-
--   总分
--   各维度评分
--   总评
-
-------------------------------------------------------------------------
-
-## AI生成题目要求
-
-生成题目后分析并保存：
-
--   中文句子
--   场景
--   标签
--   JLPT等级
--   难度
--   语法点
--   是否口语
--   是否商务
--   是否考试
-
-生成题目的 Prompt 模板、JSON 输出契约和校验规则见：
-
--   [生成题目 AI Prompt 设计](docs/ai-question-generation-prompt.md)
-
-评分答案的 Prompt 模板、JSON 输出契约和校验规则见：
-
--   [用户答案 AI 评分 Prompt 设计](docs/ai-answer-scoring-prompt.md)
-
-------------------------------------------------------------------------
-
-## 标签设计
-
-采用固定标签库，AI只负责选择，不自由生成。
-
-建议分类：
-
--   场景
--   主题
--   语法
--   敬语
--   JLPT等级
-
-------------------------------------------------------------------------
-
-## 题目去重
-
-采用 Embedding 向量检索：
-
-生成题目 → 计算Embedding → 相似度检索 → 重复则重新生成 → 保存
-
-------------------------------------------------------------------------
-
-## 当前数据库规划
-
-主要业务表：
-
--   questions
--   user_answers
--   ai_reviews
--   error_records
--   review_plans
--   tags
--   question_tags
-
-字段设计后续完善。
-
-------------------------------------------------------------------------
-
-## 开发原则
-
-### 代码
-
--   分层清晰
--   可维护
--   可扩展
--   简单优先（YAGNI）
-
-### 数据库
-
--   第三范式
--   合理索引
--   保持扩展性
-
-### AI
-
--   Prompt固定
--   JSON输出
--   后端负责校验与容错
-
-------------------------------------------------------------------------
-
-## 后续规划
-
-预留扩展：
-
--   错题智能复习
--   单词学习
--   语法学习
--   JLPT专项训练
--   多轮对话
--   Shadowing
--   发音评分
--   用户系统
--   学习统计
--   推荐算法
-
-------------------------------------------------------------------------
-
-## 开发启动说明
-
-建议按以下顺序启动：
-
-1.  启动 Docker 基础服务（PostgreSQL、Redis）
-2.  启动后端服务
-3.  启动前端服务
-
-### Docker
+### 1. 启动基础服务
 
 在项目根目录执行：
 
@@ -230,81 +64,96 @@ AI纠错
 docker compose up -d
 ```
 
-> 数据库镜像已使用 pgvector 的 PostgreSQL 16 版本。已有本地数据升级时，先执行备份，再运行 `docker compose down`（不要加 `-v`）和 `docker compose up -d`，以保留 `postgres_data` 数据卷；随后执行 `backend/src/main/resources/db/migrations/20260808_add_question_embeddings.sql` 的增量 SQL，最后调用 `POST /api/questions/embedding-backfills` 补齐历史题目向量。
+默认端口：
 
-启动后服务：
+- PostgreSQL：`localhost:5432`
+- Redis：`localhost:6379`
 
--   PostgreSQL：`localhost:5432`
--   Redis：`localhost:6379`
-
-停止 Docker 服务：
+停止服务：
 
 ```powershell
 docker compose down
 ```
 
-如需同时删除本地数据卷：
+`docker compose down -v` 会删除本地 PostgreSQL 和 Redis 数据卷，仅在确认不需要保留数据时使用。
+
+### 2. 初始化或升级数据库
+
+全新数据库使用 [schema.sql](backend/src/main/resources/db/schema.sql) 初始化。项目没有集成自动迁移工具，SQL 需要通过 PostgreSQL 客户端手动执行。
+
+已有数据库升级时：
+
+1. 先备份数据库。
+2. 不要删除 `postgres_data` 数据卷。
+3. 按文件名顺序执行 [db/migrations](backend/src/main/resources/db/migrations) 中尚未应用的 SQL。
+
+当前增量文件：
+
+- `20260813_add_japanese_corrections.sql`：允许保存无题目关联的纯日语纠错记录及完整修订稿。
+
+### 3. 选择 AI 提供方
+
+本地无 API Key 调试可使用 mock：
 
 ```powershell
-docker compose down -v
+$env:AI_PROVIDER = "mock"
 ```
 
-### 后端
+使用 Google AI 时至少配置：
 
-进入后端目录：
+```powershell
+$env:AI_PROVIDER = "google"
+$env:GOOGLE_AI_API_KEY = "你的 API Key"
+```
+
+可选配置：
+
+- `GOOGLE_AI_MODEL`：文本生成与评分模型，默认 `gemini-3.6-flash`。
+- `GOOGLE_AI_EMBEDDING_MODEL`：向量模型，默认 `gemini-embedding-001`。
+- `GOOGLE_AI_BASE_URL`：Google AI API 地址，默认 `https://generativelanguage.googleapis.com/v1beta`。
+
+不要将 API Key 写入代码、配置文件或提交记录。
+
+### 4. 启动后端
 
 ```powershell
 cd backend
-```
-
-启动后端：
-
-```powershell
 .\mvnw.cmd spring-boot:run
 ```
 
-后端访问地址：
+后端 API 基地址：`http://localhost:8080/api`。
 
-```text
-http://localhost:8080/api
-```
-
-停止后端：
-
-```text
-Ctrl + C
-```
-
-### 前端
-
-进入前端目录：
+### 5. 启动前端
 
 ```powershell
 cd frontend
+npm.cmd install
+npm.cmd run dev
 ```
 
-首次启动前安装依赖：
+前端地址：`http://localhost:5173`。Vite 已将 `/api` 代理到 `http://localhost:8080`。
+
+## 验证
+
+后端测试：
 
 ```powershell
-npm install
+cd backend
+.\mvnw.cmd test
 ```
 
-启动前端：
+前端检查：
 
 ```powershell
-npm run dev
+cd frontend
+npm.cmd run lint
+npm.cmd run build
 ```
 
-前端访问地址：
+当前工作区已验证后端 117 项测试和前端生产构建通过。前端构建仍有主 JavaScript chunk 超过 500 kB 的性能提示，已记录在 [TODO](TODO.md)。
 
-```text
-http://localhost:5173
-```
+## 设计文档
 
-停止前端：
-
-```text
-Ctrl + C
-```
-
-前端开发服务已配置 `/api` 代理到后端 `http://localhost:8080`。
+- [题目 API 设计](docs/question-api-design.md)
+- [AI 题目生成 Prompt](docs/ai-question-generation-prompt.md)
+- [AI 答题评分 Prompt](docs/ai-answer-scoring-prompt.md)

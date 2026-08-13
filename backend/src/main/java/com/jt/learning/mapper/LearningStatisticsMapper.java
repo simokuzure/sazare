@@ -21,6 +21,12 @@ public interface LearningStatisticsMapper {
             @Param("endAt") LocalDateTime endAt
     );
 
+    LearningStatisticsOverviewRow selectCorrectionOverview(
+            @Param("userId") Long userId,
+            @Param("startAt") LocalDateTime startAt,
+            @Param("endAt") LocalDateTime endAt
+    );
+
     long countConfirmedErrors(
             @Param("userId") Long userId,
             @Param("startAt") LocalDateTime startAt,
@@ -33,7 +39,19 @@ public interface LearningStatisticsMapper {
             @Param("endAt") LocalDateTime endAt
     );
 
+    List<LearningStatisticsDailyTrendRow> selectCorrectionDailyTrends(
+            @Param("userId") Long userId,
+            @Param("startAt") LocalDateTime startAt,
+            @Param("endAt") LocalDateTime endAt
+    );
+
     LearningStatisticsScoreDimensionsRow selectScoreDimensions(
+            @Param("userId") Long userId,
+            @Param("startAt") LocalDateTime startAt,
+            @Param("endAt") LocalDateTime endAt
+    );
+
+    LearningStatisticsScoreDimensionsRow selectCorrectionScoreDimensions(
             @Param("userId") Long userId,
             @Param("startAt") LocalDateTime startAt,
             @Param("endAt") LocalDateTime endAt

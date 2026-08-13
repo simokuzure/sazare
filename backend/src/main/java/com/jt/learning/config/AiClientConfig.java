@@ -3,15 +3,18 @@ package com.jt.learning.config;
 import com.jt.learning.service.ai.AiQuestionClient;
 import com.jt.learning.service.ai.AiEmbeddingClient;
 import com.jt.learning.service.ai.AiAnswerScoringClient;
+import com.jt.learning.service.ai.AiJapaneseCorrectionClient;
 import com.jt.learning.service.ai.AiReviewQuestionClient;
 import com.jt.learning.service.ai.AiReviewScoringClient;
 import com.jt.learning.service.ai.client.GoogleAiAnswerScoringClient;
+import com.jt.learning.service.ai.client.GoogleAiJapaneseCorrectionClient;
 import com.jt.learning.service.ai.client.GoogleAiQuestionClient;
 import com.jt.learning.service.ai.client.GoogleAiEmbeddingClient;
 import com.jt.learning.service.ai.client.GoogleAiReviewQuestionClient;
 import com.jt.learning.service.ai.client.GoogleAiReviewScoringClient;
 import com.jt.learning.service.ai.client.JavaAiProviderHttpClient;
 import com.jt.learning.service.ai.client.MockAiAnswerScoringClient;
+import com.jt.learning.service.ai.client.MockAiJapaneseCorrectionClient;
 import com.jt.learning.service.ai.client.MockAiQuestionClient;
 import com.jt.learning.service.ai.client.MockAiEmbeddingClient;
 import com.jt.learning.service.ai.client.MockAiReviewQuestionClient;
@@ -86,6 +89,23 @@ public class AiClientConfig {
                     aiProperties.getProviders().getGoogle(),
                     objectMapper,
                     aiProviderHttpClient
+                )
+        );
+    }
+
+    @Bean
+    public AiJapaneseCorrectionClient aiJapaneseCorrectionClient(
+            AiProperties aiProperties,
+            ObjectMapper objectMapper,
+            AiProviderHttpClient aiProviderHttpClient
+    ) {
+        return createClient(
+                aiProperties,
+                () -> new MockAiJapaneseCorrectionClient(objectMapper),
+                () -> new GoogleAiJapaneseCorrectionClient(
+                        aiProperties.getProviders().getGoogle(),
+                        objectMapper,
+                        aiProviderHttpClient
                 )
         );
     }

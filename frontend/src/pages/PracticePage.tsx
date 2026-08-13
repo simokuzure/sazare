@@ -12,6 +12,7 @@ import {
 } from '../components/errorConfirmation'
 import ReviewList from '../components/ReviewList'
 import ArticlePractice from './ArticlePractice'
+import JapaneseCorrectionPractice from './JapaneseCorrectionPractice'
 import type { PracticeNotice } from '../types/api'
 import type { Tag } from '../types/tag'
 import type { AiQuestionGenerationPayload, Question, RandomQuestionFilter } from '../types/question'
@@ -40,7 +41,7 @@ const EMPTY_ANSWER_SESSION: AnswerSessionState = {
   errorConfirmationOpen: false,
 }
 
-type PracticeMode = 'sentence' | 'article'
+type PracticeMode = 'sentence' | 'article' | 'correction'
 
 export default function PracticePage() {
   const [activeMode, setActiveMode] = useState<PracticeMode>('sentence')
@@ -70,6 +71,17 @@ export default function PracticePage() {
         >
           文章翻译
         </button>
+        <button
+          id="correction-practice-tab"
+          type="button"
+          role="tab"
+          aria-selected={activeMode === 'correction'}
+          aria-controls="correction-practice-panel"
+          className={activeMode === 'correction' ? 'is-active' : ''}
+          onClick={() => setActiveMode('correction')}
+        >
+          日语纠错
+        </button>
       </div>
 
       <div
@@ -87,6 +99,14 @@ export default function PracticePage() {
         hidden={activeMode !== 'article'}
       >
         <ArticlePractice />
+      </div>
+      <div
+        id="correction-practice-panel"
+        role="tabpanel"
+        aria-labelledby="correction-practice-tab"
+        hidden={activeMode !== 'correction'}
+      >
+        <JapaneseCorrectionPractice />
       </div>
     </section>
   )

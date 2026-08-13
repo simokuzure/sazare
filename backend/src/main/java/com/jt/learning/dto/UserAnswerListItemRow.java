@@ -36,6 +36,8 @@ public class UserAnswerListItemRow {
 
     private BigDecimal totalScore;
 
+    private String revisedText;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

@@ -15,9 +15,9 @@ export function toErrorCandidateState(analysis: AnswerErrorAnalysis): ErrorCandi
 }
 
 export function toNewErrorConfirmation(analysis: AnswerErrorAnalysis, candidate: ErrorCandidateState, sortOrder: number): UserAnswerErrorConfirmation {
-  return { mode: 'NEW_USER_ERROR_TYPE', errorTypeId: analysis.errorTypeId, userErrorTypeName: candidate.userErrorTypeName.trim(), userErrorTypeDescription: candidate.userErrorTypeDescription.trim(), originalText: analysis.original, issue: analysis.issue, suggestion: analysis.suggestion, severity: analysis.severity, sortOrder }
+  return { mode: 'NEW_USER_ERROR_TYPE', errorTypeId: analysis.errorTypeId, userErrorTypeName: candidate.userErrorTypeName.trim(), userErrorTypeDescription: candidate.userErrorTypeDescription.trim(), originalText: analysis.original, issue: analysis.issue, suggestion: analysis.suggestion, reviewSourceText: analysis.reviewSourceText ?? undefined, severity: analysis.severity, sortOrder }
 }
 
 export function toExistingErrorConfirmation(analysis: AnswerErrorAnalysis, candidate: ErrorCandidateState, sortOrder: number): UserAnswerErrorConfirmation {
-  return { mode: 'EXISTING_USER_ERROR_TYPE', userErrorTypeId: Number(candidate.userErrorTypeId), originalText: analysis.original, issue: analysis.issue, suggestion: analysis.suggestion, severity: analysis.severity, sortOrder }
+  return { mode: 'EXISTING_USER_ERROR_TYPE', userErrorTypeId: Number(candidate.userErrorTypeId), originalText: analysis.original, issue: analysis.issue, suggestion: analysis.suggestion, reviewSourceText: analysis.reviewSourceText ?? undefined, severity: analysis.severity, sortOrder }
 }

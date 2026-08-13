@@ -256,13 +256,26 @@ button:disabled {
 
 .practice-tabs {
   display: inline-grid;
-  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
   gap: 4px;
   margin-bottom: 14px;
   border: 1px solid #d8dee8;
   border-radius: 8px;
   background: #f8fafc;
   padding: 4px;
+}
+
+.japanese-correction-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.japanese-correction-grid > .japanese-correction-panel {
+  grid-area: auto;
+}
+
+.japanese-correction-panel textarea.article-answer-input {
+  min-height: 320px;
 }
 
 .practice-tabs button {

@@ -65,6 +65,16 @@ export default function LearningStatisticsPage() {
     ]
   }, [statistics])
 
+  const correctionScoreDimensions = useMemo(() => {
+    if (!statistics) return []
+    return [
+      { name: '语法词汇', score: statistics.correctionScoreDimensions.grammarVocabularyScore },
+      { name: '自然连贯', score: statistics.correctionScoreDimensions.naturalFluencyScore },
+      { name: '语体一致', score: statistics.correctionScoreDimensions.scenarioAdaptationScore },
+      { name: '表记完整', score: statistics.correctionScoreDimensions.informationCompletenessScore },
+    ]
+  }, [statistics])
+
   const reviewStates = useMemo(() => {
     if (!statistics) return []
     return [
@@ -124,26 +134,27 @@ export default function LearningStatisticsPage() {
       {loading && !statistics ? <section className="surface"><p className="loading-text">正在加载学习统计...</p></section> : null}
       {error ? <section className="surface"><div className="notice is-error"><strong>学习统计加载失败</strong><p>{error}</p><button type="button" onClick={() => setReloadToken((value) => value + 1)}>重新加载</button></div></section> : null}
 
-      {statistics ? <StatisticsContent statistics={statistics} scoreDimensions={scoreDimensions} reviewStates={reviewStates} /> : null}
+      {statistics ? <StatisticsContent statistics={statistics} scoreDimensions={scoreDimensions} correctionScoreDimensions={correctionScoreDimensions} reviewStates={reviewStates} /> : null}
     </section>
   )
 }
 
-function StatisticsContent({ statistics, scoreDimensions, reviewStates }: {
+function StatisticsContent({ statistics, scoreDimensions, correctionScoreDimensions, reviewStates }: {
   statistics: LearningStatistics
   scoreDimensions: Array<{ name: string; score: number | null }>
+  correctionScoreDimensions: Array<{ name: string; score: number | null }>
   reviewStates: Array<{ name: string; value: number }>
 }) {
   return <>
     <section className="statistics-overview-grid" aria-label="学习概览指标">
-      <MetricCard label="作答次数" value={String(statistics.overview.answerCount)} detail={`${statistics.period.startDate} 至 ${statistics.period.endDate}`} />
-      <MetricCard label="已评测" value={String(statistics.overview.reviewedAnswerCount)} detail="仅已完成 AI 评分的作答" />
-      <MetricCard label="平均总分" value={formatScore(statistics.overview.averageTotalScore)} detail="已评测作答的平均值" />
+      <MetricCard label="翻译作答次数" value={String(statistics.overview.answerCount)} detail={`${statistics.period.startDate} 至 ${statistics.period.endDate}`} />
+      <MetricCard label="翻译已评测" value={String(statistics.overview.reviewedAnswerCount)} detail="短句与文章翻译" />
+      <MetricCard label="翻译平均总分" value={formatScore(statistics.overview.averageTotalScore)} detail="已评测翻译作答的平均值" />
       <MetricCard label="已确认错误" value={String(statistics.overview.confirmedErrorCount)} detail="未确认 AI 候选不计入" />
     </section>
 
     <section className="statistics-chart-grid">
-      <ChartSurface title="作答与评分趋势" description="作答数与已评测答案的平均总分">
+      <ChartSurface title="翻译作答与评分趋势" description="短句与文章翻译">
         <ResponsiveContainer width="100%" height={280}>
           <ComposedChart data={statistics.dailyTrends} margin={{ top: 8, right: 20, left: -8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
@@ -158,7 +169,7 @@ function StatisticsContent({ statistics, scoreDimensions, reviewStates }: {
         </ResponsiveContainer>
       </ChartSurface>
 
-      <ChartSurface title="四项能力" description="已评测作答的各项平均分">
+      <ChartSurface title="翻译四项能力" description="已评测翻译作答的各项平均分">
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={scoreDimensions} margin={{ top: 8, right: 12, left: -14, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
@@ -166,6 +177,41 @@ function StatisticsContent({ statistics, scoreDimensions, reviewStates }: {
             <YAxis domain={[0, 100]} />
             <Tooltip formatter={(value) => value == null ? '-' : Number(value).toFixed(2)} />
             <Bar dataKey="score" name="平均分" fill="#7c3aed" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartSurface>
+    </section>
+
+    <section className="statistics-overview-grid" aria-label="日语纠错概览指标">
+      <MetricCard label="纠错次数" value={String(statistics.correctionOverview.answerCount)} detail={`${statistics.period.startDate} 至 ${statistics.period.endDate}`} />
+      <MetricCard label="纠错已评测" value={String(statistics.correctionOverview.reviewedAnswerCount)} detail="成功保存的日语纠错记录" />
+      <MetricCard label="纠错平均总分" value={formatScore(statistics.correctionOverview.averageTotalScore)} detail="不与翻译分数混合" />
+    </section>
+
+    <section className="statistics-chart-grid">
+      <ChartSurface title="日语纠错趋势" description="纠错次数与平均总分">
+        <ResponsiveContainer width="100%" height={280}>
+          <ComposedChart data={statistics.correctionDailyTrends} margin={{ top: 8, right: 20, left: -8, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" tickFormatter={formatShortDate} minTickGap={24} />
+            <YAxis yAxisId="count" allowDecimals={false} />
+            <YAxis yAxisId="score" orientation="right" domain={[0, 100]} />
+            <Tooltip labelFormatter={formatDateLabel} />
+            <Legend />
+            <Bar yAxisId="count" dataKey="answerCount" name="纠错数" fill="#0f766e" radius={[3, 3, 0, 0]} />
+            <Line yAxisId="score" type="monotone" dataKey="averageTotalScore" name="平均总分" stroke="#d97706" strokeWidth={2} connectNulls={false} dot={false} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </ChartSurface>
+
+      <ChartSurface title="纠错四项能力" description="仅统计纯日语纠错记录">
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={correctionScoreDimensions} margin={{ top: 8, right: 12, left: -14, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" />
+            <YAxis domain={[0, 100]} />
+            <Tooltip formatter={(value) => value == null ? '-' : Number(value).toFixed(2)} />
+            <Bar dataKey="score" name="平均分" fill="#0f766e" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </ChartSurface>

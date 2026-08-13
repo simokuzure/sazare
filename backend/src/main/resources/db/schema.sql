@@ -610,6 +610,7 @@ create table if not exists user_answers (
     information_completeness_score smallint null,
     total_score numeric(5, 2) null,
     ai_overall_comment text null,
+    ai_revised_text text null,
     deleted boolean not null default false,
     created_at timestamp not null default current_timestamp,
     updated_at timestamp not null default current_timestamp,
@@ -630,13 +631,23 @@ create table if not exists user_answers (
     ),
     constraint ck_user_answers_total_score check (
         total_score is null or total_score between 0 and 100
+    ),
+    constraint ck_user_answers_question_or_correction check (
+        question_id is not null or ai_revised_text is not null
     )
+);
+
+alter table user_answers alter column question_id drop not null;
+alter table user_answers add column if not exists ai_revised_text text null;
+alter table user_answers drop constraint if exists ck_user_answers_question_or_correction;
+alter table user_answers add constraint ck_user_answers_question_or_correction check (
+    question_id is not null or ai_revised_text is not null
 );
 
 comment on table user_answers is '用户回答表';
 comment on column user_answers.id is '主键ID';
 comment on column user_answers.user_id is '用户ID，对应 users.id，由代码维护有效性';
-comment on column user_answers.question_id is '题目ID，对应 questions.id，由代码维护有效性';
+comment on column user_answers.question_id is '题目ID，对应 questions.id，由代码维护有效性；纯日语纠错记录为空';
 comment on column user_answers.answer_text is '用户提交的日语答案';
 comment on column user_answers.answer_status is '回答状态：SUBMITTED=已提交，REVIEWED=已评测，FAILED=评测失败';
 comment on column user_answers.grammar_vocabulary_score is '语法与词汇正确性评分，满分100分';
@@ -645,6 +656,7 @@ comment on column user_answers.scenario_adaptation_score is '场景适配度评�
 comment on column user_answers.information_completeness_score is '表达信息完整性评分，满分100分';
 comment on column user_answers.total_score is '总分，四项评分均值，由代码计算';
 comment on column user_answers.ai_overall_comment is 'AI总体评价';
+comment on column user_answers.ai_revised_text is 'AI修订后的完整日语文本，纯日语纠错记录使用';
 comment on column user_answers.deleted is '是否删除';
 comment on column user_answers.created_at is '创建时间';
 comment on column user_answers.updated_at is '更新时间';
@@ -833,11 +845,13 @@ create table if not exists user_answer_errors (
     constraint ck_user_answer_errors_sort_order check (sort_order >= 0)
 );
 
+alter table user_answer_errors alter column question_id drop not null;
+
 comment on table user_answer_errors is '用户回答错误记录表';
 comment on column user_answer_errors.id is '主键ID';
 comment on column user_answer_errors.user_answer_id is '用户回答ID，对应 user_answers.id，由代码维护有效性';
 comment on column user_answer_errors.user_id is '用户ID，冗余保存自 user_answers.user_id';
-comment on column user_answer_errors.question_id is '题目ID，冗余保存自 user_answers.question_id';
+comment on column user_answer_errors.question_id is '题目ID，冗余保存自 user_answers.question_id；纯日语纠错记录为空';
 comment on column user_answer_errors.error_type_id is '二级错误类型ID，对应 error_types.id，由代码维护有效性';
 comment on column user_answer_errors.user_error_type_id is '用户错误类型ID，对应 user_error_types.id，由代码维护有效性';
 comment on column user_answer_errors.original_text is '用户答案中的错误片段';

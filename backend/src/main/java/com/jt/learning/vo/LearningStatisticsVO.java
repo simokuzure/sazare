@@ -8,6 +8,9 @@ public record LearningStatisticsVO(
         List<LearningStatisticsDailyTrendVO> dailyTrends,
         LearningStatisticsScoreDimensionsVO scoreDimensions,
         List<LearningStatisticsWeaknessVO> weaknesses,
-        LearningStatisticsReviewOverviewVO reviewOverview
+        LearningStatisticsReviewOverviewVO reviewOverview,
+        LearningStatisticsOverviewVO correctionOverview,
+        List<LearningStatisticsDailyTrendVO> correctionDailyTrends,
+        LearningStatisticsScoreDimensionsVO correctionScoreDimensions
 ) {
 }

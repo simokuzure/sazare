@@ -52,4 +52,21 @@ export type LearningStatistics = {
     periodReviewPassRate: number | null
     periodCompletedCycleCount: number
   }
+  correctionOverview: {
+    answerCount: number
+    reviewedAnswerCount: number
+    averageTotalScore: number | null
+    confirmedErrorCount: number
+  }
+  correctionDailyTrends: Array<{
+    date: string
+    answerCount: number
+    averageTotalScore: number | null
+  }>
+  correctionScoreDimensions: {
+    grammarVocabularyScore: number | null
+    naturalFluencyScore: number | null
+    scenarioAdaptationScore: number | null
+    informationCompletenessScore: number | null
+  }
 }

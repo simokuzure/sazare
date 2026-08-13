@@ -12,6 +12,20 @@
         from user_answers
         where user_id = #{userId}
           and deleted = false
+          and question_id is not null
+          and created_at &gt;= #{startAt}
+          and created_at &lt; #{endAt}
+    </select>
+
+    <select id="selectCorrectionOverview" resultType="com.jt.learning.dto.LearningStatisticsOverviewRow">
+        select
+            count(1) as answer_count,
+            count(*) filter (where answer_status = 'REVIEWED') as reviewed_answer_count,
+            avg(total_score) filter (where answer_status = 'REVIEWED') as average_total_score
+        from user_answers
+        where user_id = #{userId}
+          and deleted = false
+          and question_id is null
           and created_at &gt;= #{startAt}
           and created_at &lt; #{endAt}
     </select>
@@ -36,6 +50,22 @@
         from user_answers
         where user_id = #{userId}
           and deleted = false
+          and question_id is not null
+          and created_at &gt;= #{startAt}
+          and created_at &lt; #{endAt}
+        group by created_at::date
+        order by day
+    </select>
+
+    <select id="selectCorrectionDailyTrends" resultType="com.jt.learning.dto.LearningStatisticsDailyTrendRow">
+        select
+            created_at::date as day,
+            count(1) as answer_count,
+            avg(total_score) filter (where answer_status = 'REVIEWED') as average_total_score
+        from user_answers
+        where user_id = #{userId}
+          and deleted = false
+          and question_id is null
           and created_at &gt;= #{startAt}
           and created_at &lt; #{endAt}
         group by created_at::date
@@ -51,6 +81,22 @@
         from user_answers
         where user_id = #{userId}
           and deleted = false
+          and question_id is not null
+          and answer_status = 'REVIEWED'
+          and created_at &gt;= #{startAt}
+          and created_at &lt; #{endAt}
+    </select>
+
+    <select id="selectCorrectionScoreDimensions" resultType="com.jt.learning.dto.LearningStatisticsScoreDimensionsRow">
+        select
+            avg(grammar_vocabulary_score) as grammar_vocabulary_score,
+            avg(natural_fluency_score) as natural_fluency_score,
+            avg(scenario_adaptation_score) as scenario_adaptation_score,
+            avg(information_completeness_score) as information_completeness_score
+        from user_answers
+        where user_id = #{userId}
+          and deleted = false
+          and question_id is null
           and answer_status = 'REVIEWED'
           and created_at &gt;= #{startAt}
           and created_at &lt; #{endAt}

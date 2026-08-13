@@ -16,6 +16,8 @@ public interface UserAnswerMapper {
 
     int insertUserAnswer(UserAnswer userAnswer);
 
+    int insertReviewedCorrection(UserAnswer userAnswer);
+
     int updateReviewed(
             @Param("id") Long id,
             @Param("grammarVocabularyScore") Integer grammarVocabularyScore,

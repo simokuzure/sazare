@@ -37,6 +37,9 @@ public record UserAnswerErrorConfirmItemRequest(
         @NotBlank(message = "suggestion 不能为空")
         String suggestion,
 
+        @Size(max = 1000, message = "reviewSourceText 长度不能超过 1000")
+        String reviewSourceText,
+
         @NotBlank(message = "severity 不能为空")
         @Pattern(regexp = "LOW|MEDIUM|HIGH", message = "severity 只能是 LOW、MEDIUM 或 HIGH")
         String severity,
@@ -46,4 +49,19 @@ public record UserAnswerErrorConfirmItemRequest(
         @Max(value = 999, message = "sortOrder 不能大于 999")
         Integer sortOrder
 ) {
+    public UserAnswerErrorConfirmItemRequest(
+            String mode,
+            Long errorTypeId,
+            Long userErrorTypeId,
+            String userErrorTypeName,
+            String userErrorTypeDescription,
+            String originalText,
+            String issue,
+            String suggestion,
+            String severity,
+            Integer sortOrder
+    ) {
+        this(mode, errorTypeId, userErrorTypeId, userErrorTypeName, userErrorTypeDescription,
+                originalText, issue, suggestion, null, severity, sortOrder);
+    }
 }

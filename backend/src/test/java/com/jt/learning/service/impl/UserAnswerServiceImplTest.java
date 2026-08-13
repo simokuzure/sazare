@@ -427,6 +427,65 @@ class UserAnswerServiceImplTest {
         verify(reviewService).recordPracticeErrors(eq(1L), eq(10L), eq(List.of(500L)), eq(20L), any());
     }
 
+    @Test
+    void confirmCorrectionErrorShouldCreateTranslationReviewQuestionWithoutOriginalQuestion() {
+        User user = localUser();
+        UserAnswer correction = reviewedUserAnswer();
+        correction.setQuestionId(null);
+        correction.setAnswerText("私は昨日、図書館を行きました。");
+        correction.setAiRevisedText("私は昨日、図書館へ行きました。");
+        UserErrorType userErrorType = new UserErrorType();
+        userErrorType.setId(20L);
+        userErrorType.setUserId(1L);
+        userErrorType.setErrorTypeId(9L);
+        userErrorType.setName("移动目的地误用助词を");
+        userErrorType.setStatus("ACTIVE");
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(correction);
+        when(userErrorTypeMapper.selectActiveByIdAndUserId(20L, 1L)).thenReturn(userErrorType);
+        when(errorTypeMapper.selectEnabledLeafById(9L)).thenReturn(enabledLeafErrorType(9L));
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(500L);
+            return 1;
+        });
+
+        List<UserAnswerErrorVO> result = userAnswerService.confirmUserAnswerErrors(
+                10L,
+                new UserAnswerErrorConfirmRequest(List.of(new UserAnswerErrorConfirmItemRequest(
+                        "EXISTING_USER_ERROR_TYPE",
+                        null,
+                        20L,
+                        null,
+                        null,
+                        "図書館を行きました",
+                        "移动目的地的助词错误。",
+                        "私は昨日、図書館へ行きました。",
+                        "我昨天去了图书馆。",
+                        "MEDIUM",
+                        0
+                )))
+        );
+
+        assertThat(result).hasSize(1);
+        ArgumentCaptor<com.jt.learning.entity.UserAnswerError> errorCaptor = ArgumentCaptor.forClass(
+                com.jt.learning.entity.UserAnswerError.class);
+        verify(userAnswerErrorMapper).insertUserAnswerError(errorCaptor.capture());
+        assertThat(errorCaptor.getValue().getQuestionId()).isNull();
+
+        ArgumentCaptor<Question> questionCaptor = ArgumentCaptor.forClass(Question.class);
+        verify(questionMapper).insertQuestion(questionCaptor.capture());
+        assertThat(questionCaptor.getValue().getSourceText()).isEqualTo("我昨天去了图书馆。");
+        assertThat(questionCaptor.getValue().getLevel()).isEqualTo("N3");
+        assertThat(questionCaptor.getValue().getDifficulty()).isEqualTo(3);
+        assertThat(questionCaptor.getValue().getSourceType()).isEqualTo("REVIEW_DERIVED");
+
+        ArgumentCaptor<QuestionAnswer> answerCaptor = ArgumentCaptor.forClass(QuestionAnswer.class);
+        verify(questionAnswerMapper).insertQuestionAnswer(answerCaptor.capture());
+        assertThat(answerCaptor.getValue().getAnswerText()).isEqualTo("私は昨日、図書館へ行きました。");
+        verify(reviewService).recordPracticeErrors(eq(1L), eq(10L), eq(List.of(500L)), eq(20L), any());
+    }
+
     private User localUser() {
         User user = new User();
         user.setId(1L);
