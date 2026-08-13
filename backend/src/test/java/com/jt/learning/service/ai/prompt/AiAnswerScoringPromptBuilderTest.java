@@ -65,4 +65,50 @@ class AiAnswerScoringPromptBuilderTest {
                 .contains("赶上交通工具时误用を而非に")
                 .contains("grammarVocabularyScore");
     }
+
+    @Test
+    void buildArticleShouldRequireCompleteErrorAnalysisItems() {
+        Question question = new Question();
+        question.setQuestionType("TRANSLATION_ZH_TO_JA_ARTICLE");
+        question.setSourceText("上周，我和朋友去了京都。\n\n天气不好，但我们玩得很开心。");
+        question.setContextText("AI 原创叙事文。");
+        question.setLevel("N3");
+        question.setDifficulty(3);
+        question.setGrammarPoint("时态和篇章衔接");
+        question.setSpoken(false);
+        question.setBusiness(false);
+        question.setExam(false);
+
+        QuestionAnswer standardAnswer = new QuestionAnswer();
+        standardAnswer.setAnswerText("先週、友人と京都へ行きました。\n\n天気は悪かったですが、楽しく過ごしました。");
+
+        AiQuestionPrompt prompt = promptBuilder.build(
+                question,
+                List.of(standardAnswer),
+                List.of(new AiQuestionTagOptionDTO("NARRATIVE", "叙事文", "叙事体裁")),
+                List.of(new AiErrorTypeOptionDTO(
+                        8L,
+                        "UNNATURAL_EXPRESSION",
+                        "不自然表达",
+                        "表达不符合日语习惯",
+                        "VOCABULARY_EXPRESSION",
+                        "词汇与表达"
+                )),
+                new AiAnswerScoringRequest("先週、友達と京都に行きました。天気が悪いですが、楽しかったです。")
+        );
+
+        assertThat(prompt.systemPrompt())
+                .contains("issue")
+                .contains("每个错误项")
+                .contains("不要返回空对象或空字段")
+                .contains("不得改写文字、标点或空白")
+                .contains("无法精确截取时使用用户完整答案");
+        assertThat(prompt.userPrompt())
+                .contains("\"issue\": \"中文问题说明\"")
+                .contains("suggestedUserErrorTypeName")
+                .contains("没有明确错误时，errorAnalysis 必须返回 []")
+                .contains("不得返回 issue 等字段为空的对象")
+                .contains("\"expression\": \"日语推荐表达\"")
+                .contains("没有推荐表达时，recommendedExpressions 必须返回 []");
+    }
 }

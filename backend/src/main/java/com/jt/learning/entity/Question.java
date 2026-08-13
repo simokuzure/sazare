@@ -40,7 +40,7 @@ public class Question {
     private Integer difficulty;
 
     /**
-     * 语法点说明
+     * 短句语法点或文章生词提示
      */
     private String grammarPoint;
 

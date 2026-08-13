@@ -1,5 +1,7 @@
 import type { Tag } from './tag'
 
+export type QuestionType = 'TRANSLATION_ZH_TO_JA' | 'TRANSLATION_ZH_TO_JA_ARTICLE'
+
 export type QuestionAnswer = {
   id: number
   answerText: string
@@ -10,7 +12,7 @@ export type QuestionAnswer = {
 
 export type Question = {
   id: number
-  questionType: 'TRANSLATION_ZH_TO_JA'
+  questionType: QuestionType
   sourceText: string
   contextText: string
   level: string
@@ -44,6 +46,7 @@ export type QuestionFormState = {
 }
 
 export type QuestionFilterState = {
+  questionType: QuestionType
   level: string
   difficulty: string
   tagCodes: string
@@ -54,6 +57,7 @@ export type QuestionFilterState = {
 }
 
 export type RandomQuestionFilter = {
+  questionType: QuestionType
   level: string
   difficulty: string
   tagCodes: string[]
@@ -69,8 +73,16 @@ export type AiQuestionGenerationPayload = {
   extraRequirements?: string
 }
 
+export type AiArticleGenerationPayload = {
+  level?: string
+  difficulty?: number
+  genreTagCode: string
+  topic?: string
+  extraRequirements?: string
+}
+
 export type QuestionPayload = {
-  questionType: 'TRANSLATION_ZH_TO_JA'
+  questionType: QuestionType
   sourceText: string
   contextText: string
   level: string

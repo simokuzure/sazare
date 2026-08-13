@@ -75,7 +75,7 @@ public class MockAiQuestionClient implements AiQuestionClient {
         article.put("contextText", "叙事文，使用自然且连贯的书面语。");
         article.put("level", request.level());
         article.put("difficulty", request.difficulty());
-        article.put("grammarPoint", "时态衔接、原因表达和篇章连贯");
+        article.put("grammarPoint", "郊外：郊外（こうがい）\n早班电车：始発電車（しはつでんしゃ）\n避雨：雨宿り（あまやどり）\n老街：古い町並み（ふるいまちなみ）");
         article.put("spoken", false);
         article.put("business", false);
         article.put("exam", false);

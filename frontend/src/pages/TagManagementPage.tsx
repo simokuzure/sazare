@@ -62,6 +62,7 @@ export default function TagManagementPage() {
                     <option value="">全部</option>
                     <option value="SCENE">场景</option>
                     <option value="FUNCTION">功能</option>
+                    <option value="GENRE">体裁</option>
                   </select>
                 </label>
 
@@ -106,7 +107,7 @@ export default function TagManagementPage() {
                     {tags.map((tag) => (
                       <tr key={tag.id}>
                         <td data-label="ID">{tag.id}</td>
-                        <td data-label="类型">{tag.tagType === 'SCENE' ? '场景' : '功能'}</td>
+                        <td data-label="类型">{formatTagType(tag.tagType)}</td>
                         <td data-label="父级">{tag.parentId ?? '-'}</td>
                         <td className="code-cell table-ellipsis-cell" data-label="编码" title={tag.code}>{tag.code}</td>
                         <td className="table-ellipsis-cell" data-label="名称" title={tag.name}>{tag.name}</td>
@@ -155,4 +156,10 @@ export default function TagManagementPage() {
             </section>
           </section>
   )
+}
+
+function formatTagType(tagType: Tag['tagType']) {
+  if (tagType === 'SCENE') return '场景'
+  if (tagType === 'GENRE') return '体裁'
+  return '功能'
 }

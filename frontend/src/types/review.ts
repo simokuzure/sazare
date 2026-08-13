@@ -35,6 +35,15 @@ export type AnswerRecommendedExpression = {
   note: string
 }
 
+export type ArticleSentenceReview = {
+  sourceSegmentIndex: number
+  sourceText: string
+  referenceText: string
+  answerExcerpt: string | null
+  revisedText: string
+  comment: string
+}
+
 export type AnswerReview = {
   userAnswerId: number
   questionId: number
@@ -44,6 +53,8 @@ export type AnswerReview = {
   totalScore: number
   overallComment: string
   comments: AnswerReviewComments
+  revisedAnswer: string | null
+  sentenceReviews: ArticleSentenceReview[]
   errorAnalysis: AnswerErrorAnalysis[]
   revisionSuggestions: string[]
   recommendedExpressions: AnswerRecommendedExpression[]

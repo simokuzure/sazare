@@ -7,6 +7,7 @@ import com.jt.learning.exception.ErrorCode;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -15,6 +16,45 @@ import java.util.Set;
 public class AiErrorAnalysisValidator {
 
     private static final Set<String> VALID_SEVERITIES = Set.of("LOW", "MEDIUM", "HIGH");
+
+    public List<AiAnswerErrorAnalysisDTO> sanitize(
+            List<AiAnswerErrorAnalysisDTO> errorAnalysis,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode,
+            String answerText
+    ) {
+        if (errorAnalysis == null) {
+            return List.of();
+        }
+        Set<String> errorKeys = new LinkedHashSet<>();
+        List<AiAnswerErrorAnalysisDTO> validErrors = new ArrayList<>();
+        for (AiAnswerErrorAnalysisDTO error : errorAnalysis) {
+            if (isValid(error, errorTypesByCode, answerText, List.of(), List.of(), false, errorKeys)) {
+                validErrors.add(error);
+            }
+        }
+        return List.copyOf(validErrors);
+    }
+
+    public List<AiAnswerErrorAnalysisDTO> sanitizeArticle(
+            List<AiAnswerErrorAnalysisDTO> errorAnalysis,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode,
+            String answerText,
+            List<String> sourceSegments,
+            List<String> referenceSegments
+    ) {
+        if (errorAnalysis == null) {
+            return List.of();
+        }
+        Set<String> errorKeys = new LinkedHashSet<>();
+        List<AiAnswerErrorAnalysisDTO> validErrors = new ArrayList<>();
+        for (AiAnswerErrorAnalysisDTO error : errorAnalysis) {
+            if (isValid(error, errorTypesByCode, answerText,
+                    sourceSegments, referenceSegments, true, errorKeys)) {
+                validErrors.add(error);
+            }
+        }
+        return List.copyOf(validErrors);
+    }
 
     public void validate(
             List<AiAnswerErrorAnalysisDTO> errorAnalysis,
@@ -103,6 +143,42 @@ public class AiErrorAnalysisValidator {
                 throw invalid("errorAnalysis 存在重复错误");
             }
         }
+    }
+
+    private boolean isValid(
+            AiAnswerErrorAnalysisDTO error,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode,
+            String answerText,
+            List<String> sourceSegments,
+            List<String> referenceSegments,
+            boolean article,
+            Set<String> errorKeys
+    ) {
+        if (error == null || !errorTypesByCode.containsKey(error.errorTypeCode())
+                || !hasText(error.original()) || !hasText(error.issue()) || !hasText(error.suggestion())
+                || !VALID_SEVERITIES.contains(error.severity())
+                || !hasText(error.suggestedUserErrorTypeName())
+                || !hasText(error.suggestedUserErrorTypeDescription())
+                || error.suggestedUserErrorTypeName().trim().length() > 128
+                || error.suggestedUserErrorTypeDescription().trim().length() > 255) {
+            return false;
+        }
+        String original = error.original().trim();
+        if (article && "OMISSION".equals(error.errorTypeCode())) {
+            if (!sourceSegments.contains(original)) {
+                return false;
+            }
+        } else if (!answerText.contains(original)) {
+            return false;
+        }
+        if (article && !referenceSegments.contains(error.suggestion().trim())) {
+            return false;
+        }
+        return errorKeys.add(error.errorTypeCode() + "\u0000" + original);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private void requireText(String value, String message) {

@@ -476,7 +476,7 @@ comment on column questions.source_text is '中文题目原文，文章题按句
 comment on column questions.context_text is '题目语境说明';
 comment on column questions.level is 'JLPT等级：N5、N4、N3、N2、N1';
 comment on column questions.difficulty is '难度等级，范围1到5';
-comment on column questions.grammar_point is '语法点说明';
+comment on column questions.grammar_point is '短句语法点或文章生词提示';
 comment on column questions.spoken is '是否口语表达';
 comment on column questions.business is '是否商务表达';
 comment on column questions.exam is '是否考试相关';

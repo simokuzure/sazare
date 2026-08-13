@@ -96,9 +96,9 @@ public class QuestionServiceImpl implements QuestionService {
 
     private static final Set<String> VALID_ANSWER_TYPES = Set.of(ANSWER_TYPE_STANDARD, ANSWER_TYPE_REFERENCE);
     private static final Set<String> VALID_FORMALITIES = Set.of("CASUAL", "NEUTRAL", "POLITE", "BUSINESS");
-    private static final Pattern CHINESE_PATTERN = Pattern.compile(".*[\\u4e00-\\u9fff].*");
-    private static final Pattern JAPANESE_TEXT_PATTERN = Pattern.compile(".*[\\u3040-\\u30ff\\u4e00-\\u9fff].*");
-    private static final Pattern JAPANESE_KANA_PATTERN = Pattern.compile(".*[\\u3040-\\u30ff].*");
+    private static final Pattern CHINESE_PATTERN = Pattern.compile("[\\u4e00-\\u9fff]");
+    private static final Pattern JAPANESE_TEXT_PATTERN = Pattern.compile("[\\u3040-\\u30ff\\u4e00-\\u9fff]");
+    private static final Pattern JAPANESE_KANA_PATTERN = Pattern.compile("[\\u3040-\\u30ff]");
     private static final Pattern ARTICLE_END_PATTERN = Pattern.compile(".*[。？！]$");
     private static final String ARTICLE_SEPARATOR = "\n\n";
     private static final int ARTICLE_MIN_LENGTH = 150;
@@ -480,7 +480,7 @@ public class QuestionServiceImpl implements QuestionService {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "答案长度不能超过 " + maxAnswerLength + " 个字符");
         }
         if (ARTICLE_QUESTION_TYPE.equals(question.getQuestionType())
-                && !JAPANESE_KANA_PATTERN.matcher(answerText).matches()) {
+                && !containsJapaneseKana(answerText)) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "文章答案必须包含日语假名");
         }
         AiAnswerScoringRequest normalizedRequest = new AiAnswerScoringRequest(answerText);
@@ -590,7 +590,7 @@ public class QuestionServiceImpl implements QuestionService {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "questionType 不合法");
         }
         validateRequiredText(sourceText, "sourceText 不能为空");
-        if (!CHINESE_PATTERN.matcher(sourceText).matches()) {
+        if (!containsChinese(sourceText)) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "sourceText 必须包含中文");
         }
         validateRequiredText(contextText, "contextText 不能为空");
@@ -654,15 +654,15 @@ public class QuestionServiceImpl implements QuestionService {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题中文长度必须在 150 到 300 个非空白字符之间");
         }
         for (String sourceSegment : sourceSegments) {
-            if (!CHINESE_PATTERN.matcher(sourceSegment).matches()
-                    || JAPANESE_KANA_PATTERN.matcher(sourceSegment).matches()
+            if (!containsChinese(sourceSegment)
+                    || containsJapaneseKana(sourceSegment)
                     || !ARTICLE_END_PATTERN.matcher(sourceSegment).matches()) {
                 throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题每个 sourceText 段落必须是无假名的完整中文句子");
             }
         }
         Set<String> uniqueReferences = new LinkedHashSet<>();
         for (String referenceSegment : referenceSegments) {
-            if (!JAPANESE_KANA_PATTERN.matcher(referenceSegment).matches()) {
+            if (!containsJapaneseKana(referenceSegment)) {
                 throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题每个 answerText 段落必须包含日语假名");
             }
             if (!uniqueReferences.add(referenceSegment)) {
@@ -746,19 +746,28 @@ public class QuestionServiceImpl implements QuestionService {
 
         AiAnswerReviewDTO review = aiResponse.review();
         validateScores(review.scores());
-        if (review.totalScore() == null
-                || review.totalScore().compareTo(BigDecimal.ZERO) < 0
-                || review.totalScore().compareTo(BigDecimal.valueOf(100)) > 0) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 totalScore 不合法");
-        }
         validateRequiredText(review.overallComment(), "AI 评分 overallComment 不能为空");
         validateComments(review.comments());
+        review = normalizeOptionalReviewContent(review);
         if (ARTICLE_QUESTION_TYPE.equals(question.getQuestionType())) {
             List<String> sourceSegments = splitArticleSegments(question.getSourceText(), "sourceText");
             List<String> referenceSegments = splitArticleSegments(
                     standardAnswers.getFirst().getAnswerText(),
                     "answerText"
             );
+            review = normalizeArticleSentenceReviews(
+                    review,
+                    answerText,
+                    sourceSegments,
+                    referenceSegments
+            );
+            review = copyReviewWithErrors(review, aiErrorAnalysisValidator.sanitizeArticle(
+                    review.errorAnalysis(),
+                    errorTypesByCode,
+                    answerText,
+                    sourceSegments,
+                    referenceSegments
+            ));
             validateArticleSentenceReviews(review.sentenceReviews(), sourceSegments, referenceSegments, answerText);
             aiErrorAnalysisValidator.validateArticle(
                     review.errorAnalysis(),
@@ -768,11 +777,137 @@ public class QuestionServiceImpl implements QuestionService {
                     referenceSegments
             );
         } else {
+            review = copyReviewWithErrors(review, aiErrorAnalysisValidator.sanitize(
+                    review.errorAnalysis(), errorTypesByCode, answerText));
             aiErrorAnalysisValidator.validate(review.errorAnalysis(), errorTypesByCode, answerText);
         }
         validateRevisionSuggestions(review.revisionSuggestions());
         validateRecommendedExpressions(review.recommendedExpressions());
         return review;
+    }
+
+    private AiAnswerReviewDTO normalizeOptionalReviewContent(AiAnswerReviewDTO review) {
+        List<String> normalizedRevisionSuggestions = review.revisionSuggestions() == null
+                ? List.of()
+                : review.revisionSuggestions().stream()
+                        .filter(suggestion -> suggestion != null && !suggestion.isBlank())
+                        .map(String::trim)
+                        .toList();
+        List<AiAnswerRecommendedExpressionDTO> normalizedRecommendedExpressions =
+                review.recommendedExpressions() == null
+                        ? List.of()
+                        : review.recommendedExpressions().stream()
+                                .filter(this::isCompleteRecommendedExpression)
+                                .toList();
+        return new AiAnswerReviewDTO(
+                review.scores(),
+                calculateTotalScore(review.scores()),
+                review.overallComment(),
+                review.comments(),
+                review.sentenceReviews(),
+                review.errorAnalysis(),
+                normalizedRevisionSuggestions,
+                normalizedRecommendedExpressions
+        );
+    }
+
+    private boolean isCompleteRecommendedExpression(AiAnswerRecommendedExpressionDTO expression) {
+        return expression != null
+                && expression.expression() != null && !expression.expression().isBlank()
+                && expression.usage() != null && !expression.usage().isBlank()
+                && VALID_FORMALITIES.contains(expression.formality())
+                && expression.note() != null && !expression.note().isBlank();
+    }
+
+    private AiAnswerReviewDTO normalizeArticleSentenceReviews(
+            AiAnswerReviewDTO review,
+            String answerText,
+            List<String> sourceSegments,
+            List<String> referenceSegments
+    ) {
+        List<AiArticleSentenceReviewDTO> sentenceReviews = review.sentenceReviews();
+        if (sentenceReviews == null || sentenceReviews.size() != sourceSegments.size()) {
+            return review;
+        }
+        Map<Integer, AiArticleSentenceReviewDTO> reviewsByIndex = new LinkedHashMap<>();
+        for (AiArticleSentenceReviewDTO sentenceReview : sentenceReviews) {
+            if (sentenceReview == null || sentenceReview.sourceSegmentIndex() == null
+                    || sentenceReview.sourceSegmentIndex() < 0
+                    || sentenceReview.sourceSegmentIndex() >= sourceSegments.size()
+                    || reviewsByIndex.putIfAbsent(sentenceReview.sourceSegmentIndex(), sentenceReview) != null) {
+                return review;
+            }
+        }
+        List<AiArticleSentenceReviewDTO> normalizedSentenceReviews = new ArrayList<>();
+        for (int index = 0; index < sourceSegments.size(); index++) {
+            AiArticleSentenceReviewDTO sentenceReview = reviewsByIndex.get(index);
+            if (sentenceReview == null) {
+                return review;
+            }
+            normalizedSentenceReviews.add(normalizeArticleSentenceReview(
+                    sentenceReview,
+                    index,
+                    answerText,
+                    sourceSegments.get(index),
+                    referenceSegments.get(index),
+                    review.overallComment()
+            ));
+        }
+        return new AiAnswerReviewDTO(
+                review.scores(),
+                review.totalScore(),
+                review.overallComment(),
+                review.comments(),
+                List.copyOf(normalizedSentenceReviews),
+                review.errorAnalysis(),
+                review.revisionSuggestions(),
+                review.recommendedExpressions()
+        );
+    }
+
+    private AiArticleSentenceReviewDTO normalizeArticleSentenceReview(
+            AiArticleSentenceReviewDTO sentenceReview,
+            int index,
+            String answerText,
+            String sourceText,
+            String referenceText,
+            String overallComment
+    ) {
+        String answerExcerpt = sentenceReview.answerExcerpt();
+        if (answerExcerpt != null) {
+            answerExcerpt = normalizeText(answerExcerpt);
+            if (answerExcerpt.isBlank()) {
+                answerExcerpt = null;
+            } else if (!answerText.contains(answerExcerpt)) {
+                answerExcerpt = answerText;
+            }
+        }
+        return new AiArticleSentenceReviewDTO(
+                index,
+                sourceText,
+                referenceText,
+                answerExcerpt,
+                referenceText,
+                sentenceReview.comment() == null || sentenceReview.comment().isBlank()
+                        ? overallComment
+                        : sentenceReview.comment().trim()
+        );
+    }
+
+    private AiAnswerReviewDTO copyReviewWithErrors(
+            AiAnswerReviewDTO review,
+            List<AiAnswerErrorAnalysisDTO> errorAnalysis
+    ) {
+        return new AiAnswerReviewDTO(
+                review.scores(),
+                review.totalScore(),
+                review.overallComment(),
+                review.comments(),
+                review.sentenceReviews(),
+                errorAnalysis,
+                review.revisionSuggestions(),
+                review.recommendedExpressions()
+        );
     }
 
     private void validateArticleSentenceReviews(
@@ -944,6 +1079,9 @@ public class QuestionServiceImpl implements QuestionService {
         }
         validateRequiredText(article.contextText(), "AI 文章 contextText 不能为空");
         validateRequiredText(article.grammarPoint(), "AI 文章 grammarPoint 不能为空");
+        if (article.grammarPoint().length() > 255) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章生词提示不能超过 255 个字符");
+        }
         if (article.spoken() == null || article.business() == null || article.exam() == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 spoken、business、exam 必须是布尔值");
         }
@@ -962,13 +1100,13 @@ public class QuestionServiceImpl implements QuestionService {
             }
             String chinese = requireArticleText(sentence.chineseText(), "AI 文章 chineseText 不能为空");
             if (containsLineBreak(chinese)
-                    || !CHINESE_PATTERN.matcher(chinese).matches()
-                    || JAPANESE_KANA_PATTERN.matcher(chinese).matches()
+                    || !containsChinese(chinese)
+                    || containsJapaneseKana(chinese)
                     || !ARTICLE_END_PATTERN.matcher(chinese).matches()) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 chineseText 必须是无换行、无假名的完整中文句子");
             }
             String japanese = requireArticleText(sentence.japaneseReference(), "AI 文章 japaneseReference 不能为空");
-            if (containsLineBreak(japanese) || !JAPANESE_KANA_PATTERN.matcher(japanese).matches()) {
+            if (containsLineBreak(japanese) || !containsJapaneseKana(japanese)) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 japaneseReference 必须是无换行的日语句子");
             }
             if (!uniqueReferences.add(japanese)) {
@@ -1034,6 +1172,18 @@ public class QuestionServiceImpl implements QuestionService {
 
     private boolean containsLineBreak(String value) {
         return value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0;
+    }
+
+    private boolean containsChinese(String value) {
+        return value != null && CHINESE_PATTERN.matcher(value).find();
+    }
+
+    private boolean containsJapaneseText(String value) {
+        return value != null && JAPANESE_TEXT_PATTERN.matcher(value).find();
+    }
+
+    private boolean containsJapaneseKana(String value) {
+        return value != null && JAPANESE_KANA_PATTERN.matcher(value).find();
     }
 
     private AiQuestionGenerationResponseDTO parseAiResponse(String aiContent) {
@@ -1142,7 +1292,7 @@ public class QuestionServiceImpl implements QuestionService {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " questionType 不合法");
         }
         validateRequiredText(question.sourceText(), prefix + " sourceText 不能为空");
-        if (!CHINESE_PATTERN.matcher(question.sourceText()).matches()) {
+        if (!containsChinese(question.sourceText())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " sourceText 必须包含中文");
         }
         validateRequiredText(question.contextText(), prefix + " contextText 不能为空");
@@ -1222,7 +1372,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     private void validateAnswer(AiQuestionAnswerDTO answer, String prefix) {
         validateRequiredText(answer.answerText(), prefix + " answerText 不能为空");
-        if (!JAPANESE_TEXT_PATTERN.matcher(answer.answerText()).matches()) {
+        if (!containsJapaneseText(answer.answerText())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " answerText 必须包含日语假名或汉字");
         }
         if (!VALID_ANSWER_TYPES.contains(answer.answerType())) {

@@ -1,11 +1,13 @@
 import type { AnswerScores } from './review'
 import type { QuestionAnswer } from './question'
 import type { Tag } from './tag'
+import type { QuestionType } from './question'
 
 export type AnswerStatus = '' | 'SUBMITTED' | 'REVIEWED' | 'FAILED'
 
 export type UserAnswerFilterState = {
   answerStatus: AnswerStatus
+  questionType: '' | QuestionType
   questionId: string
   level: string
   minTotalScore: string
@@ -17,7 +19,7 @@ export type UserAnswerFilterState = {
 export type UserAnswerRecord = {
   id: number
   questionId: number
-  questionType: 'TRANSLATION_ZH_TO_JA'
+  questionType: QuestionType
   sourceText: string
   level: string | null
   difficulty: number | null

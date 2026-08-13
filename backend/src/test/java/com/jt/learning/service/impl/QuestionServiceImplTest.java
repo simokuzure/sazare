@@ -164,6 +164,7 @@ class QuestionServiceImplTest {
         assertThat(question.questionType()).isEqualTo("TRANSLATION_ZH_TO_JA_ARTICLE");
         assertThat(question.sourceType()).isEqualTo("AI");
         assertThat(question.sourceText()).contains("\n\n");
+        assertThat(question.grammarPoint()).contains("郊外：郊外（こうがい）", "避雨：雨宿り（あまやどり）");
         assertThat(question.tags()).extracting("code").containsExactly("NARRATIVE");
         assertThat(question.answers()).isEmpty();
         ArgumentCaptor<QuestionAnswer> answerCaptor = ArgumentCaptor.forClass(QuestionAnswer.class);
@@ -606,7 +607,7 @@ class QuestionServiceImplTest {
         when(userAnswerMapper.insertUserAnswer(any())).thenAnswer(invocation -> {
             UserAnswer userAnswer = invocation.getArgument(0);
             assertThat(userAnswer.getAnswerText())
-                    .isEqualTo("先週、友達と京都へ旅行しました。天気は悪かったですが、楽しく過ごしました。");
+                    .isEqualTo("先週、友達と京都へ旅行しました。\n\n天気は悪かったですが、楽しく過ごしました。");
             userAnswer.setId(301L);
             return 1;
         });
@@ -616,7 +617,7 @@ class QuestionServiceImplTest {
         AnswerReviewVO review = questionService.submitAnswer(
                 100L,
                 new AiAnswerScoringRequest(
-                        "\r\n先週、友達と京都へ旅行しました。天気は悪かったですが、楽しく過ごしました。\r\n"
+                        "\r\n先週、友達と京都へ旅行しました。\r\n\r\n天気は悪かったですが、楽しく過ごしました。\r\n"
                 )
         );
 
@@ -624,6 +625,105 @@ class QuestionServiceImplTest {
         assertThat(review.revisedAnswer()).isEqualTo(
                 "先週、友人と京都へ旅行しました。\n\n天気はよくありませんでしたが、楽しく過ごしました。"
         );
+        verify(userAnswerMapper, times(1)).insertUserAnswer(any());
+    }
+
+    @Test
+    void submitArticleAnswerShouldFallbackToWholeAnswerWhenExcerptIsNotOriginalText() {
+        Question question = articleQuestion(100L);
+        QuestionAnswer answer = answer(200L, "先週、友人と京都へ旅行しました。\n\n天気はよくありませんでしたが、楽しく過ごしました。");
+        when(questionMapper.selectActiveQuestionById(100L)).thenReturn(question);
+        when(questionAnswerMapper.selectActiveAnswersByQuestionId(100L)).thenReturn(List.of(answer));
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user(10L));
+        when(tagMapper.selectEnabledTagsByQuestionId(100L))
+                .thenReturn(List.of(tag(3L, "GENRE", "NARRATIVE", "叙事文")));
+        when(userAnswerMapper.insertUserAnswer(any())).thenAnswer(invocation -> {
+            UserAnswer userAnswer = invocation.getArgument(0);
+            userAnswer.setId(302L);
+            return 1;
+        });
+        when(aiAnswerScoringClient.scoreAnswer(any(), any(), any(), anyList(), anyList()))
+                .thenReturn(validArticleReviewJson().replace(
+                        "先週、友達と京都へ旅行しました。天気は悪かったですが、楽しく過ごしました。",
+                        "AI が改写したため、用户答案には存在しない抜粋"
+                ));
+
+        String userAnswer = "先週、友達と京都へ旅行しました。天気は悪かったですが、楽しく過ごしました。";
+        AnswerReviewVO review = questionService.submitAnswer(
+                100L,
+                new AiAnswerScoringRequest(userAnswer)
+        );
+
+        assertThat(review.sentenceReviews())
+                .extracting("answerExcerpt")
+                .containsOnly(userAnswer);
+        verify(userAnswerMapper, times(1)).insertUserAnswer(any());
+    }
+
+    @Test
+    void submitArticleAnswerShouldIgnoreIncompleteOptionalRecommendations() {
+        Question question = articleQuestion(100L);
+        QuestionAnswer answer = answer(200L, "先週、友人と京都へ旅行しました。\n\n天気はよくありませんでしたが、楽しく過ごしました。");
+        when(questionMapper.selectActiveQuestionById(100L)).thenReturn(question);
+        when(questionAnswerMapper.selectActiveAnswersByQuestionId(100L)).thenReturn(List.of(answer));
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user(10L));
+        when(tagMapper.selectEnabledTagsByQuestionId(100L))
+                .thenReturn(List.of(tag(3L, "GENRE", "NARRATIVE", "叙事文")));
+        when(userAnswerMapper.insertUserAnswer(any())).thenAnswer(invocation -> {
+            UserAnswer userAnswer = invocation.getArgument(0);
+            userAnswer.setId(303L);
+            return 1;
+        });
+        when(aiAnswerScoringClient.scoreAnswer(any(), any(), any(), anyList(), anyList()))
+                .thenReturn(validArticleReviewJson()
+                        .replace("\"totalScore\": 86.25", "\"totalScore\": null")
+                        .replace("\"sourceText\": \"上周，我和朋友去了京都旅行。\"",
+                                "\"sourceText\": \"AI 未原样复制的中文\"")
+                        .replace("\"referenceText\": \"先週、友人と京都へ旅行しました。\"",
+                                "\"referenceText\": \"AI 未原样复制的日文\"")
+                        .replace("\"revisedText\": \"先週、友人と京都へ旅行しました。\"",
+                                "\"revisedText\": \"AI 自行改写的修订句\"")
+                        .replace("\"revisionSuggestions\": [\"保持全文敬体和时态一致。\"]",
+                                "\"revisionSuggestions\": [\"保持全文敬体和时态一致。\", \"\"]")
+                        .replace("\"errorAnalysis\": []", """
+                                "errorAnalysis": [
+                                  {
+                                    "errorTypeCode": "UNNATURAL_EXPRESSION",
+                                    "original": "用户答案中不存在的片段",
+                                    "issue": "",
+                                    "suggestion": "",
+                                    "severity": "MEDIUM",
+                                    "suggestedUserErrorTypeName": "",
+                                    "suggestedUserErrorTypeDescription": ""
+                                  }
+                                ]
+                                """)
+                        .replace("\"recommendedExpressions\": []", """
+                                "recommendedExpressions": [
+                                  {
+                                    "expression": "",
+                                    "usage": "",
+                                    "formality": "POLITE",
+                                    "note": ""
+                                  }
+                                ]
+                                """));
+
+        AnswerReviewVO review = questionService.submitAnswer(
+                100L,
+                new AiAnswerScoringRequest("先週、友達と京都へ旅行しました。天気は悪かったですが、楽しく過ごしました。")
+        );
+
+        assertThat(review.revisionSuggestions()).containsExactly("保持全文敬体和时态一致。");
+        assertThat(review.recommendedExpressions()).isEmpty();
+        assertThat(review.errorAnalysis()).isEmpty();
+        assertThat(review.totalScore()).isEqualByComparingTo("86.25");
+        assertThat(review.sentenceReviews().getFirst().sourceText())
+                .isEqualTo("上周，我和朋友去了京都旅行。");
+        assertThat(review.sentenceReviews().getFirst().referenceText())
+                .isEqualTo("先週、友人と京都へ旅行しました。");
+        assertThat(review.sentenceReviews().getFirst().revisedText())
+                .isEqualTo("先週、友人と京都へ旅行しました。");
         verify(userAnswerMapper, times(1)).insertUserAnswer(any());
     }
 
@@ -830,7 +930,7 @@ class QuestionServiceImplTest {
                     "contextText": "AI 原创叙事文，使用自然连贯的书面语。",
                     "level": "N3",
                     "difficulty": 3,
-                    "grammarPoint": "时态衔接、原因表达和篇章连贯",
+                    "grammarPoint": "郊外：郊外（こうがい）\\n避雨：雨宿り（あまやどり）\\n老街：古い町並み（ふるいまちなみ）",
                     "spoken": false,
                     "business": false,
                     "exam": false,

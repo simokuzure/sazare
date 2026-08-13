@@ -14,6 +14,9 @@ export async function fetchUserAnswers(
   if (filters.answerStatus) {
     searchParams.set('answerStatus', filters.answerStatus)
   }
+  if (filters.questionType) {
+    searchParams.set('questionType', filters.questionType)
+  }
   if (filters.questionId) {
     searchParams.set('questionId', filters.questionId)
   }

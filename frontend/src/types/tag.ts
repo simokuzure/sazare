@@ -1,8 +1,10 @@
-export type TagFilter = '' | 'SCENE' | 'FUNCTION'
+export type TagType = 'SCENE' | 'FUNCTION' | 'GENRE'
+
+export type TagFilter = '' | TagType
 
 export type Tag = {
   id: number
-  tagType: 'SCENE' | 'FUNCTION'
+  tagType: TagType
   parentId: number | null
   code: string
   name: string

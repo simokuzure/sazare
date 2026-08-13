@@ -11,6 +11,7 @@ import {
   toNewErrorConfirmation,
 } from '../components/errorConfirmation'
 import ReviewList from '../components/ReviewList'
+import ArticlePractice from './ArticlePractice'
 import type { PracticeNotice } from '../types/api'
 import type { Tag } from '../types/tag'
 import type { AiQuestionGenerationPayload, Question, RandomQuestionFilter } from '../types/question'
@@ -39,7 +40,59 @@ const EMPTY_ANSWER_SESSION: AnswerSessionState = {
   errorConfirmationOpen: false,
 }
 
+type PracticeMode = 'sentence' | 'article'
+
 export default function PracticePage() {
+  const [activeMode, setActiveMode] = useState<PracticeMode>('sentence')
+
+  return (
+    <section className="page-content" aria-label="练习">
+      <div className="practice-tabs" role="tablist" aria-label="翻译练习类型">
+        <button
+          id="sentence-practice-tab"
+          type="button"
+          role="tab"
+          aria-selected={activeMode === 'sentence'}
+          aria-controls="sentence-practice-panel"
+          className={activeMode === 'sentence' ? 'is-active' : ''}
+          onClick={() => setActiveMode('sentence')}
+        >
+          短句翻译
+        </button>
+        <button
+          id="article-practice-tab"
+          type="button"
+          role="tab"
+          aria-selected={activeMode === 'article'}
+          aria-controls="article-practice-panel"
+          className={activeMode === 'article' ? 'is-active' : ''}
+          onClick={() => setActiveMode('article')}
+        >
+          文章翻译
+        </button>
+      </div>
+
+      <div
+        id="sentence-practice-panel"
+        role="tabpanel"
+        aria-labelledby="sentence-practice-tab"
+        hidden={activeMode !== 'sentence'}
+      >
+        <ShortSentencePractice />
+      </div>
+      <div
+        id="article-practice-panel"
+        role="tabpanel"
+        aria-labelledby="article-practice-tab"
+        hidden={activeMode !== 'article'}
+      >
+        <ArticlePractice />
+      </div>
+    </section>
+  )
+}
+
+function ShortSentencePractice() {
   const [practiceTags, setPracticeTags] = useState<Tag[]>([])
   const [practiceTagsLoading, setPracticeTagsLoading] = useState(false)
   const [practiceTagsError, setPracticeTagsError] = useState<string | null>(null)
@@ -351,6 +404,7 @@ export default function PracticePage() {
 
   function buildRandomQuestionFilter(): RandomQuestionFilter {
     return {
+      questionType: 'TRANSLATION_ZH_TO_JA',
       level,
       difficulty,
       tagCodes: buildRandomQuestionTagCodes(),
@@ -368,7 +422,7 @@ export default function PracticePage() {
   }
 
   return (
-    <section className="page-content" aria-label="练习">
+    <div>
       <div className="practice-grid">
         <section className="surface generator-panel" aria-label="题目生成">
           <form className="form-grid" onSubmit={(event) => event.preventDefault()}>
@@ -414,7 +468,7 @@ export default function PracticePage() {
           {!answerSubmitted ? (
             <>
               {answerInputNotice && (answerInputNotice.kind === 'error' || !selectedQuestion) ? <Notice notice={answerInputNotice} /> : null}
-              <textarea value={answerText} disabled={!selectedQuestion} placeholder={selectedQuestion ? '请输入日语答案' : '生成题目后即可作答'} onChange={(event) => updateSelectedAnswerSession((session) => ({ ...session, answerText: event.target.value }))} />
+              <textarea value={answerText} maxLength={2000} disabled={!selectedQuestion} placeholder={selectedQuestion ? '请输入日语答案' : '生成题目后即可作答'} onChange={(event) => updateSelectedAnswerSession((session) => ({ ...session, answerText: event.target.value }))} />
               <div className="action-row"><button type="button" className="primary-button" disabled={!selectedQuestion || answerScoring} onClick={handleSubmitAnswer}>{answerScoring ? '评分中' : '提交答案'}</button><button type="button" disabled={!selectedQuestion && !answerText} onClick={handleClearAnswer}>清空</button></div>
             </>
           ) : (
@@ -465,7 +519,7 @@ export default function PracticePage() {
           )}
         </section>
       </div>
-    </section>
+    </div>
   )
 }
 

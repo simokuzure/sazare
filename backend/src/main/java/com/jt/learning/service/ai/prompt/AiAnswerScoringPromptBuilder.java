@@ -39,14 +39,17 @@ public class AiAnswerScoringPromptBuilder {
             用户提交完整译文，可以合并、拆分或调整句序；必须按语义对应关系评改，不能按句数或顺序机械扣分。
             沿用四个评分字段：grammarVocabularyScore 评语法与用词，naturalFluencyScore 评自然度与篇章连贯，scenarioAdaptationScore 评体裁、语域与文体，informationCompletenessScore 评忠实度与信息完整性。
             四项均为 0 到 100 的整数；totalScore 是四项平均值，保留两位小数。
+            题目信息中的 grammarPoint 是给学习者的生词提示，不是必须采用的固定译法；不得仅因用户使用自然的同义表达而扣分或列错。
             sentenceReviews 必须按中文原句索引返回，每个原句有且只有一项。sourceText、referenceText 必须与输入完全一致。
-            answerExcerpt 必须是用户完整答案中的连续片段；漏译时为 null。允许不同原句使用相同或重叠片段。
+            answerExcerpt 必须从用户完整答案中原样复制连续片段，不得改写文字、标点或空白；漏译时为 null。允许不同原句使用相同或重叠片段；无法精确截取时使用用户完整答案。
             revisedText 必须等于对应 referenceText，comment 使用简洁中文。
             errorAnalysis 只列有明确依据的错误。漏译项 original 使用对应中文 sourceText；其他错误 original 必须是用户答案中的连续片段。
             errorAnalysis.suggestion 必须等于对应 sentenceReviews.revisedText，以便将错句直接转为普通短句复习题。
+            errorAnalysis 中每个错误项的 errorTypeCode、original、issue、suggestion、severity、suggestedUserErrorTypeName、suggestedUserErrorTypeDescription 都必须填写非空值；没有明确错误时返回空数组，不要返回空对象或空字段。
             errorTypeCode 必须从输入的二级错误类型中选择；severity 只能是 LOW、MEDIUM、HIGH。
             overallComment 还必须评价全文衔接、指代、时态、语体一致性和信息完整性。
-            recommendedExpressions.formality 只能是 CASUAL、NEUTRAL、POLITE、BUSINESS。
+            revisionSuggestions 只返回非空的中文建议。
+            recommendedExpressions 中每项的 expression、usage、formality、note 都必须填写非空值，formality 只能是 CASUAL、NEUTRAL、POLITE、BUSINESS；没有推荐表达时返回空数组，不要返回空对象或空字段。
             """;
 
     private final ObjectMapper objectMapper;
@@ -118,11 +121,30 @@ public class AiAnswerScoringPromptBuilder {
                         "comment": "中文逐句说明"
                       }
                     ],
-                    "errorAnalysis": [],
+                    "errorAnalysis": [
+                      {
+                        "errorTypeCode": "<可选错误类型中的二级 code>",
+                        "original": "用户答案连续片段；漏译时为对应中文原句",
+                        "issue": "中文问题说明",
+                        "suggestion": "对应 sentenceReviews.revisedText",
+                        "severity": "MEDIUM",
+                        "suggestedUserErrorTypeName": "可复现的具体错误类型名称",
+                        "suggestedUserErrorTypeDescription": "触发情形、错误形式与正确用法"
+                      }
+                    ],
                     "revisionSuggestions": ["中文全文修改建议"],
-                    "recommendedExpressions": []
+                    "recommendedExpressions": [
+                      {
+                        "expression": "日语推荐表达",
+                        "usage": "中文使用场景",
+                        "formality": "POLITE",
+                        "note": "中文说明"
+                      }
+                    ]
                   }
                 }
+                没有明确错误时，errorAnalysis 必须返回 []；不得保留上述示例对象，也不得返回 issue 等字段为空的对象。
+                没有推荐表达时，recommendedExpressions 必须返回 []；不得保留上述示例对象或返回字段为空的对象。
                 """.formatted(
                 toJson(sourceSegments),
                 toJson(referenceSegments),

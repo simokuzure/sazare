@@ -1,7 +1,7 @@
 import { readApiResponse } from './client'
 import type { PageData } from '../types/api'
 import type { AnswerReview } from '../types/review'
-import type { AiQuestionGenerationPayload, Question, QuestionFilterState, QuestionPayload, RandomQuestionFilter } from '../types/question'
+import type { AiArticleGenerationPayload, AiQuestionGenerationPayload, Question, QuestionFilterState, QuestionPayload, RandomQuestionFilter } from '../types/question'
 
 export function parseCodeList(value: string) {
   return value
@@ -22,6 +22,18 @@ export async function generateQuestions(payload: AiQuestionGenerationPayload): P
   return result.data ?? []
 }
 
+export async function generateArticle(payload: AiArticleGenerationPayload): Promise<Question | null> {
+  const response = await fetch('/api/questions/article-ai-generations', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+  const result = await readApiResponse<Question>(response)
+  return result.data
+}
+
 export async function submitQuestionAnswer(questionId: number, answerText: string): Promise<AnswerReview | null> {
   const response = await fetch(`/api/questions/${questionId}/answers`, {
     method: 'POST',
@@ -36,7 +48,7 @@ export async function submitQuestionAnswer(questionId: number, answerText: strin
 
 export async function fetchQuestions(filters: QuestionFilterState, signal?: AbortSignal): Promise<PageData<Question>> {
   const searchParams = new URLSearchParams({
-    questionType: 'TRANSLATION_ZH_TO_JA',
+    questionType: filters.questionType,
     page: String(filters.page),
     size: String(filters.size),
   })
@@ -64,7 +76,7 @@ export async function fetchQuestions(filters: QuestionFilterState, signal?: Abor
 
 export async function fetchRandomQuestion(filters: RandomQuestionFilter): Promise<Question | null> {
   const searchParams = new URLSearchParams({
-    questionType: 'TRANSLATION_ZH_TO_JA',
+    questionType: filters.questionType,
   })
   if (filters.level) {
     searchParams.set('level', filters.level)

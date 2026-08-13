@@ -23,6 +23,7 @@ const EMPTY_QUESTION_FORM: QuestionFormState = {
 }
 
 const INITIAL_QUESTION_FILTERS: QuestionFilterState = {
+  questionType: 'TRANSLATION_ZH_TO_JA',
   level: '',
   difficulty: '',
   tagCodes: '',
@@ -46,6 +47,7 @@ export default function QuestionManagementPage() {
   const [questionSaving, setQuestionSaving] = useState(false)
   const [questionActionId, setQuestionActionId] = useState<number | null>(null)
   const [tagOptions, setTagOptions] = useState<Tag[]>([])
+  const [genreTagOptions, setGenreTagOptions] = useState<Tag[]>([])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -83,13 +85,18 @@ export default function QuestionManagementPage() {
 
     async function fetchTagOptions() {
       try {
-        const result = await queryTags({ enabledOnly: true, page: 1, size: 100 }, controller.signal)
-        setTagOptions(result.items)
+        const [result, genreResult] = await Promise.all([
+          queryTags({ enabledOnly: true, page: 1, size: 100 }, controller.signal),
+          queryTags({ tagType: 'GENRE', enabledOnly: true, page: 1, size: 100 }, controller.signal),
+        ])
+        setTagOptions(result.items.filter((tag) => tag.tagType !== 'GENRE'))
+        setGenreTagOptions(genreResult.items)
       } catch (fetchError: unknown) {
         if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
           return
         }
         setTagOptions([])
+        setGenreTagOptions([])
       }
     }
 
@@ -103,6 +110,7 @@ export default function QuestionManagementPage() {
   const questionTotalPages = Math.max(Math.ceil(questionTotal / questionFilters.size), 1)
   const questionFirstItemNo = questionTotal === 0 ? 0 : (questionFilters.page - 1) * questionFilters.size + 1
   const questionLastItemNo = Math.min(questionFilters.page * questionFilters.size, questionTotal)
+  const editingArticle = viewMode === 'edit' && editingQuestion?.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE'
 
   function updateQuestionFilters(patch: Partial<QuestionFilterState>) {
     setQuestionFilters((current) => ({
@@ -208,6 +216,7 @@ export default function QuestionManagementPage() {
   function buildQuestionPayload(form: QuestionFormState): QuestionPayload | null {
     const tagCodes = parseCodeList(form.tagCodes)
     const standardAnswer = form.standardAnswer.trim()
+    const questionType = editingArticle ? 'TRANSLATION_ZH_TO_JA_ARTICLE' : 'TRANSLATION_ZH_TO_JA'
     const referenceAnswers = form.referenceAnswers
       .split('\n')
       .map((answer) => answer.trim())
@@ -223,13 +232,38 @@ export default function QuestionManagementPage() {
       setQuestionNotice({
         kind: 'error',
         title: '表单未填写完整',
-        message: '中文原文、语境、语法点、标签 code 和标准答案都必须填写。',
+        message: editingArticle
+          ? '中文文章、语境、生词提示、体裁和日文参考稿都必须填写。'
+          : '中文原文、语境、语法点、标签 code 和标准答案都必须填写。',
       })
       return null
     }
 
+    if (questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE') {
+      const sourceSegments = splitArticleSegments(form.sourceText)
+      const answerSegments = splitArticleSegments(standardAnswer)
+      const genreCodes = tagCodes.filter((code) => genreTagOptions.some((tag) => tag.code === code))
+      const sourceLength = sourceSegments.join('').replace(/\s/g, '').length
+      if (sourceSegments.length === 0 || sourceSegments.length !== answerSegments.length) {
+        setQuestionNotice({
+          kind: 'error',
+          title: '文章段落不一致',
+          message: '中文原文和日文参考稿必须按一句一段填写，并保持相同段落数和顺序。',
+        })
+        return null
+      }
+      if (sourceLength < 150 || sourceLength > 300) {
+        setQuestionNotice({ kind: 'error', title: '文章长度不合法', message: '中文文章长度必须为 150 到 300 个非空白字符。' })
+        return null
+      }
+      if (genreCodes.length !== 1 || tagCodes.length !== 1) {
+        setQuestionNotice({ kind: 'error', title: '请选择体裁', message: '文章题必须且只能选择 1 个体裁标签。' })
+        return null
+      }
+    }
+
     return {
-      questionType: 'TRANSLATION_ZH_TO_JA',
+      questionType,
       sourceText: form.sourceText.trim(),
       contextText: form.contextText.trim(),
       level: form.level,
@@ -246,12 +280,12 @@ export default function QuestionManagementPage() {
           primaryAnswer: true,
           sortOrder: 0,
         },
-        ...referenceAnswers.map((answer, index) => ({
+        ...(questionType === 'TRANSLATION_ZH_TO_JA' ? referenceAnswers.map((answer, index) => ({
           answerText: answer,
           answerType: 'REFERENCE' as const,
           primaryAnswer: false,
           sortOrder: index + 1,
-        })),
+        })) : []),
       ],
     }
   }
@@ -331,6 +365,13 @@ export default function QuestionManagementPage() {
               <section className="surface question-management-panel" aria-label="question query">
               <form className="question-filter-bar" onSubmit={(event) => event.preventDefault()}>
                 <label>
+                  <span>题型</span>
+                  <select value={questionFilters.questionType} onChange={(event) => updateQuestionFilters({ questionType: event.target.value as QuestionFilterState['questionType'] })}>
+                    <option value="TRANSLATION_ZH_TO_JA">短句翻译</option>
+                    <option value="TRANSLATION_ZH_TO_JA_ARTICLE">文章翻译</option>
+                  </select>
+                </label>
+                <label>
                   <span>JLPT 等级</span>
                   <select value={questionFilters.level} onChange={(event) => updateQuestionFilters({ level: event.target.value })}>
                     <option value="">全部</option>
@@ -390,6 +431,7 @@ export default function QuestionManagementPage() {
                   <thead>
                     <tr>
                       <th>ID</th>
+                      <th>题型</th>
                       <th>原文</th>
                       <th>等级</th>
                       <th>来源</th>
@@ -402,6 +444,7 @@ export default function QuestionManagementPage() {
                     {questions.map((question) => (
                       <tr key={question.id}>
                         <td data-label="ID">{question.id}</td>
+                        <td data-label="题型"><span className="question-type-badge">{formatQuestionType(question.questionType)}</span></td>
                         <td className="table-question-answer-cell" data-label="原文" title={question.sourceText}>{question.sourceText}</td>
                         <td data-label="等级">{question.level} / {question.difficulty}</td>
                         <td data-label="来源">{formatQuestionSourceType(question.sourceType)}</td>
@@ -487,7 +530,7 @@ export default function QuestionManagementPage() {
                     刷新
                   </button>
                   <button type="button" className="primary-button" onClick={handleStartCreateQuestion}>
-                    新建题目
+                    新建短句
                   </button>
                 </div>
               </div>
@@ -532,16 +575,22 @@ export default function QuestionManagementPage() {
                 {detailQuestion ? (
                   <dl className="question-details">
                     <div>
+                      <dt>题型</dt>
+                      <dd>{formatQuestionType(detailQuestion.questionType)}</dd>
+                    </div>
+                    <div>
                       <dt>中文原文</dt>
-                      <dd>{detailQuestion.sourceText}</dd>
+                      <dd>{detailQuestion.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE'
+                        ? <ArticleSegments text={detailQuestion.sourceText} />
+                        : detailQuestion.sourceText}</dd>
                     </div>
                     <div>
                       <dt>语境</dt>
                       <dd>{detailQuestion.contextText}</dd>
                     </div>
                     <div>
-                      <dt>语法点</dt>
-                      <dd>{detailQuestion.grammarPoint}</dd>
+                      <dt>{detailQuestion.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? '生词提示' : '语法点'}</dt>
+                      <dd className={detailQuestion.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? 'pre-wrap-text' : undefined}>{detailQuestion.grammarPoint}</dd>
                     </div>
                     <div>
                       <dt>属性</dt>
@@ -564,7 +613,9 @@ export default function QuestionManagementPage() {
                           {detailQuestion.answers.map((answer) => (
                             <li key={answer.id}>
                               <span>{answer.answerType === 'STANDARD' ? '标准' : '参考'}</span>
-                              <strong>{answer.answerText}</strong>
+                              <strong>{detailQuestion.questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE'
+                                ? <ArticleSegments text={answer.answerText} />
+                                : answer.answerText}</strong>
                             </li>
                           ))}
                         </ol>
@@ -581,7 +632,7 @@ export default function QuestionManagementPage() {
               <section className="surface question-form-panel" aria-label="question form">
                 <div className="section-title">
                   <span className="label">{viewMode === 'edit' ? '整体更新' : '人工录入'}</span>
-                  <strong>{viewMode === 'edit' && editingQuestion ? `编辑题目 #${editingQuestion.id}` : '新建题目'}</strong>
+                  <strong>{viewMode === 'edit' && editingQuestion ? `编辑${formatQuestionType(editingQuestion.questionType)} #${editingQuestion.id}` : '新建短句'}</strong>
                 </div>
 
                 <div className="action-row">
@@ -596,13 +647,20 @@ export default function QuestionManagementPage() {
                 </div>
 
                 <form className="question-edit-form" onSubmit={(event) => event.preventDefault()}>
+                  {viewMode === 'edit' && editingQuestion ? (
+                    <label>
+                      <span>题型</span>
+                      <input value={formatQuestionType(editingQuestion.questionType)} disabled />
+                    </label>
+                  ) : null}
                   <label className="wide-field">
-                    <span>中文原文</span>
+                    <span>{editingArticle ? '中文文章' : '中文原文'}</span>
                     <textarea
                       value={questionForm.sourceText}
-                      placeholder="输入中文句子"
+                      placeholder={editingArticle ? '按一句一段输入中文文章，句间保留一个空行' : '输入中文句子'}
                       onChange={(event) => updateQuestionForm({ sourceText: event.target.value })}
                     />
+                    {editingArticle ? <small className="field-hint">当前 {splitArticleSegments(questionForm.sourceText).length} 段；中文总长 {questionForm.sourceText.replace(/\s/g, '').length} / 150–300。</small> : null}
                   </label>
 
                   <label className="wide-field">
@@ -637,12 +695,21 @@ export default function QuestionManagementPage() {
                   </label>
 
                   <label className="wide-field">
-                    <span>语法点</span>
-                    <input
-                      value={questionForm.grammarPoint}
-                      placeholder="例如：予定を表す表現"
-                      onChange={(event) => updateQuestionForm({ grammarPoint: event.target.value })}
-                    />
+                    <span>{editingArticle ? '生词提示' : '语法点'}</span>
+                    {editingArticle ? (
+                      <textarea
+                        value={questionForm.grammarPoint}
+                        maxLength={255}
+                        placeholder="每行填写“中文词语：日语表达（读音）”"
+                        onChange={(event) => updateQuestionForm({ grammarPoint: event.target.value })}
+                      />
+                    ) : (
+                      <input
+                        value={questionForm.grammarPoint}
+                        placeholder="例如：予定を表す表現"
+                        onChange={(event) => updateQuestionForm({ grammarPoint: event.target.value })}
+                      />
+                    )}
                   </label>
 
                   <div className="checkbox-row wide-field">
@@ -672,44 +739,57 @@ export default function QuestionManagementPage() {
                     </label>
                   </div>
 
-                  <label className="wide-field">
-                    <span>标签 code</span>
-                    <input
-                      value={questionForm.tagCodes}
-                      placeholder="至少包含 1 个场景标签 code，多个用逗号分隔"
-                      onChange={(event) => updateQuestionForm({ tagCodes: event.target.value })}
-                    />
-                  </label>
+                  {editingArticle ? (
+                    <label className="wide-field">
+                      <span>文章体裁</span>
+                      <select value={parseCodeList(questionForm.tagCodes)[0] ?? ''} onChange={(event) => updateQuestionForm({ tagCodes: event.target.value })}>
+                        <option value="">请选择体裁</option>
+                        {genreTagOptions.map((tag) => <option key={tag.id} value={tag.code}>{tag.name} / {tag.code}</option>)}
+                      </select>
+                    </label>
+                  ) : (
+                    <>
+                      <label className="wide-field">
+                        <span>标签 code</span>
+                        <input
+                          value={questionForm.tagCodes}
+                          placeholder="至少包含 1 个场景标签 code，多个用逗号分隔"
+                          onChange={(event) => updateQuestionForm({ tagCodes: event.target.value })}
+                        />
+                      </label>
 
-                  <div className="tag-option-row wide-field">
-                    {tagOptions.slice(0, 16).map((tag) => (
-                      <button key={tag.id} type="button" onClick={() => appendQuestionTagCode(tag.code)}>
-                        {tag.name}
-                      </button>
-                    ))}
-                  </div>
+                      <div className="tag-option-row wide-field">
+                        {tagOptions.slice(0, 16).map((tag) => (
+                          <button key={tag.id} type="button" onClick={() => appendQuestionTagCode(tag.code)}>
+                            {tag.name}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
 
                   <label className="wide-field">
-                    <span>标准答案</span>
+                    <span>{editingArticle ? '日文参考稿' : '标准答案'}</span>
                     <textarea
                       value={questionForm.standardAnswer}
-                      placeholder="输入主标准答案"
+                      placeholder={editingArticle ? '按一句一段输入日文参考稿，并与中文段落顺序一致' : '输入主标准答案'}
                       onChange={(event) => updateQuestionForm({ standardAnswer: event.target.value })}
                     />
+                    {editingArticle ? <small className="field-hint">当前 {splitArticleSegments(questionForm.standardAnswer).length} 段。</small> : null}
                   </label>
 
-                  <label className="wide-field">
+                  {!editingArticle ? <label className="wide-field">
                     <span>参考答案</span>
                     <textarea
                       value={questionForm.referenceAnswers}
                       placeholder="可选，每行一个参考答案"
                       onChange={(event) => updateQuestionForm({ referenceAnswers: event.target.value })}
                     />
-                  </label>
+                  </label> : null}
 
                   <div className="action-row wide-field">
                     <button type="button" className="primary-button" disabled={questionSaving} onClick={handleSaveQuestion}>
-                      {questionSaving ? '保存中' : viewMode === 'edit' ? '保存修改' : '创建题目'}
+                      {questionSaving ? '保存中' : viewMode === 'edit' ? '保存修改' : '创建短句'}
                     </button>
                     <button
                       type="button"
@@ -762,4 +842,22 @@ function formatQuestionSourceType(sourceType: Question['sourceType']) {
   if (sourceType === 'AI') return 'AI'
   if (sourceType === 'REVIEW_DERIVED') return '复习衍生'
   return '人工'
+}
+
+function formatQuestionType(questionType: Question['questionType']) {
+  return questionType === 'TRANSLATION_ZH_TO_JA_ARTICLE' ? '文章翻译' : '短句翻译'
+}
+
+function splitArticleSegments(text: string) {
+  const normalized = text.replace(/\r\n?/g, '\n').trim()
+  if (!normalized) return []
+  return normalized.split(/\n\s*\n/).map((segment) => segment.trim()).filter(Boolean)
+}
+
+function ArticleSegments({ text }: { text: string }) {
+  return (
+    <ol className="article-segment-list compact">
+      {splitArticleSegments(text).map((segment, index) => <li key={`${index}-${segment}`}>{segment}</li>)}
+    </ol>
+  )
 }
