@@ -33,7 +33,9 @@ class AiReviewPromptBuilderTest {
         var prompt = new AiReviewQuestionPromptBuilder(new ObjectMapper()).build(
                 userErrorType(), errorType(), List.of(question()), Map.of(10L, List.of(answer())));
 
-        assertThat(prompt.systemPrompt()).contains("一道", "1到10个答案");
+        assertThat(prompt.systemPrompt())
+                .contains("一道", "1到10个答案")
+                .contains("contextText只能客观说明", "不得包含考查意图", "语法或词汇要求只写入grammarPoint");
         assertThat(prompt.userPrompt()).contains("请翻译", "電車に間に合いました");
     }
 

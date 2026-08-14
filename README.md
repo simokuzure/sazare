@@ -111,6 +111,7 @@ $env:GOOGLE_AI_API_KEY = "你的 API Key"
 - `GOOGLE_AI_MODEL`：文本生成与评分模型，默认 `gemini-3.6-flash`。
 - `GOOGLE_AI_EMBEDDING_MODEL`：向量模型，默认 `gemini-embedding-001`。
 - `GOOGLE_AI_BASE_URL`：Google AI API 地址，默认 `https://generativelanguage.googleapis.com/v1beta`。
+- `AI_REQUEST_TIMEOUT`：AI 请求超时时间，默认 `180s`；例如设置为 `240s`。
 
 不要将 API Key 写入代码、配置文件或提交记录。
 

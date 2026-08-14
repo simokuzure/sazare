@@ -2,10 +2,13 @@ package com.jt.learning.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
+
 @ConfigurationProperties(prefix = "ai")
 public class AiProperties {
 
     private String provider = "google";
+    private Duration requestTimeout = Duration.ofSeconds(180);
     private Providers providers = new Providers();
 
     public String getProvider() {
@@ -14,6 +17,14 @@ public class AiProperties {
 
     public void setProvider(String provider) {
         this.provider = provider;
+    }
+
+    public Duration getRequestTimeout() {
+        return requestTimeout;
+    }
+
+    public void setRequestTimeout(Duration requestTimeout) {
+        this.requestTimeout = requestTimeout;
     }
 
     public Providers getProviders() {

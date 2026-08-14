@@ -20,21 +20,18 @@ public class JavaAiProviderHttpClient implements AiProviderHttpClient {
     private static final int ERROR_RESPONSE_LOG_LIMIT = 2_000;
 
     private final HttpClient httpClient;
+    private final Duration requestTimeout;
 
-    public JavaAiProviderHttpClient(HttpClient httpClient) {
+    public JavaAiProviderHttpClient(HttpClient httpClient, Duration requestTimeout) {
         this.httpClient = httpClient;
+        this.requestTimeout = validateRequestTimeout(requestTimeout);
     }
 
     @Override
     public AiProviderHttpResponse postJson(URI uri, Map<String, String> headers, String body) {
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(uri)
-                .timeout(Duration.ofSeconds(60))
-                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
-        headers.forEach(requestBuilder::header);
-
         try {
             HttpResponse<String> response = httpClient.send(
-                    requestBuilder.build(),
+                    buildPostRequest(uri, headers, body),
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
             );
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
@@ -54,6 +51,21 @@ public class JavaAiProviderHttpClient implements AiProviderHttpClient {
             log.error("AI 服务调用失败: endpoint={}", endpointForLog(uri), exception);
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 服务请求失败");
         }
+    }
+
+    HttpRequest buildPostRequest(URI uri, Map<String, String> headers, String body) {
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(uri)
+                .timeout(requestTimeout)
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
+        headers.forEach(requestBuilder::header);
+        return requestBuilder.build();
+    }
+
+    private Duration validateRequestTimeout(Duration timeout) {
+        if (timeout == null || timeout.isZero() || timeout.isNegative()) {
+            throw new IllegalArgumentException("AI 请求超时时间必须大于 0");
+        }
+        return timeout;
     }
 
     private String endpointForLog(URI uri) {

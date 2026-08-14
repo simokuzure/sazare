@@ -696,11 +696,15 @@ textarea:focus {
 
 .grammar-point button {
   flex: 0 0 auto;
+  min-height: 28px;
+  padding: 3px 8px;
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .grammar-point span {
   min-width: 0;
-  padding-top: 7px;
+  padding-top: 4px;
 }
 
 .tag-chip-row {

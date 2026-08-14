@@ -35,11 +35,11 @@ import java.util.function.Supplier;
 public class AiClientConfig {
 
     @Bean
-    public AiProviderHttpClient aiProviderHttpClient() {
+    public AiProviderHttpClient aiProviderHttpClient(AiProperties aiProperties) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
-        return new JavaAiProviderHttpClient(httpClient);
+        return new JavaAiProviderHttpClient(httpClient, aiProperties.getRequestTimeout());
     }
 
     @Bean

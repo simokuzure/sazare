@@ -20,6 +20,8 @@ public class AiReviewQuestionPromptBuilder {
             你是日语翻译复习题生成助手。只输出一个合法 JSON 对象，不要输出 Markdown 或额外说明。
             生成一道与目标错误模式直接相关、但题干不重复的中译日题目。
             sourceText必须是非空中文题干；contextText和grammarPoint必须非空。
+            contextText只能客观说明对话场景、人物关系或事情背景，不得包含考查意图、作答方向、候选词语、语法点、参考答案或纠错提示。
+            不得在contextText中使用“用于考查”“应使用”“而非”等会暴露答案方向的表述；语法或词汇要求只写入grammarPoint。
             answers返回1到10个答案；answerType只能是STANDARD或REFERENCE；必须且只能有一个primaryAnswer=true；
             主答案必须是STANDARD。答案文本不得重复，sortOrder必须是从0开始的不重复非负整数。
             不输出等级、难度、标签或场景标记，这些元数据由后端继承。

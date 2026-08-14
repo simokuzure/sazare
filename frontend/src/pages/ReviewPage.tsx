@@ -497,7 +497,7 @@ function ReviewCardHeading({ detail, showDescription }: { detail: ReviewCardDeta
 }
 
 function ReviewSchedule({ detail }: { detail: ReviewCardDetail }) {
-  return <dl className="review-sm2-grid"><div><dt>难度因子</dt><dd>{detail.easeFactor.toFixed(4)}</dd></div><div><dt>连续成功</dt><dd>{detail.repetitionCount}</dd></div><div><dt>当前间隔</dt><dd>{detail.intervalDays} 天</dd></div><div><dt>累计失败</dt><dd>{detail.lapseCount}</dd></div><div><dt>最近复习</dt><dd>{formatDateTime(detail.lastReviewedAt)}</dd></div><div><dt>下次到期</dt><dd>{formatDateTime(detail.dueAt)}</dd></div></dl>
+  return <dl className="review-sm2-grid"><div><dt>难度因子</dt><dd>{detail.easeFactor.toFixed(4)}</dd></div><div><dt>连续成功</dt><dd>{detail.repetitionCount}</dd></div><div><dt>当前间隔</dt><dd>{detail.intervalDays} 天</dd></div><div><dt>累计错误次数</dt><dd>{detail.lapseCount}</dd></div><div><dt>最近复习</dt><dd>{formatDateTime(detail.lastReviewedAt)}</dd></div><div><dt>下次到期</dt><dd>{formatDateTime(detail.dueAt)}</dd></div></dl>
 }
 
 function ReviewResultView({ card, result, submittedAnswer, candidates, notice, derivedGenerating, nextCardLoading, onGenerate, onOpenErrorConfirmation, onContinueEarly, onNext, onBack, children }: {
