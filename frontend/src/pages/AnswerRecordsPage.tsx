@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getErrorMessage } from '../api/client'
 import { fetchUserAnswerDetail, fetchUserAnswers } from '../api/userAnswerApi'
+import PageHeader from '../components/PageHeader'
 import type { AnswerStatus, UserAnswerDetail, UserAnswerFilterState, UserAnswerRecord } from '../types/userAnswer'
 
 type AnswerRecordViewMode = 'list' | 'detail'
@@ -104,9 +105,15 @@ export default function AnswerRecordsPage() {
   }
 
   return (
-    <section className="page-content" aria-label="answer records page">
+    <section className="page-content target-page answer-records-page" aria-label="answer records page">
       {viewMode === 'list' ? (
-      <section className="surface answer-records-panel" aria-label="answer records query">
+      <>
+      <PageHeader
+        eyebrow="答题记录"
+        title="答题记录"
+        description="查看历次作答的评分结果，可按题型、状态、分数与等级筛选。"
+      />
+      <section className="surface answer-records-panel target-list-panel" aria-label="answer records query">
         <form className="answer-record-filter-bar" onSubmit={(event) => event.preventDefault()}>
           <label>
             <span>题型</span>
@@ -211,7 +218,7 @@ export default function AnswerRecordsPage() {
                   <td className="table-question-answer-cell" data-label="中文原文" title={record.sourceText ?? undefined}>{record.sourceText ?? '-'}</td>
                   <td data-label="等级/难度">{formatLevelDifficulty(record)}</td>
                   <td className="table-question-answer-cell" data-label="用户答案" title={record.answerText}>{record.answerText}</td>
-                  <td data-label="状态">{STATUS_LABELS[record.answerStatus]}</td>
+                  <td data-label="状态"><span className={record.answerStatus === 'REVIEWED' ? 'data-badge is-success' : record.answerStatus === 'FAILED' ? 'data-badge is-danger' : 'data-badge'}>{STATUS_LABELS[record.answerStatus]}</span></td>
                   <td data-label="总分">{formatReviewedScore(record.answerStatus, record.totalScore)}</td>
                   <td data-label="四项评分">{formatScores(record)}</td>
                   <td data-label="提交时间">{formatDateTime(record.createdAt)}</td>
@@ -270,15 +277,16 @@ export default function AnswerRecordsPage() {
           </div>
         </div>
       </section>
+      </>
       ) : null}
 
       {viewMode === 'detail' ? (
-        <section className="surface answer-records-panel" aria-label="answer record detail">
-          <div className="action-row">
-            <button type="button" onClick={handleBackToList}>
-              返回列表
-            </button>
-          </div>
+        <section className="answer-records-panel target-detail-panel" aria-label="answer record detail">
+          <PageHeader
+            eyebrow="详情"
+            title={detail ? `答题记录 #${detail.id}` : '答题记录详情'}
+            actions={<button type="button" onClick={handleBackToList}>返回列表</button>}
+          />
 
           {detailLoading ? (
             <div className="notice">
@@ -296,11 +304,6 @@ export default function AnswerRecordsPage() {
 
           {detail ? (
             <>
-              <div className="section-title">
-                <span className="label">详情</span>
-                <strong>答题记录 #{detail.id}</strong>
-              </div>
-
               {detail.questionId == null ? (
                 <dl className="question-details">
                   <div><dt>题型</dt><dd>日语纠错</dd></div>

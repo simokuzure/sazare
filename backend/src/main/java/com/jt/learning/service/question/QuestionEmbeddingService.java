@@ -20,7 +20,7 @@ import java.util.List;
 @Service
 public class QuestionEmbeddingService {
 
-    public static final double SIMILARITY_THRESHOLD = 0.90d;
+    public static final double SIMILARITY_THRESHOLD = 0.80d;
     private static final int DIMENSION = 768;
 
     private final QuestionEmbeddingMapper questionEmbeddingMapper;

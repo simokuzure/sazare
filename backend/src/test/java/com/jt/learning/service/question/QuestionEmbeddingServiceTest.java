@@ -46,6 +46,8 @@ class QuestionEmbeddingServiceTest {
         QuestionEmbeddingService service = new QuestionEmbeddingService(mock(QuestionEmbeddingMapper.class), mock(AiEmbeddingClient.class));
 
         assertThat(service.isSimilar(vector(1f), vector(1f))).isTrue();
+        assertThat(service.isSimilar(vector(1f), cosineVector(0.8f))).isTrue();
+        assertThat(service.isSimilar(vector(1f), cosineVector(0.79f))).isFalse();
         assertThat(service.isSimilar(vector(1f), vectorAt(1, 1f))).isFalse();
     }
 
@@ -67,6 +69,14 @@ class QuestionEmbeddingServiceTest {
         Float[] values = new Float[768];
         java.util.Arrays.fill(values, 0f);
         values[index] = value;
+        return java.util.Arrays.asList(values);
+    }
+
+    private List<Float> cosineVector(float similarity) {
+        Float[] values = new Float[768];
+        java.util.Arrays.fill(values, 0f);
+        values[0] = similarity;
+        values[1] = (float) Math.sqrt(1 - similarity * similarity);
         return java.util.Arrays.asList(values);
     }
 }

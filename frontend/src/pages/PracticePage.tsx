@@ -4,6 +4,7 @@ import { confirmUserAnswerErrors, fetchUserErrorTypes } from '../api/userErrorAp
 import { fetchRandomQuestion, generateQuestions, submitQuestionAnswer } from '../api/questionApi'
 import { fetchTags } from '../api/tagApi'
 import ErrorConfirmationModal from '../components/ErrorConfirmationModal'
+import PageHeader from '../components/PageHeader'
 import {
   type ErrorCandidateState,
   toErrorCandidateState,
@@ -48,7 +49,10 @@ export default function PracticePage() {
 
   return (
     <section className="page-content" aria-label="练习">
-      <div className="practice-tabs" role="tablist" aria-label="翻译练习类型">
+      <PageHeader
+        title="翻译练习"
+        description="选择练习模式，生成题目并提交作答，AI 会即时评分与纠错。"
+        actions={<div className="practice-tabs" role="tablist" aria-label="翻译练习类型">
         <button
           id="sentence-practice-tab"
           type="button"
@@ -82,7 +86,8 @@ export default function PracticePage() {
         >
           日语纠错
         </button>
-      </div>
+      </div>}
+      />
 
       <div
         id="sentence-practice-panel"

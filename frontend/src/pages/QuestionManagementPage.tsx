@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getErrorMessage } from '../api/client'
 import { fetchTags as queryTags } from '../api/tagApi'
 import { deleteQuestion, fetchQuestion, fetchQuestions as queryQuestions, parseCodeList, saveQuestion, toggleQuestionEnabled } from '../api/questionApi'
+import PageHeader from '../components/PageHeader'
 import type { PracticeNotice } from '../types/api'
 import type { Tag } from '../types/tag'
 import type { Question, QuestionFilterState, QuestionFormState, QuestionPayload } from '../types/question'
@@ -353,7 +354,15 @@ export default function QuestionManagementPage() {
   }
 
   return (
-          <section className="page-content" aria-label="question management page">
+          <section className="page-content target-page question-page" aria-label="question management page">
+            {viewMode === 'list' ? (
+              <PageHeader
+                eyebrow="问题管理"
+                title="问题管理"
+                description="管理题库中的短句与文章，可筛选并进行查看、编辑、停用或删除。"
+                actions={<button type="button" className="primary-button" onClick={handleStartCreateQuestion}>新建短句</button>}
+              />
+            ) : null}
             {questionNotice ? (
               <div className={questionNotice.kind === 'error' ? 'notice is-error' : 'notice'}>
                 <strong>{questionNotice.title}</strong>
@@ -362,7 +371,7 @@ export default function QuestionManagementPage() {
             ) : null}
 
             {viewMode === 'list' ? (
-              <section className="surface question-management-panel" aria-label="question query">
+              <section className="surface question-management-panel target-list-panel" aria-label="question query">
               <form className="question-filter-bar" onSubmit={(event) => event.preventDefault()}>
                 <label>
                   <span>题型</span>
@@ -447,8 +456,8 @@ export default function QuestionManagementPage() {
                         <td data-label="题型"><span className="question-type-badge">{formatQuestionType(question.questionType)}</span></td>
                         <td className="table-question-answer-cell" data-label="原文" title={question.sourceText}>{question.sourceText}</td>
                         <td data-label="等级">{question.level} / {question.difficulty}</td>
-                        <td data-label="来源">{formatQuestionSourceType(question.sourceType)}</td>
-                        <td data-label="状态">{question.enabled ? '启用' : '停用'}</td>
+                        <td data-label="来源"><span className={question.sourceType === 'AI' ? 'data-badge is-brand' : 'data-badge'}>{formatQuestionSourceType(question.sourceType)}</span></td>
+                        <td data-label="状态"><span className={question.enabled ? 'data-badge is-success' : 'data-badge'}>{question.enabled ? '启用' : '停用'}</span></td>
                         <td className="question-tags-cell" data-label="标签">
                           <span className="tag-chip-row">
                             {question.tags.slice(0, 3).map((tag) => (
@@ -529,9 +538,6 @@ export default function QuestionManagementPage() {
                   <button type="button" disabled={questionLoading} onClick={refreshQuestions}>
                     刷新
                   </button>
-                  <button type="button" className="primary-button" onClick={handleStartCreateQuestion}>
-                    新建短句
-                  </button>
                 </div>
               </div>
               </section>
@@ -539,16 +545,12 @@ export default function QuestionManagementPage() {
 
             {viewMode === 'detail' ? (
               <section className="surface question-detail-panel" aria-label="question detail">
-                <div className="section-title">
-                  <span className="label">详情</span>
-                  <strong>{detailQuestion ? `题目 #${detailQuestion.id}` : '未选择题目'}</strong>
-                </div>
-
-                <div className="action-row">
-                  <button type="button" onClick={handleBackToQuestionList}>
-                    返回列表
-                  </button>
-                  {detailQuestion ? (
+                <PageHeader
+                  eyebrow="详情"
+                  title={detailQuestion ? `题目 #${detailQuestion.id}` : '题目详情'}
+                  actions={<>
+                    <button type="button" onClick={handleBackToQuestionList}>返回列表</button>
+                    {detailQuestion ? (
                     <>
                       <button type="button" className="primary-button" onClick={() => handleStartEditQuestion(detailQuestion)}>
                         编辑题目
@@ -569,8 +571,9 @@ export default function QuestionManagementPage() {
                         删除
                       </button>
                     </>
-                  ) : null}
-                </div>
+                    ) : null}
+                  </>}
+                />
 
                 {detailQuestion ? (
                   <dl className="question-details">
@@ -630,21 +633,18 @@ export default function QuestionManagementPage() {
 
             {viewMode === 'create' || viewMode === 'edit' ? (
               <section className="surface question-form-panel" aria-label="question form">
-                <div className="section-title">
-                  <span className="label">{viewMode === 'edit' ? '整体更新' : '人工录入'}</span>
-                  <strong>{viewMode === 'edit' && editingQuestion ? `编辑${formatQuestionType(editingQuestion.questionType)} #${editingQuestion.id}` : '新建短句'}</strong>
-                </div>
-
-                <div className="action-row">
-                  <button type="button" onClick={handleBackToQuestionList}>
-                    返回列表
-                  </button>
-                  {viewMode === 'edit' && editingQuestion ? (
+                <PageHeader
+                  eyebrow={viewMode === 'edit' ? '整体更新' : '人工录入'}
+                  title={viewMode === 'edit' && editingQuestion ? `编辑${formatQuestionType(editingQuestion.questionType)} #${editingQuestion.id}` : '新建短句'}
+                  actions={<>
+                    <button type="button" onClick={handleBackToQuestionList}>返回列表</button>
+                    {viewMode === 'edit' && editingQuestion ? (
                     <button type="button" onClick={() => handleSelectManagedQuestion(editingQuestion.id)}>
                       查看详情
                     </button>
-                  ) : null}
-                </div>
+                    ) : null}
+                  </>}
+                />
 
                 <form className="question-edit-form" onSubmit={(event) => event.preventDefault()}>
                   {viewMode === 'edit' && editingQuestion ? (

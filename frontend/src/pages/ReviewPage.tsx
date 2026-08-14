@@ -8,6 +8,7 @@ import {
 } from '../api/reviewApi'
 import { confirmUserAnswerErrors, fetchUserErrorTypes } from '../api/userErrorApi'
 import ErrorConfirmationModal from '../components/ErrorConfirmationModal'
+import PageHeader from '../components/PageHeader'
 import {
   type ErrorCandidateState,
   toErrorCandidateState,
@@ -383,18 +384,20 @@ export default function ReviewPage() {
     </ReviewResultView>
   }
 
-  return <section className="page-content review-page" aria-label="错题复习">
-    <section className="surface review-surface review-workbench">
-      <div className="section-title review-title-row">
-        <div><span className="label">错题复习</span><strong>复习卡片</strong></div>
-        <div className="segmented-control review-list-modes" aria-label="复习卡片视图">
+  return <section className="page-content target-page review-page" aria-label="错题复习">
+    <PageHeader
+      eyebrow="错题复习"
+      title="复习卡片"
+      description="按错误模式聚合的间隔复习计划，跟踪周期进度、待重试与下次到期时间。"
+      actions={<div className="segmented-control review-list-modes" aria-label="复习卡片视图">
           {(['DUE', 'ACTIVE', 'MASTERED'] as const).map((mode) => (
             <button key={mode} type="button" className={filters.mode === mode ? 'is-selected' : ''} onClick={() => changeMode(mode)}>
               {listModeLabel(mode)}
             </button>
           ))}
-        </div>
-      </div>
+        </div>}
+    />
+    <section className="surface review-surface review-workbench target-list-panel">
 
       {listError ? <Notice notice={{ kind: 'error', title: '加载失败', message: listError }} actionLabel="重试" onAction={() => setListReloadToken((value) => value + 1)} /> : null}
       {listLoading ? <p className="loading-text">正在加载复习卡片...</p> : null}
@@ -436,9 +439,9 @@ function ReviewCardOverview({ detail, loading, error, onStart, onStartEarly, onR
   onReload: () => void
   onBack: () => void
 }) {
-  return <section className="page-content review-page" aria-label="复习卡片查看">
+  return <section className="page-content target-page review-page" aria-label="复习卡片查看">
+    <PageHeader eyebrow="错题复习" title="复习卡片详情" actions={<><button type="button" onClick={onBack}>返回列表</button><button type="button" disabled={loading} onClick={onReload}>重新加载</button></>} />
     <section className="surface review-surface review-detail-surface">
-      <header className="review-detail-toolbar"><button type="button" onClick={onBack}>返回列表</button><button type="button" disabled={loading} onClick={onReload}>重新加载</button></header>
       {loading && !detail ? <p className="loading-text">正在加载卡片详情...</p> : null}
       {error ? <Notice notice={{ kind: 'error', title: '卡片加载失败', message: error }} actionLabel="重新加载" onAction={onReload} /> : null}
       {detail ? <>
@@ -469,9 +472,9 @@ function ReviewDetailView({ detail, loading, error, answerText, submitting, deri
   onReload: () => void
   onBack: () => void
 }) {
-  return <section className="page-content review-page" aria-label="复习卡片详情">
+  return <section className="page-content target-page review-page" aria-label="复习卡片详情">
+    <PageHeader eyebrow="错题复习" title={earlyReview ? '提前复习' : '复习卡片详情'} actions={<><button type="button" disabled={submitting} onClick={onBack}>返回列表</button><button type="button" disabled={loading || submitting || derivedGenerating} onClick={onReload}>重新加载</button></>} />
     <section className="surface review-surface review-detail-surface">
-      <header className="review-detail-toolbar"><button type="button" disabled={submitting} onClick={onBack}>返回列表</button><button type="button" disabled={loading || submitting || derivedGenerating} onClick={onReload}>重新加载</button></header>
       {loading && !detail ? <p className="loading-text">正在加载卡片详情...</p> : null}
       {error ? <Notice notice={{ kind: 'error', title: '卡片加载失败', message: error }} actionLabel="重新加载" onAction={onReload} /> : null}
       {detail ? <>
@@ -517,7 +520,8 @@ function ReviewResultView({ card, result, submittedAnswer, candidates, notice, d
 }) {
   const passed = result.result === 'PASS'
   const savedCount = candidates.filter((candidate) => candidate.saved).length
-  return <section className="page-content review-page" aria-label="复习结果">
+  return <section className="page-content target-page review-page" aria-label="复习结果">
+    <PageHeader eyebrow="错题复习" title="复习结果" />
     <section className="surface review-surface review-result-surface">
       <div className={`review-result-banner ${passed ? 'is-pass' : 'is-fail'}`}><div><span className="label">本次评分</span><h2>{passed ? '回答通过' : '需要重试'}</h2><p>{result.feedback}</p></div><div className="review-score-summary"><div className="review-total-score"><span>总分</span><strong>{formatTotalScore(result.totalScore)}</strong><small>/ 100</small></div><div className="review-quality"><span>复习质量</span><strong>{result.quality}</strong><small>/ 5</small></div></div></div>
       {notice ? <Notice notice={notice} /> : null}

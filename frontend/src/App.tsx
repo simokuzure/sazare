@@ -41,11 +41,14 @@ function App() {
 
   return (
     <main className="app-shell">
-      <section className="workspace">
-        <header className="app-header">
+      <header className="app-header">
+        <div className="app-header-inner">
           <div className="title-group">
-            <div className="title-row">
-              <h1>日语翻译练习</h1>
+            <div className="brand-row">
+              <button type="button" className="brand-link" onClick={() => setActivePage('practice')} aria-label="返回练习首页">
+                <span className="brand-mark" aria-hidden="true">訳</span>
+                <h1>日语翻译练习</h1>
+              </button>
               <StatusBadge label="后端服务" value={backendStatus} />
             </div>
           </div>
@@ -63,8 +66,10 @@ function App() {
               </button>
             ))}
           </nav>
-        </header>
+        </div>
+      </header>
 
+      <section className="workspace">
         <div hidden={activePage !== 'practice'}>
           <PracticePage />
         </div>

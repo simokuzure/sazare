@@ -23,7 +23,7 @@ class QuestionEmbeddingMapperSqlTest {
 
         BoundSql boundSql = configuration
                 .getMappedStatement("com.jt.learning.mapper.QuestionEmbeddingMapper.selectSimilarQuestionEmbeddings")
-                .getBoundSql(Map.of("embedding", "[0.1]", "threshold", 0.9d));
+                .getBoundSql(Map.of("embedding", "[0.1]", "threshold", 0.8d));
 
         assertThat(boundSql.getSql())
                 .contains("q.deleted = false")
