@@ -5,6 +5,7 @@ import com.jt.learning.dto.AiQuestionGenerationRequest;
 import com.jt.learning.dto.AiQuestionTagOptionDTO;
 import com.jt.learning.service.ai.AiQuestionClient;
 import com.jt.learning.service.ai.AiQuestionPrompt;
+import com.jt.learning.service.ai.prompt.ArticleGenreRoleRegistry;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
@@ -41,26 +42,26 @@ public class MockAiQuestionClient implements AiQuestionClient {
     }
 
     @Override
-    public String generateArticle(AiQuestionPrompt prompt, AiArticleGenerationRequest request) {
+    public String generateArticle(AiQuestionPrompt prompt, AiArticleGenerationRequest request, String seed) {
         List<String> chineseSentences = List.of(
-                "上周末，我和朋友决定去郊外的一座小镇旅行。",
-                "我们原本计划乘早班电车出发，却因为看错时间错过了车。",
-                "下一班车要等一个小时，所以我们在车站附近吃了早餐。",
-                "到达小镇时，天空突然下起了大雨。",
-                "我们没有带伞，只好跑进一家旧书店避雨。",
-                "店主热情地介绍了当地的历史，还推荐了一家安静的咖啡馆。",
-                "雨停以后，我们按照他的建议慢慢参观了老街。",
-                "虽然行程和预想完全不同，但这次意外让旅行变得更加难忘。"
+                "我所在的社区图书馆最近把一间长期闲置的资料室改成了夜间阅览区。",
+                "它不增加闭馆时间，而是让登记过的夜班工作者使用独立入口。",
+                "第一位申请者是一名护士，她常在清晨下班后等待首班公交车。",
+                "过去她只能在便利店休息，如今可以安静地整理学习笔记。",
+                "管理员发现，夜间使用者需要的并不是更多书籍，而是稳定的灯光和插座。",
+                "于是馆方调整了清洁时段，也取消了原先循环播放的提示广播。",
+                "试行期间仍有人担心管理成本，社区因此每月公开用电量和使用记录。",
+                "这项安排尚未决定是否长期保留，但它改变了人们对公共空间开放时间的理解。"
         );
         List<String> japaneseSentences = List.of(
-                "先週末、友人と郊外の小さな町へ旅行することにしました。",
-                "朝早い電車で出発する予定でしたが、時間を見間違えて乗り遅れてしまいました。",
-                "次の電車まで一時間あったので、駅の近くで朝食を取りました。",
-                "町に着くと、空から急に激しい雨が降り始めました。",
-                "傘を持っていなかったため、古い本屋に駆け込んで雨宿りをしました。",
-                "店主は親切に町の歴史を教え、静かな喫茶店も紹介してくれました。",
-                "雨がやんだ後、私たちは彼の勧めに従って古い町並みをゆっくり見て回りました。",
-                "予定とはまったく違う旅になりましたが、その偶然のおかげで忘れられない思い出になりました。"
+                "私の住む地域の図書館では最近、長く使われていなかった資料室を夜間閲覧室に改装しました。",
+                "閉館時間を延ばすのではなく、登録した夜勤労働者が専用入口を利用する仕組みです。",
+                "最初の申請者は看護師で、早朝に勤務を終えてから始発バスを待つことがよくあります。",
+                "以前はコンビニで休むしかありませんでしたが、今は静かに学習ノートを整理できます。",
+                "管理者は、夜間利用者に必要なのは本の追加ではなく、安定した照明とコンセントだと気づきました。",
+                "そこで図書館は清掃時間を調整し、繰り返し流していた案内放送も取りやめました。",
+                "試行中も管理費を心配する声があるため、地域では毎月の電力使用量と利用記録を公開しています。",
+                "この取り組みを続けるかは未定ですが、公共空間の開放時間に対する人々の考え方を変えました。"
         );
         List<Map<String, Object>> sentences = new ArrayList<>();
         for (int index = 0; index < chineseSentences.size(); index++) {
@@ -72,16 +73,26 @@ public class MockAiQuestionClient implements AiQuestionClient {
         }
         Map<String, Object> article = new LinkedHashMap<>();
         article.put("questionType", "TRANSLATION_ZH_TO_JA_ARTICLE");
-        article.put("contextText", "叙事文，使用自然且连贯的书面语。");
+        article.put("contextText", "介绍社区公共空间试行安排，使用自然连贯的书面语。");
         article.put("level", request.level());
         article.put("difficulty", request.difficulty());
-        article.put("grammarPoint", "郊外：郊外（こうがい）\n早班电车：始発電車（しはつでんしゃ）\n避雨：雨宿り（あまやどり）\n老街：古い町並み（ふるいまちなみ）");
+        article.put("grammarPoint", "闲置：遊休（ゆうきゅう）\n夜班：夜勤（やきん）\n插座：コンセント\n试行：試行（しこう）");
         article.put("spoken", false);
         article.put("business", false);
         article.put("exam", false);
         article.put("sentences", sentences);
+        Map<String, String> roles = new LinkedHashMap<>();
+        ArticleGenreRoleRegistry.rolesFor(request.genreTagCode())
+                .forEach((key, description) -> roles.put(key, "围绕夜间阅览区的" + description));
+        Map<String, Object> blueprint = new LinkedHashMap<>();
+        blueprint.put("seed", seed);
+        blueprint.put("coreConcept", "公共阅览空间与夜班工作者");
+        blueprint.put("roles", roles);
         try {
-            return objectMapper.writeValueAsString(Map.of("article", article));
+            return objectMapper.writeValueAsString(Map.of(
+                    "blueprint", blueprint,
+                    "article", article
+            ));
         } catch (JacksonException exception) {
             throw new IllegalStateException("Mock 文章 AI JSON 序列化失败", exception);
         }

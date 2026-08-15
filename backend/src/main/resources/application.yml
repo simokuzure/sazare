@@ -25,6 +25,8 @@ ai:
       embedding-model: ${GOOGLE_AI_EMBEDDING_MODEL:gemini-embedding-001}
       api-key: ${GOOGLE_AI_API_KEY:}
       base-url: ${GOOGLE_AI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
+      article-temperature: ${GOOGLE_AI_ARTICLE_TEMPERATURE:1.1}
+      article-top-p: ${GOOGLE_AI_ARTICLE_TOP_P:0.98}
 
 mybatis:
   mapper-locations: classpath*:mapper/**/*.xml

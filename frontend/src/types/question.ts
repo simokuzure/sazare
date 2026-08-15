@@ -76,7 +76,7 @@ export type AiQuestionGenerationPayload = {
 export type AiArticleGenerationPayload = {
   level?: string
   difficulty?: number
-  genreTagCode: string
+  genreTagCode?: string
   topic?: string
   extraRequirements?: string
 }

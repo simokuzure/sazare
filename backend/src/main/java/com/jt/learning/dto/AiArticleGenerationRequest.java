@@ -2,7 +2,6 @@ package com.jt.learning.dto;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -14,7 +13,6 @@ public record AiArticleGenerationRequest(
         @Max(value = 5, message = "difficulty 必须在 1 到 5 之间")
         Integer difficulty,
 
-        @NotBlank(message = "genreTagCode 不能为空")
         String genreTagCode,
 
         @Size(max = 100, message = "topic 最多 100 个字符")
@@ -26,7 +24,7 @@ public record AiArticleGenerationRequest(
     public AiArticleGenerationRequest {
         level = level == null || level.isBlank() ? "N3" : level.trim();
         difficulty = difficulty == null ? 3 : difficulty;
-        genreTagCode = genreTagCode == null ? null : genreTagCode.trim();
+        genreTagCode = genreTagCode == null || genreTagCode.isBlank() ? null : genreTagCode.trim();
         topic = topic == null || topic.isBlank() ? null : topic.trim();
         extraRequirements = extraRequirements == null || extraRequirements.isBlank()
                 ? null

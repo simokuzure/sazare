@@ -44,23 +44,26 @@ public class GoogleAiQuestionClient implements AiQuestionClient {
             List<AiQuestionTagOptionDTO> sceneTagOptions,
             List<AiQuestionTagOptionDTO> functionTagOptions
     ) {
-        return generate(prompt);
+        return generate(prompt, false);
     }
 
     @Override
-    public String generateArticle(AiQuestionPrompt prompt, AiArticleGenerationRequest request) {
-        return generate(prompt);
+    public String generateArticle(AiQuestionPrompt prompt, AiArticleGenerationRequest request, String seed) {
+        return generate(prompt, true);
     }
 
-    private String generate(AiQuestionPrompt prompt) {
+    private String generate(AiQuestionPrompt prompt, boolean article) {
         validateProperties();
+        if (article) {
+            validateArticleSamplingProperties();
+        }
         AiProviderHttpResponse response = httpClient.postJson(
                 buildUri(),
                 Map.of(
                         "Content-Type", CONTENT_TYPE,
                         "x-goog-api-key", properties.getApiKey().trim()
                 ),
-                buildRequestBody(prompt)
+                buildRequestBody(prompt, article)
         );
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new BusinessException(
@@ -85,6 +88,19 @@ public class GoogleAiQuestionClient implements AiQuestionClient {
         }
     }
 
+    private void validateArticleSamplingProperties() {
+        if (!Double.isFinite(properties.getArticleTemperature())
+                || properties.getArticleTemperature() < 0.0d
+                || properties.getArticleTemperature() > 2.0d) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 文章 temperature 必须在 0.0 到 2.0 之间");
+        }
+        if (!Double.isFinite(properties.getArticleTopP())
+                || properties.getArticleTopP() <= 0.0d
+                || properties.getArticleTopP() > 1.0d) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 文章 topP 必须大于 0.0 且不超过 1.0");
+        }
+    }
+
     private URI buildUri() {
         String baseUrl = properties.getBaseUrl().trim().replaceAll("/+$", "");
         String model = normalizeModel(properties.getModel());
@@ -100,7 +116,14 @@ public class GoogleAiQuestionClient implements AiQuestionClient {
         return normalizedModel;
     }
 
-    private String buildRequestBody(AiQuestionPrompt prompt) {
+    private String buildRequestBody(AiQuestionPrompt prompt, boolean article) {
+        Map<String, Object> generationConfig = article
+                ? Map.of(
+                        "responseMimeType", CONTENT_TYPE,
+                        "temperature", properties.getArticleTemperature(),
+                        "topP", properties.getArticleTopP()
+                )
+                : Map.of("responseMimeType", CONTENT_TYPE);
         Map<String, Object> body = Map.of(
                 "systemInstruction", Map.of(
                         "parts", List.of(Map.of("text", prompt.systemPrompt()))
@@ -109,9 +132,7 @@ public class GoogleAiQuestionClient implements AiQuestionClient {
                         "role", "user",
                         "parts", List.of(Map.of("text", prompt.userPrompt()))
                 )),
-                "generationConfig", Map.of(
-                        "responseMimeType", CONTENT_TYPE
-                )
+                "generationConfig", generationConfig
         );
 
         try {

@@ -19,6 +19,7 @@ import com.jt.learning.entity.UserAnswer;
 import com.jt.learning.exception.BusinessException;
 import com.jt.learning.exception.ErrorCode;
 import com.jt.learning.mapper.QuestionAnswerMapper;
+import com.jt.learning.mapper.ArticleGenerationMetadataMapper;
 import com.jt.learning.mapper.ErrorTypeMapper;
 import com.jt.learning.mapper.QuestionMapper;
 import com.jt.learning.mapper.QuestionTagMapper;
@@ -27,6 +28,7 @@ import com.jt.learning.mapper.UserAnswerMapper;
 import com.jt.learning.mapper.UserMapper;
 import com.jt.learning.service.ai.AiAnswerScoringClient;
 import com.jt.learning.service.ai.AiQuestionClient;
+import com.jt.learning.service.ai.AiQuestionPrompt;
 import com.jt.learning.service.ai.prompt.AiAnswerScoringPromptBuilder;
 import com.jt.learning.service.ai.prompt.AiQuestionPromptBuilder;
 import com.jt.learning.service.ai.validation.AiErrorAnalysisValidator;
@@ -48,6 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -67,6 +70,7 @@ class QuestionServiceImplTest {
     private AiQuestionClient aiQuestionClient;
     private AiAnswerScoringClient aiAnswerScoringClient;
     private QuestionEmbeddingService questionEmbeddingService;
+    private ArticleGenerationMetadataMapper articleGenerationMetadataMapper;
     private QuestionServiceImpl questionService;
 
     @BeforeEach
@@ -81,6 +85,7 @@ class QuestionServiceImplTest {
         aiQuestionClient = mock(AiQuestionClient.class);
         aiAnswerScoringClient = mock(AiAnswerScoringClient.class);
         questionEmbeddingService = mock(QuestionEmbeddingService.class);
+        articleGenerationMetadataMapper = mock(ArticleGenerationMetadataMapper.class);
 
         ObjectMapper objectMapper = new ObjectMapper();
         when(errorTypeMapper.selectEnabledLeafOptions()).thenReturn(List.of(errorTypeOption()));
@@ -98,6 +103,7 @@ class QuestionServiceImplTest {
                 aiAnswerScoringClient,
                 new AiErrorAnalysisValidator(),
                 questionEmbeddingService,
+                articleGenerationMetadataMapper,
                 objectMapper
         );
     }
@@ -145,7 +151,8 @@ class QuestionServiceImplTest {
         Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
         when(tagMapper.selectEnabledTagsByCodes("GENRE", List.of("NARRATIVE")))
                 .thenReturn(List.of(genreTag));
-        when(aiQuestionClient.generateArticle(any(), any())).thenReturn(validArticleJson());
+        when(aiQuestionClient.generateArticle(any(), any(), anyString()))
+                .thenAnswer(invocation -> validArticleJson(invocation.getArgument(2)));
         when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
             Question question = invocation.getArgument(0);
             question.setId(101L);
@@ -172,6 +179,151 @@ class QuestionServiceImplTest {
         verify(questionAnswerMapper).insertQuestionAnswer(answerCaptor.capture());
         assertThat(answerCaptor.getValue().getAnswerText()).contains("\n\n");
         verify(questionTagMapper).insertQuestionTag(101L, 3L);
+        verify(questionEmbeddingService).embedArticleBody(question.sourceText());
+        verify(articleGenerationMetadataMapper).insertArticleGenerationMetadata(
+                eq(101L), any(), anyString(), any()
+        );
+    }
+
+    @Test
+    void generateArticleByAiShouldRandomlySelectEnabledGenreWhenNotSpecified() {
+        Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
+        when(tagMapper.selectEnabledTagsByType("GENRE")).thenReturn(List.of(genreTag));
+        when(aiQuestionClient.generateArticle(any(), any(), anyString()))
+                .thenAnswer(invocation -> validArticleJson(invocation.getArgument(2)));
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(103L);
+            return 1;
+        });
+
+        QuestionVO question = questionService.generateArticleByAi(
+                new AiArticleGenerationRequest("N3", 3, null, null, null)
+        );
+
+        assertThat(question.tags()).extracting("code").containsExactly("NARRATIVE");
+        ArgumentCaptor<AiArticleGenerationRequest> requestCaptor =
+                ArgumentCaptor.forClass(AiArticleGenerationRequest.class);
+        verify(aiQuestionClient).generateArticle(any(), requestCaptor.capture(), anyString());
+        assertThat(requestCaptor.getValue().genreTagCode()).isEqualTo("NARRATIVE");
+        verify(tagMapper).selectEnabledTagsByType("GENRE");
+    }
+
+    @Test
+    void generateArticleByAiShouldAcceptClosingQuoteAfterChineseSentencePunctuation() {
+        Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
+        when(tagMapper.selectEnabledTagsByCodes("GENRE", List.of("NARRATIVE")))
+                .thenReturn(List.of(genreTag));
+        when(aiQuestionClient.generateArticle(any(), any(), anyString()))
+                .thenAnswer(invocation -> validArticleJson(invocation.getArgument(2))
+                        .replace("上周末，我和朋友决定去郊外的一座小镇旅行。", "他说：“这次去郊外旅行吧。”"));
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(104L);
+            return 1;
+        });
+
+        QuestionVO question = questionService.generateArticleByAi(
+                new AiArticleGenerationRequest("N3", 3, "NARRATIVE", null, null)
+        );
+
+        assertThat(question.sourceText()).startsWith("他说：“这次去郊外旅行吧。”");
+        verify(questionMapper).insertQuestion(any());
+    }
+
+    @Test
+    void generateArticleByAiShouldReportSentenceIndexAndDetectedKana() {
+        Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
+        when(tagMapper.selectEnabledTagsByCodes("GENRE", List.of("NARRATIVE")))
+                .thenReturn(List.of(genreTag));
+        when(aiQuestionClient.generateArticle(any(), any(), anyString()))
+                .thenAnswer(invocation -> validArticleJson(invocation.getArgument(2))
+                        .replace("我们原本计划乘早班电车出发", "我们の原本计划乘早班电车出发"));
+
+        assertThatThrownBy(() -> questionService.generateArticleByAi(
+                new AiArticleGenerationRequest("N3", 3, "NARRATIVE", null, null)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("第 2 句 chineseText")
+                .hasMessageContaining("检测到：の");
+
+        verify(aiQuestionClient, times(1)).generateArticle(any(), any(), anyString());
+        verify(questionMapper, never()).insertQuestion(any());
+    }
+
+    @Test
+    void generateArticleByAiShouldPassDuplicateDetailsToNextAttempt() {
+        Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
+        when(tagMapper.selectEnabledTagsByCodes("GENRE", List.of("NARRATIVE")))
+                .thenReturn(List.of(genreTag));
+        when(aiQuestionClient.generateArticle(any(), any(), anyString()))
+                .thenAnswer(invocation -> validArticleJson(invocation.getArgument(2)));
+        when(questionEmbeddingService.findSimilarQuestions(anyList(), eq("TRANSLATION_ZH_TO_JA_ARTICLE")))
+                .thenReturn(List.of(
+                        new QuestionEmbeddingMatch(47L, "第一篇命中的历史文章正文。", 0.93d),
+                        new QuestionEmbeddingMatch(49L, "第二篇命中的历史文章正文。", 0.88d)
+                ))
+                .thenReturn(List.of());
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(102L);
+            return 1;
+        });
+
+        questionService.generateArticleByAi(
+                new AiArticleGenerationRequest("N3", 3, "NARRATIVE", "旅行", null)
+        );
+
+        ArgumentCaptor<AiQuestionPrompt> promptCaptor = ArgumentCaptor.forClass(AiQuestionPrompt.class);
+        verify(aiQuestionClient, times(2)).generateArticle(promptCaptor.capture(), any(), anyString());
+        List<AiQuestionPrompt> prompts = promptCaptor.getAllValues();
+        assertThat(prompts.get(1).userPrompt())
+                .contains("正文向量与 2 篇历史文章相似")
+                .contains("最高相似度为 0.9300")
+                .contains("第一篇命中的历史文章正文。")
+                .contains("第二篇命中的历史文章正文。")
+                .contains("上周末，我和朋友决定去郊外的一座小镇旅行。");
+        verify(articleGenerationMetadataMapper).insertArticleGenerationMetadata(
+                eq(102L), any(), anyString(), any()
+        );
+    }
+
+    @Test
+    void generateArticleByAiShouldStopAfterThreeDuplicateAttempts() {
+        Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
+        when(tagMapper.selectEnabledTagsByCodes("GENRE", List.of("NARRATIVE")))
+                .thenReturn(List.of(genreTag));
+        when(aiQuestionClient.generateArticle(any(), any(), anyString()))
+                .thenAnswer(invocation -> validArticleJson(invocation.getArgument(2)));
+        when(questionEmbeddingService.findSimilarQuestions(anyList(), eq("TRANSLATION_ZH_TO_JA_ARTICLE")))
+                .thenReturn(List.of(new QuestionEmbeddingMatch(62L, "持续命中的历史文章正文。", 0.91d)));
+
+        assertThatThrownBy(() -> questionService.generateArticleByAi(
+                new AiArticleGenerationRequest("N3", 3, "NARRATIVE", null, null)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("补生成后仍未获得可用文章");
+
+        verify(aiQuestionClient, times(3)).generateArticle(any(), any(), anyString());
+        verify(questionMapper, never()).insertQuestion(any());
+        verify(articleGenerationMetadataMapper, never())
+                .insertArticleGenerationMetadata(any(), any(), anyString(), any());
+    }
+
+    @Test
+    void generateArticleByAiShouldNotRetryInvalidJson() {
+        Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
+        when(tagMapper.selectEnabledTagsByCodes("GENRE", List.of("NARRATIVE")))
+                .thenReturn(List.of(genreTag));
+        when(aiQuestionClient.generateArticle(any(), any(), anyString())).thenReturn("{}");
+
+        assertThatThrownBy(() -> questionService.generateArticleByAi(
+                new AiArticleGenerationRequest("N3", 3, "NARRATIVE", null, null)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("blueprint 和 article");
+
+        verify(aiQuestionClient, times(1)).generateArticle(any(), any(), anyString());
     }
 
     @Test
@@ -183,7 +335,7 @@ class QuestionServiceImplTest {
         when(aiQuestionClient.generateQuestions(any(), any(), anyList(), anyList())).thenReturn(validAiJson());
         when(questionEmbeddingService.embedQuestion(any(), any())).thenReturn(vector());
         when(questionEmbeddingService.findSimilarQuestions(anyList()))
-                .thenReturn(List.of(new QuestionEmbeddingMatch(99L, 0.95d)));
+                .thenReturn(List.of(new QuestionEmbeddingMatch(99L, "历史短句", 0.95d)));
 
         assertThatThrownBy(() -> questionService.generateQuestionsByAi(request()))
                 .isInstanceOf(BusinessException.class)
@@ -923,9 +1075,19 @@ class QuestionServiceImplTest {
                 """;
     }
 
-    private String validArticleJson() {
+    private String validArticleJson(String seed) {
         return """
                 {
+                  "blueprint": {
+                    "seed": "%s",
+                    "coreConcept": "计划之外的旅行经历",
+                    "roles": {
+                      "subject": "结伴出行的朋友",
+                      "setting": "郊外小镇",
+                      "experience": "行程意外改变",
+                      "changeOrInsight": "重新看待计划外经历"
+                    }
+                  },
                   "article": {
                     "questionType": "TRANSLATION_ZH_TO_JA_ARTICLE",
                     "contextText": "叙事文，使用自然连贯的书面语。",
@@ -946,7 +1108,7 @@ class QuestionServiceImplTest {
                     ]
                   }
                 }
-                """;
+                """.formatted(seed);
     }
 
     private List<Float> vector() {

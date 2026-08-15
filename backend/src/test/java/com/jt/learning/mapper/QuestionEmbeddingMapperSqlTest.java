@@ -26,8 +26,24 @@ class QuestionEmbeddingMapperSqlTest {
                 .getBoundSql(Map.of("embedding", "[0.1]", "threshold", 0.8d));
 
         assertThat(boundSql.getSql())
+                .contains("q.source_text")
                 .contains("q.deleted = false")
                 .contains("q.source_type in ('AI', 'MANUAL')")
                 .contains("qe.embedding <=> cast(? as vector)");
+    }
+
+    @Test
+    void embeddingCandidateSqlShouldReturnQuestionTypeForContentSelection() throws Exception {
+        Configuration configuration = new Configuration();
+        try (InputStream input = Resources.getResourceAsStream("mapper/QuestionEmbeddingMapper.xml")) {
+            new XMLMapperBuilder(input, configuration, "mapper/QuestionEmbeddingMapper.xml", configuration.getSqlFragments())
+                    .parse();
+        }
+
+        BoundSql boundSql = configuration
+                .getMappedStatement("com.jt.learning.mapper.QuestionEmbeddingMapper.selectRegularQuestionEmbeddingCandidates")
+                .getBoundSql(Map.of());
+
+        assertThat(boundSql.getSql()).contains("q.question_type");
     }
 }

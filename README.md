@@ -110,6 +110,8 @@ $env:GOOGLE_AI_API_KEY = "你的 API Key"
 
 - `GOOGLE_AI_MODEL`：文本生成与评分模型，默认 `gemini-3.6-flash`。
 - `GOOGLE_AI_EMBEDDING_MODEL`：向量模型，默认 `gemini-embedding-001`。
+- `GOOGLE_AI_ARTICLE_TEMPERATURE`：文章生成 temperature，默认 `1.1`，允许范围 `0.0`～`2.0`。
+- `GOOGLE_AI_ARTICLE_TOP_P`：文章生成 topP，默认 `0.98`，取值必须大于 `0.0` 且不超过 `1.0`。
 - `GOOGLE_AI_BASE_URL`：Google AI API 地址，默认 `https://generativelanguage.googleapis.com/v1beta`。
 - `AI_REQUEST_TIMEOUT`：AI 请求超时时间，默认 `180s`；例如设置为 `240s`。
 

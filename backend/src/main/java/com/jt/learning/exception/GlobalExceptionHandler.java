@@ -5,6 +5,7 @@ import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -18,6 +19,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ApiResponse<Void> handleBusinessException(BusinessException exception) {
+        log.warn("Business exception: code={}, message={}", exception.getCode(), exception.getMessage());
         return ApiResponse.error(exception.getCode(), exception.getMessage());
     }
 
@@ -45,6 +47,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ApiResponse<Void> handleHttpMessageNotReadableException(HttpMessageNotReadableException exception) {
         return ApiResponse.error(ErrorCode.PARAM_ERROR.getCode(), "请求体不能为空或 JSON 格式错误");
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ApiResponse<Void> handleHttpMediaTypeNotSupportedException(
+            HttpMediaTypeNotSupportedException exception
+    ) {
+        return ApiResponse.error(ErrorCode.PARAM_ERROR.getCode(), "Content-Type 必须为 application/json");
     }
 
     @ExceptionHandler(Exception.class)

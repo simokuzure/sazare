@@ -54,6 +54,8 @@ public class AiProperties {
         private String embeddingModel = "gemini-embedding-001";
         private String apiKey = "";
         private String baseUrl = "https://generativelanguage.googleapis.com/v1beta";
+        private double articleTemperature = 1.1d;
+        private double articleTopP = 0.98d;
 
         public String getModel() {
             return model;
@@ -85,6 +87,22 @@ public class AiProperties {
 
         public void setBaseUrl(String baseUrl) {
             this.baseUrl = baseUrl;
+        }
+
+        public double getArticleTemperature() {
+            return articleTemperature;
+        }
+
+        public void setArticleTemperature(double articleTemperature) {
+            this.articleTemperature = articleTemperature;
+        }
+
+        public double getArticleTopP() {
+            return articleTopP;
+        }
+
+        public void setArticleTopP(double articleTopP) {
+            this.articleTopP = articleTopP;
         }
     }
 }

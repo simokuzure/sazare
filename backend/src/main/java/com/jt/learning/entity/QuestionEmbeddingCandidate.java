@@ -8,6 +8,7 @@ import lombok.Setter;
 public class QuestionEmbeddingCandidate {
 
     private Long questionId;
+    private String questionType;
     private String sourceText;
     private String contextText;
     private String contentHash;

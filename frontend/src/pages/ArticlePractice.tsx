@@ -96,11 +96,6 @@ export default function ArticlePractice() {
   }
 
   async function handleGenerateArticle() {
-    if (!genreTagCode) {
-      setPracticeNotice({ kind: 'error', title: '请选择体裁', message: 'AI 生成文章前需要选择一个体裁。' })
-      return
-    }
-
     setQuestionGenerating(true)
     setPracticeNotice(null)
     setVocabularyHintsVisible(false)
@@ -270,9 +265,10 @@ export default function ArticlePractice() {
   }
 
   function buildArticleGenerationPayload(): AiArticleGenerationPayload {
-    const payload: AiArticleGenerationPayload = { genreTagCode }
+    const payload: AiArticleGenerationPayload = {}
     if (level) payload.level = level
     if (difficulty) payload.difficulty = Number(difficulty)
+    if (genreTagCode) payload.genreTagCode = genreTagCode
     if (topic.trim()) payload.topic = topic.trim()
     if (extraRequirements.trim()) payload.extraRequirements = extraRequirements.trim()
     return payload
@@ -284,13 +280,12 @@ export default function ArticlePractice() {
         <form className="form-grid article-generator-form" onSubmit={(event) => event.preventDefault()}>
           <label><span>JLPT 等级</span><select value={level} onChange={(event) => setLevel(event.target.value)}><option value="">默认 N3</option>{['N5', 'N4', 'N3', 'N2', 'N1'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
           <label><span>难度</span><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-          <label><span>文章体裁</span><select value={genreTagCode} disabled={genreTagsLoading} onChange={(event) => setGenreTagCode(event.target.value)}><option value="">{genreTagsLoading ? '加载中' : '不限（仅随机）'}</option>{genreTags.map((tag) => <option key={tag.id} value={tag.code}>{tag.name}</option>)}</select></label>
+          <label><span>文章体裁</span><select value={genreTagCode} disabled={genreTagsLoading} onChange={(event) => setGenreTagCode(event.target.value)}><option value="">{genreTagsLoading ? '加载中' : '不限（随机体裁）'}</option>{genreTags.map((tag) => <option key={tag.id} value={tag.code}>{tag.name}</option>)}</select></label>
           <label><span>主题</span><input value={topic} maxLength={100} placeholder="可选，例如：周末旅行" onChange={(event) => setTopic(event.target.value)} /></label>
           <label className="wide-field"><span>补充要求</span><input value={extraRequirements} maxLength={500} placeholder="例如：书面语、保持敬体、关注篇章衔接" onChange={(event) => setExtraRequirements(event.target.value)} /></label>
           <button type="button" disabled={questionLoading} onClick={handleRandomArticle}>{questionRandomizing ? '抽题中' : '随机文章'}</button>
-          <button type="button" className="primary-button" disabled={questionLoading || !genreTagCode} onClick={handleGenerateArticle}>{questionGenerating ? '生成中' : '生成文章'}</button>
+          <button type="button" className="primary-button" disabled={questionLoading} onClick={handleGenerateArticle}>{questionGenerating ? '生成中' : '生成文章'}</button>
         </form>
-        {!genreTagCode && !genreTagsLoading ? <p className="field-hint">随机抽题可以不限体裁；AI 生成文章前需要选择体裁。</p> : null}
         {genreTagsError ? <div className="error-message">体裁标签加载失败：{genreTagsError}</div> : null}
       </section>
 

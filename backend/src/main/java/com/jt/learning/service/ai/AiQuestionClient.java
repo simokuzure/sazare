@@ -17,6 +17,7 @@ public interface AiQuestionClient {
 
     String generateArticle(
             AiQuestionPrompt prompt,
-            AiArticleGenerationRequest request
+            AiArticleGenerationRequest request,
+            String seed
     );
 }

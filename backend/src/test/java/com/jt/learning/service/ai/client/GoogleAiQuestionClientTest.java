@@ -1,6 +1,7 @@
 package com.jt.learning.service.ai.client;
 
 import com.jt.learning.config.AiProperties;
+import com.jt.learning.dto.AiArticleGenerationRequest;
 import com.jt.learning.dto.AiQuestionGenerationRequest;
 import com.jt.learning.exception.BusinessException;
 import com.jt.learning.service.ai.AiQuestionPrompt;
@@ -59,6 +60,54 @@ class GoogleAiQuestionClientTest {
                 .isEqualTo("user prompt");
         assertThat(requestBody.get("generationConfig").get("responseMimeType").asString())
                 .isEqualTo("application/json");
+        assertThat(requestBody.get("generationConfig").get("temperature")).isNull();
+        assertThat(requestBody.get("generationConfig").get("topP")).isNull();
+    }
+
+    @Test
+    void generateArticleShouldUseArticleSamplingConfiguration() throws Exception {
+        CapturingHttpClient httpClient = new CapturingHttpClient(new AiProviderHttpResponse(200, """
+                {
+                  "candidates": [
+                    {
+                      "content": {
+                        "parts": [{"text": "{\\"blueprint\\":{},\\"article\\":{}}"}]
+                      }
+                    }
+                  ]
+                }
+                """));
+        GoogleAiQuestionClient client = new GoogleAiQuestionClient(properties(), objectMapper, httpClient);
+
+        client.generateArticle(
+                new AiQuestionPrompt("system prompt", "user prompt"),
+                new AiArticleGenerationRequest("N3", 3, "NARRATIVE", null, null),
+                "123e4567-e89b-12d3-a456-426614174000"
+        );
+
+        JsonNode generationConfig = objectMapper.readTree(httpClient.body).get("generationConfig");
+        assertThat(generationConfig.get("responseMimeType").asString()).isEqualTo("application/json");
+        assertThat(generationConfig.get("temperature").asDouble()).isEqualTo(1.1d);
+        assertThat(generationConfig.get("topP").asDouble()).isEqualTo(0.98d);
+        assertThat(generationConfig.get("topK")).isNull();
+        assertThat(generationConfig.get("seed")).isNull();
+    }
+
+    @Test
+    void generateArticleShouldRejectInvalidSamplingConfiguration() {
+        AiProperties.Google properties = properties();
+        properties.setArticleTemperature(2.1d);
+        CapturingHttpClient httpClient = new CapturingHttpClient(new AiProviderHttpResponse(200, "{}"));
+        GoogleAiQuestionClient client = new GoogleAiQuestionClient(properties, objectMapper, httpClient);
+
+        assertThatThrownBy(() -> client.generateArticle(
+                new AiQuestionPrompt("system", "user"),
+                new AiArticleGenerationRequest("N3", 3, "NARRATIVE", null, null),
+                "123e4567-e89b-12d3-a456-426614174000"
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("temperature");
+        assertThat(httpClient.called).isFalse();
     }
 
     @Test
