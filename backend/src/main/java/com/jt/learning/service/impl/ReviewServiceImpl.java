@@ -5,6 +5,7 @@ import com.jt.learning.dto.AiErrorTypeOptionDTO;
 import com.jt.learning.dto.AiQuestionAnswerDTO;
 import com.jt.learning.dto.AiReviewDTO;
 import com.jt.learning.dto.AiReviewGeneratedQuestionDTO;
+import com.jt.learning.dto.ReviewAttemptHistoryRow;
 import com.jt.learning.dto.ReviewAttemptRequest;
 import com.jt.learning.dto.ReviewCardListRow;
 import com.jt.learning.dto.ReviewCardQueryRequest;
@@ -48,6 +49,7 @@ import com.jt.learning.vo.AnswerErrorAnalysisVO;
 import com.jt.learning.vo.AnswerScoresVO;
 import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.QuestionAnswerVO;
+import com.jt.learning.vo.ReviewAttemptHistoryVO;
 import com.jt.learning.vo.ReviewAttemptVO;
 import com.jt.learning.vo.ReviewCardDetailVO;
 import com.jt.learning.vo.ReviewCardListVO;
@@ -185,11 +187,17 @@ public class ReviewServiceImpl implements ReviewService {
                 question = toReviewQuestionVO(selected);
             }
         }
+        List<ReviewAttemptHistoryVO> reviewAttempts = reviewAttemptMapper
+                .selectReviewHistory(card.getId(), user.getId())
+                .stream()
+                .map(this::toReviewAttemptHistoryVO)
+                .toList();
         return new ReviewCardDetailVO(
                 card.getId(), card.getUserErrorTypeId(), userErrorType.getName(), userErrorType.getDescription(),
                 errorType.getId(), errorType.getCode(), errorType.getName(), card.getStatus(), card.getEaseFactor(),
                 card.getRepetitionCount(), card.getIntervalDays(), card.getLapseCount(), card.getDueAt(),
-                card.getLastReviewedAt(), card.getMasteredAt(), state, toProgressVO(cycle, progress), question
+                card.getLastReviewedAt(), card.getMasteredAt(), state, toProgressVO(cycle, progress), question,
+                reviewAttempts
         );
     }
 
@@ -856,6 +864,13 @@ public class ReviewServiceImpl implements ReviewService {
     private QuestionAnswerVO toAnswerVO(QuestionAnswer answer) {
         return new QuestionAnswerVO(answer.getId(), answer.getAnswerText(), answer.getAnswerType(),
                 answer.getPrimaryAnswer(), answer.getSortOrder());
+    }
+
+    private ReviewAttemptHistoryVO toReviewAttemptHistoryVO(ReviewAttemptHistoryRow row) {
+        return new ReviewAttemptHistoryVO(
+                row.getId(), row.getCycleNo(), row.getQuestionRole(), row.getSourceText(), row.getReferenceAnswer(),
+                row.getAnswerText(), row.getResult(), row.getTotalScore(), row.getQuality(), row.getCreatedAt()
+        );
     }
 
     private TagVO toTagVO(Tag tag) {

@@ -140,6 +140,19 @@ export type ReviewQuestion = {
   attemptCount: number
 }
 
+export type ReviewAttemptHistory = {
+  id: number
+  cycleNo: number
+  questionRole: ReviewQuestionRole
+  sourceText: string
+  referenceAnswer: string | null
+  answerText: string
+  result: ReviewResult
+  totalScore: number | null
+  quality: number
+  createdAt: string
+}
+
 export type ReviewCardDetail = {
   id: number
   userErrorTypeId: number
@@ -159,6 +172,7 @@ export type ReviewCardDetail = {
   reviewState: ReviewState
   progress: ReviewCycleProgress | null
   currentQuestion: ReviewQuestion | null
+  reviewAttempts: ReviewAttemptHistory[]
 }
 
 export type ReviewAttemptPayload = {

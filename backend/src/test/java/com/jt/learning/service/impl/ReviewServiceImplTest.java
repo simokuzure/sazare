@@ -1,6 +1,7 @@
 package com.jt.learning.service.impl;
 
 import com.jt.learning.dto.AiErrorTypeOptionDTO;
+import com.jt.learning.dto.ReviewAttemptHistoryRow;
 import com.jt.learning.dto.ReviewAttemptRequest;
 import com.jt.learning.dto.ReviewCycleProgressRow;
 import com.jt.learning.entity.ErrorType;
@@ -100,6 +101,60 @@ class ReviewServiceImplTest {
                 scoringClient, questionClient,
                 new ReviewAiResponseValidator(objectMapper, errorValidator)
         );
+    }
+
+    @Test
+    void getReviewCardShouldIncludeAllFormalReviewAttemptsInMapperOrder() {
+        stubLocalUser();
+        ReviewCard card = card("MASTERED", null);
+        card.setMasteredAt(LocalDateTime.of(2026, 8, 16, 12, 0));
+        when(cardMapper.selectByIdAndUserId(1L, 1L)).thenReturn(card);
+        when(userErrorTypeMapper.selectActiveByIdAndUserId(2L, 1L)).thenReturn(userErrorType());
+        when(errorTypeMapper.selectEnabledLeafById(3L)).thenReturn(errorType());
+        when(attemptMapper.selectReviewHistory(1L, 1L)).thenReturn(List.of(
+                reviewHistoryRow(12L, 2, "DERIVED", "我赶上了公交车。", "バスに間に合いました。",
+                        "バスに間に合うことができました。",
+                        "PASS", "91.50", 4, LocalDateTime.of(2026, 8, 16, 11, 30)),
+                reviewHistoryRow(11L, 1, "ORIGINAL", "我赶上了电车。", "電車に間に合いました。",
+                        "電車を間に合いました。",
+                        "FAIL", "78.25", 2, LocalDateTime.of(2026, 8, 15, 9, 0))
+        ));
+
+        var result = service.getReviewCard(1L, false);
+
+        assertThat(result.reviewAttempts()).hasSize(2);
+        assertThat(result.reviewAttempts().getFirst().id()).isEqualTo(12L);
+        assertThat(result.reviewAttempts().getFirst().cycleNo()).isEqualTo(2);
+        assertThat(result.reviewAttempts().getFirst().questionRole()).isEqualTo("DERIVED");
+        assertThat(result.reviewAttempts().getFirst().referenceAnswer())
+                .isEqualTo("バスに間に合いました。");
+        assertThat(result.reviewAttempts().getFirst().totalScore()).isEqualByComparingTo("91.50");
+        assertThat(result.reviewAttempts().getLast().result()).isEqualTo("FAIL");
+    }
+
+    @Test
+    void getReviewCardShouldReturnEmptyReviewHistory() {
+        stubLocalUser();
+        ReviewCard card = card("ACTIVE", LocalDateTime.now().plusDays(1));
+        when(cardMapper.selectByIdAndUserId(1L, 1L)).thenReturn(card);
+        when(userErrorTypeMapper.selectActiveByIdAndUserId(2L, 1L)).thenReturn(userErrorType());
+        when(errorTypeMapper.selectEnabledLeafById(3L)).thenReturn(errorType());
+        when(attemptMapper.selectReviewHistory(1L, 1L)).thenReturn(List.of());
+
+        var result = service.getReviewCard(1L, false);
+
+        assertThat(result.reviewAttempts()).isEmpty();
+    }
+
+    @Test
+    void getReviewCardShouldNotLoadHistoryForCardOutsideCurrentUser() {
+        stubLocalUser();
+        when(cardMapper.selectByIdAndUserId(99L, 1L)).thenReturn(null);
+
+        assertThatThrownBy(() -> service.getReviewCard(99L, false))
+                .isInstanceOf(BusinessException.class);
+
+        verify(attemptMapper, never()).selectReviewHistory(anyLong(), anyLong());
     }
 
     @Test
@@ -512,6 +567,32 @@ class ReviewServiceImplTest {
         row.setActiveQuestionCount(active);
         row.setDerivedQuestionCount(derived);
         row.setVerifiedDerivedPassedCount(verifiedDerived);
+        return row;
+    }
+
+    private ReviewAttemptHistoryRow reviewHistoryRow(
+            Long id,
+            int cycleNo,
+            String questionRole,
+            String sourceText,
+            String referenceAnswer,
+            String answerText,
+            String result,
+            String totalScore,
+            int quality,
+            LocalDateTime createdAt
+    ) {
+        ReviewAttemptHistoryRow row = new ReviewAttemptHistoryRow();
+        row.setId(id);
+        row.setCycleNo(cycleNo);
+        row.setQuestionRole(questionRole);
+        row.setSourceText(sourceText);
+        row.setReferenceAnswer(referenceAnswer);
+        row.setAnswerText(answerText);
+        row.setResult(result);
+        row.setTotalScore(new BigDecimal(totalScore));
+        row.setQuality(quality);
+        row.setCreatedAt(createdAt);
         return row;
     }
 

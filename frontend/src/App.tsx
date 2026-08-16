@@ -15,12 +15,10 @@ type PageKey = 'practice' | 'answerRecords' | 'statistics' | 'tags' | 'questions
 
 const NAV_ITEMS: { key: PageKey; label: string }[] = [
   { key: 'practice', label: '练习' },
-  { key: 'answerRecords', label: '答题记录' },
-  { key: 'statistics', label: '学习分析' },
-  { key: 'tags', label: '标签管理' },
-  { key: 'questions', label: '问题管理' },
-  { key: 'errorTypes', label: '错误类型管理' },
   { key: 'reviews', label: '错题复习' },
+  { key: 'answerRecords', label: '答题记录' },
+  { key: 'questions', label: '问题管理' },
+  { key: 'statistics', label: '学习分析' },
 ]
 
 function App() {

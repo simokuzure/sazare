@@ -18,6 +18,7 @@ import {
 import ReviewList from '../components/ReviewList'
 import type { PageData, PracticeNotice } from '../types/api'
 import type {
+  ReviewAttemptHistory,
   ReviewAttemptResult,
   ReviewCard,
   ReviewCardDetail,
@@ -452,6 +453,7 @@ function ReviewCardOverview({ detail, loading, error, onStart, onStartEarly, onR
         {detail.reviewState === 'WAITING' ? <StateMessage title="等待下次复习" message={`下次到期时间：${formatDateTime(detail.dueAt)}。也可以现在提前复习，计划将从本次实际作答日期重新计算。`} actionLabel="提前复习" onAction={onStartEarly} /> : null}
         {detail.reviewState === 'DERIVED_GENERATION_REQUIRED' ? <StateMessage title="需要继续本周期" message="本周期原题已经通过，但净成功尚未达到 4，需要生成衍生题继续复习。" actionLabel="继续复习" onAction={onStart} /> : null}
         {detail.reviewState === 'MASTERED' ? <StateMessage title="本周期已掌握" message={`完成时间：${formatDateTime(detail.masteredAt)}。再次在普通练习中确认同类错误时，会开启下一周期。`} /> : null}
+        <ReviewAttemptHistoryList attempts={detail.reviewAttempts} />
       </> : null}
     </section>
   </section>
@@ -501,6 +503,21 @@ function ReviewCardHeading({ detail, showDescription }: { detail: ReviewCardDeta
 
 function ReviewSchedule({ detail }: { detail: ReviewCardDetail }) {
   return <dl className="review-sm2-grid"><div><dt>难度因子</dt><dd>{detail.easeFactor.toFixed(4)}</dd></div><div><dt>连续成功</dt><dd>{detail.repetitionCount}</dd></div><div><dt>当前间隔</dt><dd>{detail.intervalDays} 天</dd></div><div><dt>累计错误次数</dt><dd>{detail.lapseCount}</dd></div><div><dt>最近复习</dt><dd>{formatDateTime(detail.lastReviewedAt)}</dd></div><div><dt>下次到期</dt><dd>{formatDateTime(detail.dueAt)}</dd></div></dl>
+}
+
+function ReviewAttemptHistoryList({ attempts }: { attempts: ReviewAttemptHistory[] }) {
+  return <section className="review-attempt-history" aria-label="复习记录">
+    <div className="section-title"><span className="label">历史</span><strong>复习记录</strong></div>
+    {attempts.length === 0 ? <p className="empty-inline">暂无正式复习记录。</p> : <ol className="review-attempt-history-list">
+      {attempts.map((attempt) => <li key={attempt.id}>
+        <div className="review-attempt-history-header">
+          <div className="review-attempt-history-meta"><time dateTime={attempt.createdAt}>{formatDateTime(attempt.createdAt)}</time><span>第 {attempt.cycleNo} 周期</span><span>{attempt.questionRole === 'DERIVED' ? '衍生题' : '原题'}</span></div>
+          <div className="review-attempt-history-summary"><span className={`review-attempt-result ${attempt.result === 'PASS' ? 'is-pass' : 'is-fail'}`}>{attempt.result === 'PASS' ? '通过' : '失败'}</span><strong>总分 {formatReviewAttemptScore(attempt.totalScore)}</strong><span>质量 {attempt.quality} / 5</span></div>
+        </div>
+        <div className="review-attempt-history-content"><div><span>题目</span><p>{attempt.sourceText}</p><div className="review-attempt-reference"><span>参考答案</span><p>{attempt.referenceAnswer || '暂无参考答案。'}</p></div></div><div><span>你的答案</span><p>{attempt.answerText}</p></div></div>
+      </li>)}
+    </ol>}
+  </section>
 }
 
 function ReviewResultView({ card, result, submittedAnswer, candidates, notice, derivedGenerating, nextCardLoading, onGenerate, onOpenErrorConfirmation, onContinueEarly, onNext, onBack, children }: {
@@ -608,6 +625,10 @@ function formatDateTime(value: string | null) {
 
 function formatTotalScore(value: number) {
   return value.toFixed(2)
+}
+
+function formatReviewAttemptScore(value: number | null) {
+  return value === null ? '-' : `${value.toFixed(2)} / 100`
 }
 
 function isAbortError(error: unknown) {

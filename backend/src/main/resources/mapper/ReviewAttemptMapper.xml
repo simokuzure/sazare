@@ -16,6 +16,47 @@
         )
     </insert>
 
+    <select id="selectReviewHistory" resultType="com.jt.learning.dto.ReviewAttemptHistoryRow">
+        select
+            attempt.id,
+            cycle.cycle_no,
+            cycle_question.question_role,
+            question.source_text,
+            (
+                select answer.answer_text
+                from question_answers answer
+                where answer.question_id = question.id
+                  and answer.deleted = false
+                order by case when answer.primary_answer = true then 0 else 1 end,
+                         answer.sort_order asc,
+                         answer.id asc
+                limit 1
+            ) as reference_answer,
+            user_answer.answer_text,
+            attempt.result,
+            user_answer.total_score,
+            attempt.sm2_quality as quality,
+            attempt.created_at
+        from review_attempts attempt
+        inner join review_cycles cycle
+            on cycle.id = attempt.review_cycle_id
+           and cycle.review_card_id = attempt.review_card_id
+        inner join review_cycle_questions cycle_question
+            on cycle_question.id = attempt.review_cycle_question_id
+           and cycle_question.review_cycle_id = attempt.review_cycle_id
+        inner join user_answers user_answer
+            on user_answer.id = attempt.user_answer_id
+           and user_answer.user_id = attempt.user_id
+           and user_answer.deleted = false
+        inner join questions question
+            on question.id = user_answer.question_id
+           and question.deleted = false
+        where attempt.review_card_id = #{reviewCardId}
+          and attempt.user_id = #{userId}
+          and attempt.attempt_source = 'REVIEW'
+        order by attempt.created_at desc, attempt.id desc
+    </select>
+
     <select id="existsByCardIdAndUserAnswerId" resultType="boolean">
         select exists (
             select 1 from review_attempts

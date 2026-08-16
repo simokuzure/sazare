@@ -1384,6 +1384,100 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.review-attempt-history {
+  display: grid;
+  gap: 12px;
+}
+
+.review-attempt-history-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review-attempt-history-list > li {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--card);
+  padding: 14px;
+}
+
+.review-attempt-history-header,
+.review-attempt-history-meta,
+.review-attempt-history-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.review-attempt-history-header {
+  justify-content: space-between;
+}
+
+.review-attempt-history-meta,
+.review-attempt-history-summary {
+  flex-wrap: wrap;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.review-attempt-history-summary strong {
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.review-attempt-result {
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-weight: 700;
+}
+
+.review-attempt-result.is-pass {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.review-attempt-result.is-fail {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.review-attempt-history-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.review-attempt-history-content > div {
+  min-width: 0;
+  border-radius: 9px;
+  background: var(--secondary);
+  padding: 10px 12px;
+}
+
+.review-attempt-history-content span {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.review-attempt-history-content p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--foreground);
+  line-height: 1.6;
+}
+
+.review-attempt-reference {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
 .review-attempt-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
@@ -2368,6 +2462,15 @@ tbody tr:last-child td {
 
   .review-sm2-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .review-attempt-history-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .review-attempt-history-content {
+    grid-template-columns: 1fr;
   }
 
   .review-detail-toolbar {

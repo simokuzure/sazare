@@ -2,6 +2,7 @@ package com.jt.learning.vo;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record ReviewCardDetailVO(
         Long id,
@@ -21,6 +22,7 @@ public record ReviewCardDetailVO(
         LocalDateTime masteredAt,
         String reviewState,
         ReviewCycleProgressVO progress,
-        ReviewQuestionVO currentQuestion
+        ReviewQuestionVO currentQuestion,
+        List<ReviewAttemptHistoryVO> reviewAttempts
 ) {
 }
