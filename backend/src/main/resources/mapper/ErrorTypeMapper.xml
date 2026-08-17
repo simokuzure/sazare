@@ -43,6 +43,26 @@
           and deleted = false
     </select>
 
+    <select id="selectEnabledLeafByCode" resultType="com.jt.learning.entity.ErrorType">
+        select
+            id,
+            parent_id,
+            type_level,
+            code,
+            name,
+            description,
+            sort_order,
+            enabled,
+            deleted,
+            created_at,
+            updated_at
+        from error_types
+        where code = #{code}
+          and type_level = 2
+          and enabled = true
+          and deleted = false
+    </select>
+
     <select id="countErrorTypes" resultType="long">
         select count(1)
         from error_types

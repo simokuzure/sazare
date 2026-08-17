@@ -21,7 +21,7 @@ ai:
   request-timeout: ${AI_REQUEST_TIMEOUT:180s}
   providers:
     google:
-      model: ${GOOGLE_AI_MODEL:gemini-3.7-flash}
+      model: ${GOOGLE_AI_MODEL:gemini-3.6-flash}
       embedding-model: ${GOOGLE_AI_EMBEDDING_MODEL:gemini-embedding-001}
       api-key: ${GOOGLE_AI_API_KEY:}
       base-url: ${GOOGLE_AI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}

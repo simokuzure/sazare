@@ -4,6 +4,7 @@ import com.jt.learning.entity.ErrorType;
 import com.jt.learning.entity.Question;
 import com.jt.learning.entity.QuestionAnswer;
 import com.jt.learning.entity.UserErrorType;
+import com.jt.learning.dto.AiQuestionTagOptionDTO;
 import com.jt.learning.service.ai.AiQuestionPrompt;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -18,13 +19,14 @@ public class AiReviewQuestionPromptBuilder {
 
     private static final String SYSTEM_PROMPT = """
             你是日语翻译复习题生成助手。只输出一个合法 JSON 对象，不要输出 Markdown 或额外说明。
-            生成一道与目标错误模式直接相关、但题干不重复的中译日题目。
+            生成一道与复习重点直接相关、但题干不重复的中译日题目。
             sourceText必须是非空中文题干；contextText和grammarPoint必须非空。
             contextText只能客观说明对话场景、人物关系或事情背景，不得包含考查意图、作答方向、候选词语、语法点、参考答案或纠错提示。
             不得在contextText中使用“用于考查”“应使用”“而非”等会暴露答案方向的表述；语法或词汇要求只写入grammarPoint。
             answers返回1到10个答案；answerType只能是STANDARD或REFERENCE；必须且只能有一个primaryAnswer=true；
             主答案必须是STANDARD。答案文本不得重复，sortOrder必须是从0开始的不重复非负整数。
-            不输出等级、难度、标签或场景标记，这些元数据由后端继承。
+            不输出等级、难度或场景标记。tagCodes必须根据新题实际语义重新选择，不能照搬已有题标签。
+            tagCodes必须包含且只能包含1个场景标签，可以再包含0到2个功能标签，不能使用候选列表之外的code。
             """;
 
     private final ObjectMapper objectMapper;
@@ -37,7 +39,9 @@ public class AiReviewQuestionPromptBuilder {
             UserErrorType userErrorType,
             ErrorType errorType,
             List<Question> cycleQuestions,
-            Map<Long, List<QuestionAnswer>> answersByQuestionId
+            Map<Long, List<QuestionAnswer>> answersByQuestionId,
+            List<AiQuestionTagOptionDTO> sceneTagOptions,
+            List<AiQuestionTagOptionDTO> functionTagOptions
     ) {
         List<Map<String, Object>> existingQuestions = cycleQuestions.stream()
                 .map(question -> {
@@ -57,14 +61,20 @@ public class AiReviewQuestionPromptBuilder {
         targetError.put("errorTypeName", errorType.getName());
 
         String userPrompt = """
-                请根据目标错误类型和本周期已有题目生成一道新的复习衍生题。
+                请根据复习重点和本周期已有题目生成一道新的复习衍生题。
 
-                目标错误类型：%s
+                复习重点：%s
                 本周期已有题目及答案：%s
+                场景标签候选：%s
+                功能标签候选：%s
 
                 JSON结构：
-                {"question":{"sourceText":"中文题干","contextText":"中文语境","grammarPoint":"语法点","answers":[{"answerText":"日语答案","answerType":"STANDARD","primaryAnswer":true,"sortOrder":0}]}}
-                """.formatted(toJson(targetError), toJson(existingQuestions));
+                {"question":{"sourceText":"中文题干","contextText":"中文语境","grammarPoint":"语法点","tagCodes":["场景标签code","可选的功能标签code"],"answers":[{"answerText":"日语答案","answerType":"STANDARD","primaryAnswer":true,"sortOrder":0}]}}
+                """.formatted(
+                toJson(targetError),
+                toJson(existingQuestions),
+                toJson(sceneTagOptions),
+                toJson(functionTagOptions));
         return new AiQuestionPrompt(SYSTEM_PROMPT, userPrompt);
     }
 

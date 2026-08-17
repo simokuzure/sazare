@@ -2,6 +2,7 @@ package com.jt.learning.service;
 
 import com.jt.learning.dto.ReviewAttemptRequest;
 import com.jt.learning.dto.ReviewCardQueryRequest;
+import com.jt.learning.entity.ReviewCard;
 import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.ReviewAttemptVO;
 import com.jt.learning.vo.ReviewCardDetailVO;
@@ -21,7 +22,7 @@ public interface ReviewService {
 
     ReviewDerivedQuestionGenerationVO generateDerivedQuestion(Long cardId);
 
-    void recordPracticeError(
+    ReviewCard recordPracticeError(
             Long userId,
             Long userAnswerId,
             Long questionId,

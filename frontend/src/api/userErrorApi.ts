@@ -1,6 +1,8 @@
 import { readApiResponse } from './client'
 import type { PageData } from '../types/api'
 import type {
+  ReviewCardCreatePayload,
+  ReviewCardCreated,
   UserAnswerError,
   UserAnswerErrorConfirmationPayload,
   UserErrorType,
@@ -32,4 +34,18 @@ export async function confirmUserAnswerErrors(
   })
   const result = await readApiResponse<UserAnswerError[]>(response)
   return result.data ?? []
+}
+
+export async function createReviewCard(
+  userAnswerId: number,
+  payload: ReviewCardCreatePayload,
+): Promise<ReviewCardCreated> {
+  const response = await fetch(`/api/user-answers/${userAnswerId}/review-cards`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const result = await readApiResponse<ReviewCardCreated>(response)
+  if (!result.data) throw new Error('创建复习卡片未返回结果')
+  return result.data
 }

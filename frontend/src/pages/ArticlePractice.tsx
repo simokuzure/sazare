@@ -194,7 +194,7 @@ export default function ArticlePractice() {
       setUserErrorTypes([])
       setSession((current) => ({
         ...current,
-        errorConfirmationNotice: { kind: 'error', title: '无法加载已有类型', message: getErrorMessage(fetchError) },
+        errorConfirmationNotice: { kind: 'error', title: '无法加载已有复习卡片', message: getErrorMessage(fetchError) },
       }))
     } finally {
       setUserErrorTypesLoading(false)
@@ -203,11 +203,11 @@ export default function ArticlePractice() {
 
   async function handleConfirmErrors() {
     const answerReview = session.answerReview
-    if (!answerReview) return
+    if (!answerReview) return false
     const selectedItems = answerReview.errorAnalysis
       .map((analysis, index) => ({ analysis, candidate: session.errorCandidates[index], index }))
       .filter(({ candidate }) => candidate?.selected && !candidate.saved)
-    if (selectedItems.length === 0) return
+    if (selectedItems.length === 0) return false
 
     const payload: UserAnswerErrorConfirmation[] = []
     for (const { analysis, candidate, index } of selectedItems) {
@@ -215,18 +215,18 @@ export default function ArticlePractice() {
         if (!candidate.userErrorTypeName.trim() || !candidate.userErrorTypeDescription.trim()) {
           setSession((current) => ({
             ...current,
-            errorConfirmationNotice: { kind: 'error', title: '请补充用户错误类型', message: '新建类型需要名称和说明。' },
+            errorConfirmationNotice: { kind: 'error', title: '请补充复习卡片', message: '新建复习卡片需要名称和说明。' },
           }))
-          return
+          return false
         }
         payload.push(toNewErrorConfirmation(analysis, candidate, index))
       } else {
         if (!candidate.userErrorTypeId) {
           setSession((current) => ({
             ...current,
-            errorConfirmationNotice: { kind: 'error', title: '请选择已有类型', message: '追加记录前请选择对应的用户错误类型。' },
+            errorConfirmationNotice: { kind: 'error', title: '请选择已有复习卡片', message: '添加记录前请选择对应的复习卡片。' },
           }))
-          return
+          return false
         }
         payload.push(toExistingErrorConfirmation(analysis, candidate, index))
       }
@@ -242,15 +242,16 @@ export default function ArticlePractice() {
         errorCandidates: current.errorCandidates.map((item, index) => (
           confirmedIndexes.has(index) ? { ...item, selected: false, saved: true } : item
         )),
-        errorConfirmationNotice: { kind: 'info', title: '错误已记录', message: `已确认 ${selectedItems.length} 条错误。` },
-        errorConfirmationOpen: false,
+        errorConfirmationNotice: { kind: 'info', title: '复习卡片已更新', message: `已添加 ${selectedItems.length} 项复习内容。` },
       }))
       void loadActiveUserErrorTypes()
+      return true
     } catch (fetchError: unknown) {
       setSession((current) => ({
         ...current,
         errorConfirmationNotice: { kind: 'error', title: '记录失败', message: getErrorMessage(fetchError) },
       }))
+      return false
     } finally {
       setErrorConfirming(false)
     }
@@ -328,7 +329,8 @@ export default function ArticlePractice() {
               selectedErrorCount={selectedErrorCount}
               onUpdateErrorCandidate={updateErrorCandidate}
               onConfirmErrors={handleConfirmErrors}
-              onOpenErrorConfirmation={() => { setSession((current) => ({ ...current, errorConfirmationNotice: null, errorConfirmationOpen: true })); void loadActiveUserErrorTypes() }}
+              onCustomSaved={() => void loadActiveUserErrorTypes()}
+              onOpenErrorConfirmation={() => { setSession((current) => ({ ...current, errorConfirmationNotice: null, errorConfirmationOpen: true })); if (session.answerReview?.errorAnalysis.length) void loadActiveUserErrorTypes() }}
               onCloseErrorConfirmation={() => setSession((current) => ({ ...current, errorConfirmationOpen: false }))}
             /> : null}
             <div className="action-row"><button type="button" className="primary-button" disabled={session.answerScoring || errorConfirming} onClick={() => { setSession((current) => ({ ...current, answerSubmitted: false, answerScoring: false, answerReview: null, answerNotice: null, errorCandidates: [], errorConfirmationNotice: null, errorConfirmationOpen: false })); setPracticeNotice(null) }}>修改答案</button><button type="button" disabled={session.answerScoring || errorConfirming} onClick={() => { setSession(EMPTY_ARTICLE_SESSION); setPracticeNotice(null) }}>清空</button></div>
@@ -349,7 +351,8 @@ type ArticleReviewResultProps = {
   errorConfirming: boolean
   selectedErrorCount: number
   onUpdateErrorCandidate: (index: number, patch: Partial<ErrorCandidateState>) => void
-  onConfirmErrors: () => void
+  onConfirmErrors: () => Promise<boolean>
+  onCustomSaved: () => void
   onOpenErrorConfirmation: () => void
   onCloseErrorConfirmation: () => void
 }
@@ -385,11 +388,11 @@ function ArticleReviewResult(props: ArticleReviewResultProps) {
           <dl className="score-grid"><div><dt>语法与用词</dt><dd>{review.scores.grammarVocabularyScore}</dd></div><div><dt>自然度与篇章连贯</dt><dd>{review.scores.naturalFluencyScore}</dd></div><div><dt>体裁与语域</dt><dd>{review.scores.scenarioAdaptationScore}</dd></div><div><dt>忠实度与完整性</dt><dd>{review.scores.informationCompletenessScore}</dd></div></dl>
           <dl className="comment-list"><div><dt>语法</dt><dd>{review.comments.grammarComment}</dd></div><div><dt>词汇</dt><dd>{review.comments.vocabularyComment}</dd></div><div><dt>自然度与篇章</dt><dd>{review.comments.naturalnessComment}</dd></div><div><dt>体裁与语域</dt><dd>{review.comments.scenarioComment}</dd></div></dl>
           <ReviewList title="候选错误" emptyText="本次未发现明确错误。" items={review.errorAnalysis}>{(item) => <div><span>{item.errorTypeName} / {item.severity}</span><strong>{item.original}</strong><p>{item.issue}</p><p>{item.suggestion}</p></div>}</ReviewList>
-          {review.errorAnalysis.length > 0 ? <div className="error-record-action"><span>{candidates.filter((candidate) => candidate.saved).length} / {review.errorAnalysis.length} 条错误已记录</span><button type="button" className="primary-button" disabled={candidates.every((candidate) => candidate.saved)} onClick={props.onOpenErrorConfirmation}>记录错误</button></div> : null}
           <ReviewList title="修改建议" emptyText="本次没有额外修改建议。" items={review.revisionSuggestions}>{(item) => <p>{item}</p>}</ReviewList>
           <ReviewList title="推荐表达" emptyText="本次没有推荐表达。" items={review.recommendedExpressions}>{(item) => <div><span>{item.formality}</span><strong>{item.expression}</strong><p>{item.usage}</p><p>{item.note}</p></div>}</ReviewList>
         </div>
       </details>
+      <div className="error-record-action"><span>{review.errorAnalysis.length > 0 ? `${candidates.filter((candidate) => candidate.saved).length} / ${review.errorAnalysis.length} 项已加入复习卡片` : '可手动记录希望继续练习的表达'}</span><button type="button" className="primary-button" onClick={props.onOpenErrorConfirmation}>添加复习卡片</button></div>
 
       {props.errorConfirmationOpen ? <ErrorConfirmationModal
         analyses={review.errorAnalysis}
@@ -399,8 +402,12 @@ function ArticleReviewResult(props: ArticleReviewResultProps) {
         notice={props.errorConfirmationNotice}
         confirming={props.errorConfirming}
         selectedCount={props.selectedErrorCount}
+        userAnswerId={review.userAnswerId}
+        reviewCardSource={{ kind: 'ARTICLE', segments: review.sentenceReviews.map((item) => ({ index: item.sourceSegmentIndex, text: item.sourceText, referenceText: item.referenceText })) }}
+        recommendedExpressions={review.recommendedExpressions.map((item) => item.expression)}
         onUpdate={props.onUpdateErrorCandidate}
         onConfirm={props.onConfirmErrors}
+        onCustomSaved={props.onCustomSaved}
         onClose={props.onCloseErrorConfirmation}
       /> : null}
     </>

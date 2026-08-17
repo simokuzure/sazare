@@ -68,7 +68,7 @@ public class AiJapaneseCorrectionPromptBuilder {
                         "suggestion": "correctedText 中的完整日语修订句",
                         "reviewSourceText": "修订句对应的简体中文含义",
                         "severity": "MEDIUM",
-                        "suggestedUserErrorTypeName": "可复现的具体错误模式",
+                        "suggestedUserErrorTypeName": "可反复练习的具体复习重点",
                         "suggestedUserErrorTypeDescription": "触发情形、错误形式与正确用法"
                       }
                     ],

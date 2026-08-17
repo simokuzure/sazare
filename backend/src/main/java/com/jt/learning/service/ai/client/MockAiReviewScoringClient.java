@@ -23,7 +23,7 @@ public class MockAiReviewScoringClient implements AiReviewScoringClient {
                     "review", Map.of(
                             "quality", 4,
                             "targetErrorResolved", true,
-                            "feedback", "目标错误已经解决，表达基本自然。",
+                            "feedback", "复习重点已经掌握，表达基本自然。",
                             "scores", Map.of(
                                     "grammarVocabularyScore", 84,
                                     "naturalFluencyScore", 82,

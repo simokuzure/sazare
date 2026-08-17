@@ -91,7 +91,7 @@ export default function JapaneseCorrectionPractice() {
       setUserErrorTypes([])
       setSession((current) => ({
         ...current,
-        confirmationNotice: { kind: 'error', title: '无法加载已有类型', message: getErrorMessage(fetchError) },
+        confirmationNotice: { kind: 'error', title: '无法加载已有复习卡片', message: getErrorMessage(fetchError) },
       }))
     } finally {
       setUserErrorTypesLoading(false)
@@ -99,11 +99,11 @@ export default function JapaneseCorrectionPractice() {
   }
 
   async function handleConfirmErrors() {
-    if (!session.review) return
+    if (!session.review) return false
     const selectedItems = session.review.errorAnalysis
       .map((analysis, index) => ({ analysis, candidate: session.candidates[index], index }))
       .filter(({ candidate }) => candidate?.selected && !candidate.saved)
-    if (selectedItems.length === 0) return
+    if (selectedItems.length === 0) return false
 
     const payload: UserAnswerErrorConfirmation[] = []
     for (const { analysis, candidate, index } of selectedItems) {
@@ -111,18 +111,18 @@ export default function JapaneseCorrectionPractice() {
         if (!candidate.userErrorTypeName.trim() || !candidate.userErrorTypeDescription.trim()) {
           setSession((current) => ({
             ...current,
-            confirmationNotice: { kind: 'error', title: '请补充用户错误类型', message: '新建类型需要名称和说明。' },
+            confirmationNotice: { kind: 'error', title: '请补充复习卡片', message: '新建复习卡片需要名称和说明。' },
           }))
-          return
+          return false
         }
         payload.push(toNewErrorConfirmation(analysis, candidate, index))
       } else {
         if (!candidate.userErrorTypeId) {
           setSession((current) => ({
             ...current,
-            confirmationNotice: { kind: 'error', title: '请选择已有类型', message: '追加记录前请选择对应的用户错误类型。' },
+            confirmationNotice: { kind: 'error', title: '请选择已有复习卡片', message: '添加记录前请选择对应的复习卡片。' },
           }))
-          return
+          return false
         }
         payload.push(toExistingErrorConfirmation(analysis, candidate, index))
       }
@@ -138,15 +138,16 @@ export default function JapaneseCorrectionPractice() {
         candidates: current.candidates.map((item, index) => (
           confirmedIndexes.has(index) ? { ...item, selected: false, saved: true } : item
         )),
-        confirmationOpen: false,
-        confirmationNotice: { kind: 'info', title: '错误已记录', message: `已确认 ${selectedItems.length} 条错误。` },
+        confirmationNotice: { kind: 'info', title: '复习卡片已更新', message: `已添加 ${selectedItems.length} 项复习内容。` },
       }))
       void loadActiveUserErrorTypes()
+      return true
     } catch (fetchError: unknown) {
       setSession((current) => ({
         ...current,
         confirmationNotice: { kind: 'error', title: '记录失败', message: getErrorMessage(fetchError) },
       }))
+      return false
     } finally {
       setErrorConfirming(false)
     }
@@ -212,10 +213,11 @@ export default function JapaneseCorrectionPractice() {
               onUpdateCandidate={updateCandidate}
               onOpenConfirmation={() => {
                 setSession((current) => ({ ...current, confirmationOpen: true, confirmationNotice: null }))
-                void loadActiveUserErrorTypes()
+                if (session.review?.errorAnalysis.length) void loadActiveUserErrorTypes()
               }}
               onCloseConfirmation={() => setSession((current) => ({ ...current, confirmationOpen: false }))}
               onConfirmErrors={handleConfirmErrors}
+              onCustomSaved={() => void loadActiveUserErrorTypes()}
             /> : null}
             <div className="action-row">
               <button type="button" className="primary-button" disabled={session.correcting || errorConfirming} onClick={handleEdit}>修改原文</button>
@@ -240,7 +242,8 @@ type CorrectionResultProps = {
   onUpdateCandidate: (index: number, patch: Partial<ErrorCandidateState>) => void
   onOpenConfirmation: () => void
   onCloseConfirmation: () => void
-  onConfirmErrors: () => void
+  onConfirmErrors: () => Promise<boolean>
+  onCustomSaved: () => void
 }
 
 function CorrectionResult(props: CorrectionResultProps) {
@@ -269,11 +272,11 @@ function CorrectionResult(props: CorrectionResultProps) {
           <ReviewList title="候选错误" emptyText="本次未发现明确错误。" items={review.errorAnalysis}>
             {(item) => <div><span>{item.errorTypeName} / {item.severity}</span><strong>{item.original}</strong><p>{item.issue}</p><p>修订：{item.suggestion}</p></div>}
           </ReviewList>
-          {review.errorAnalysis.length > 0 ? <div className="error-record-action"><span>{candidates.filter((candidate) => candidate.saved).length} / {review.errorAnalysis.length} 条错误已记录</span><button type="button" className="primary-button" disabled={candidates.every((candidate) => candidate.saved)} onClick={props.onOpenConfirmation}>记录错误</button></div> : null}
           <ReviewList title="修改建议" emptyText="本次没有额外修改建议。" items={review.revisionSuggestions}>{(item) => <p>{item}</p>}</ReviewList>
           <ReviewList title="推荐表达" emptyText="本次没有推荐表达。" items={review.recommendedExpressions}>{(item) => <div><span>{item.formality}</span><strong>{item.expression}</strong><p>{item.usage}</p><p>{item.note}</p></div>}</ReviewList>
         </div>
       </details>
+      <div className="error-record-action"><span>{review.errorAnalysis.length > 0 ? `${candidates.filter((candidate) => candidate.saved).length} / ${review.errorAnalysis.length} 项已加入复习卡片` : '可手动记录希望继续练习的表达'}</span><button type="button" className="primary-button" onClick={props.onOpenConfirmation}>添加复习卡片</button></div>
 
       {props.confirmationOpen ? <ErrorConfirmationModal
         analyses={review.errorAnalysis}
@@ -283,8 +286,12 @@ function CorrectionResult(props: CorrectionResultProps) {
         notice={props.confirmationNotice}
         confirming={props.errorConfirming}
         selectedCount={props.selectedErrorCount}
+        userAnswerId={review.userAnswerId}
+        reviewCardSource={{ kind: 'CORRECTION' }}
+        recommendedExpressions={review.recommendedExpressions.map((item) => item.expression)}
         onUpdate={props.onUpdateCandidate}
         onConfirm={props.onConfirmErrors}
+        onCustomSaved={props.onCustomSaved}
         onClose={props.onCloseConfirmation}
       /> : null}
     </>

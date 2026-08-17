@@ -3,11 +3,13 @@ package com.jt.learning.controller;
 import com.jt.learning.common.ApiResponse;
 import com.jt.learning.dto.UserAnswerQueryRequest;
 import com.jt.learning.dto.UserAnswerErrorConfirmRequest;
+import com.jt.learning.dto.ReviewCardCreateRequest;
 import com.jt.learning.service.UserAnswerService;
 import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.UserAnswerErrorVO;
 import com.jt.learning.vo.UserAnswerDetailVO;
 import com.jt.learning.vo.UserAnswerListItemVO;
+import com.jt.learning.vo.ReviewCardCreatedVO;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -45,5 +47,13 @@ public class UserAnswerController {
             @Valid @RequestBody UserAnswerErrorConfirmRequest request
     ) {
         return ApiResponse.success(userAnswerService.confirmUserAnswerErrors(id, request));
+    }
+
+    @PostMapping("/user-answers/{id}/review-cards")
+    public ApiResponse<ReviewCardCreatedVO> createReviewCard(
+            @PathVariable Long id,
+            @Valid @RequestBody ReviewCardCreateRequest request
+    ) {
+        return ApiResponse.success(userAnswerService.createReviewCard(id, request));
     }
 }

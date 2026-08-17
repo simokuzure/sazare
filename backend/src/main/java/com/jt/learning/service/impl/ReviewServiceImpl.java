@@ -3,6 +3,7 @@ package com.jt.learning.service.impl;
 import com.jt.learning.dto.AiAnswerErrorAnalysisDTO;
 import com.jt.learning.dto.AiErrorTypeOptionDTO;
 import com.jt.learning.dto.AiQuestionAnswerDTO;
+import com.jt.learning.dto.AiQuestionTagOptionDTO;
 import com.jt.learning.dto.AiReviewDTO;
 import com.jt.learning.dto.AiReviewGeneratedQuestionDTO;
 import com.jt.learning.dto.ReviewAttemptHistoryRow;
@@ -86,6 +87,8 @@ public class ReviewServiceImpl implements ReviewService {
     private static final String RESULT_PASS = "PASS";
     private static final String RESULT_FAIL = "FAIL";
     private static final String SOURCE_REVIEW_DERIVED = "REVIEW_DERIVED";
+    private static final String TAG_TYPE_SCENE = "SCENE";
+    private static final String TAG_TYPE_FUNCTION = "FUNCTION";
 
     private final ReviewCardMapper reviewCardMapper;
     private final ReviewCycleMapper reviewCycleMapper;
@@ -328,7 +331,7 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     @Transactional
-    public void recordPracticeError(
+    public ReviewCard recordPracticeError(
             Long userId,
             Long userAnswerId,
             Long questionId,
@@ -352,19 +355,20 @@ public class ReviewServiceImpl implements ReviewService {
             throw business("复习卡片归属不合法");
         }
         if (reviewAttemptMapper.existsByCardIdAndUserAnswerId(card.getId(), userAnswerId)) {
-            return;
+            return card;
         }
 
         if (newCard) {
             createPracticeFailureCycle(card, userAnswerId, questionId, 1, 0, occurredAt);
-            return;
+            return card;
         }
         if (CARD_MASTERED.equals(card.getStatus())) {
             int cycleNo = reviewCycleMapper.selectMaxCycleNo(card.getId()) + 1;
             createPracticeFailureCycle(card, userAnswerId, questionId, cycleNo, 1, occurredAt);
-            return;
+            return card;
         }
         applyPracticeFailureToCurrentCycle(card, userAnswerId, questionId, occurredAt);
+        return card;
     }
 
     @Override
@@ -501,10 +505,21 @@ public class ReviewServiceImpl implements ReviewService {
         List<QuestionAnswer> answers = questionAnswerMapper.selectActiveAnswersByQuestionIds(questionIds);
         Map<Long, List<QuestionAnswer>> answersByQuestionId = answers.stream()
                 .collect(Collectors.groupingBy(QuestionAnswer::getQuestionId, LinkedHashMap::new, Collectors.toList()));
-        AiQuestionPrompt prompt = questionPromptBuilder.build(userErrorType, errorType, questions, answersByQuestionId);
+        List<Tag> sceneTags = tagMapper.selectEnabledTagsByType(TAG_TYPE_SCENE);
+        List<Tag> functionTags = tagMapper.selectEnabledTagsByType(TAG_TYPE_FUNCTION);
+        Map<String, Tag> allowedTagsByCode = java.util.stream.Stream.concat(
+                        sceneTags.stream(), functionTags.stream())
+                .collect(Collectors.toMap(Tag::getCode, Function.identity(), (left, right) -> left, LinkedHashMap::new));
+        List<AiQuestionTagOptionDTO> sceneTagOptions = toTagOptions(sceneTags);
+        List<AiQuestionTagOptionDTO> functionTagOptions = toTagOptions(functionTags);
+        AiQuestionPrompt prompt = questionPromptBuilder.build(
+                userErrorType, errorType, questions, answersByQuestionId, sceneTagOptions, functionTagOptions);
         Set<String> sourceTexts = questions.stream().map(Question::getSourceText).collect(Collectors.toSet());
         AiReviewGeneratedQuestionDTO generated = aiResponseValidator.parseQuestion(
-                questionClient.generateQuestion(prompt), sourceTexts);
+                questionClient.generateQuestion(prompt, sceneTagOptions, functionTagOptions),
+                sourceTexts,
+                sceneTags.stream().map(Tag::getCode).collect(Collectors.toSet()),
+                allowedTagsByCode.keySet());
 
         ReviewCycleQuestion baseCycleQuestion = reviewCycleQuestionMapper.selectLatestFailedOriginal(cycle.getId());
         if (baseCycleQuestion == null) {
@@ -525,8 +540,8 @@ public class ReviewServiceImpl implements ReviewService {
         for (AiQuestionAnswerDTO answerDTO : generated.answers()) {
             questionAnswerMapper.insertQuestionAnswer(newDerivedAnswer(derived.getId(), answerDTO, now));
         }
-        for (Tag tag : tagMapper.selectEnabledTagsByQuestionId(baseQuestion.getId())) {
-            questionTagMapper.insertQuestionTag(derived.getId(), tag.getId());
+        for (String tagCode : generated.tagCodes()) {
+            questionTagMapper.insertQuestionTag(derived.getId(), allowedTagsByCode.get(tagCode.trim()).getId());
         }
 
         ReviewCycleQuestion cycleQuestion = new ReviewCycleQuestion();
@@ -613,6 +628,12 @@ public class ReviewServiceImpl implements ReviewService {
                 cycleQuestion.getId(), question.getId(), cycleQuestion.getQuestionRole(), question.getSourceText(),
                 question.getContextText(), question.getLevel(), question.getDifficulty(), question.getGrammarPoint(),
                 question.getSpoken(), question.getBusiness(), question.getExam(), tags, cycleQuestion.getAttemptCount());
+    }
+
+    private List<AiQuestionTagOptionDTO> toTagOptions(List<Tag> tags) {
+        return tags.stream()
+                .map(tag -> new AiQuestionTagOptionDTO(tag.getCode(), tag.getName(), tag.getDescription()))
+                .toList();
     }
 
     private ReviewCardListVO toCardListVO(ReviewCardListRow row) {

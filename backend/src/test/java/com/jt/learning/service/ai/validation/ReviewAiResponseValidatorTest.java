@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -96,16 +97,18 @@ class ReviewAiResponseValidatorTest {
     @Test
     void shouldRejectDuplicateQuestionOrInvalidAnswers() {
         String duplicate = """
-                {"question":{"sourceText":"请翻译这句话","contextText":"日常交流","grammarPoint":"助词","answers":[{"answerText":"この文を訳してください。","answerType":"STANDARD","primaryAnswer":true,"sortOrder":0}]}}
+                {"question":{"sourceText":"请翻译这句话","contextText":"日常交流","grammarPoint":"助词","tagCodes":["DAILY_TRAVEL"],"answers":[{"answerText":"この文を訳してください。","answerType":"STANDARD","primaryAnswer":true,"sortOrder":0}]}}
                 """;
-        assertThatThrownBy(() -> validator.parseQuestion(duplicate, Set.of("请翻译这句话")))
+        assertThatThrownBy(() -> validator.parseQuestion(
+                duplicate, Set.of("请翻译这句话"), Set.of("DAILY_TRAVEL"), Set.of("DAILY_TRAVEL")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("重复");
 
         String invalidAnswers = """
-                {"question":{"sourceText":"请翻译另一句话","contextText":"日常交流","grammarPoint":"助词","answers":[{"answerText":"答えです。","answerType":"OTHER","primaryAnswer":true,"sortOrder":0}]}}
+                {"question":{"sourceText":"请翻译另一句话","contextText":"日常交流","grammarPoint":"助词","tagCodes":["DAILY_TRAVEL"],"answers":[{"answerText":"答えです。","answerType":"OTHER","primaryAnswer":true,"sortOrder":0}]}}
                 """;
-        assertThatThrownBy(() -> validator.parseQuestion(invalidAnswers, Set.of()))
+        assertThatThrownBy(() -> validator.parseQuestion(
+                invalidAnswers, Set.of(), Set.of("DAILY_TRAVEL"), Set.of("DAILY_TRAVEL")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("answerType");
     }
@@ -113,10 +116,26 @@ class ReviewAiResponseValidatorTest {
     @Test
     void shouldAcceptGeneratedQuestionFieldsInAnyOrder() {
         var question = validator.parseQuestion("""
-                {"question":{"answers":[{"sortOrder":0,"primaryAnswer":true,"answerType":"STANDARD","answerText":"この文を訳してください。"}],"grammarPoint":"助词","sourceText":"请翻译这句话","contextText":"日常交流"}}
-                """, Set.of());
+                {"question":{"answers":[{"sortOrder":0,"primaryAnswer":true,"answerType":"STANDARD","answerText":"この文を訳してください。"}],"tagCodes":["DAILY_TRAVEL","FUNCTION_CONFIRM"],"grammarPoint":"助词","sourceText":"请翻译这句话","contextText":"日常交流"}}
+                """, Set.of(), Set.of("DAILY_TRAVEL"), Set.of("DAILY_TRAVEL", "FUNCTION_CONFIRM"));
 
         assertThat(question.sourceText()).isEqualTo("请翻译这句话");
         assertThat(question.answers()).hasSize(1);
+    }
+
+    @Test
+    void shouldParseTagClassificationAndRejectInvalidSceneCount() {
+        List<String> tagCodes = validator.parseTagCodes(
+                "{\"tagCodes\":[\"DAILY_TRAVEL\",\"FUNCTION_CONFIRM\"]}",
+                Set.of("DAILY_TRAVEL"),
+                Set.of("DAILY_TRAVEL", "FUNCTION_CONFIRM"));
+
+        assertThat(tagCodes).containsExactly("DAILY_TRAVEL", "FUNCTION_CONFIRM");
+        assertThatThrownBy(() -> validator.parseTagCodes(
+                "{\"tagCodes\":[\"FUNCTION_CONFIRM\"]}",
+                Set.of("DAILY_TRAVEL"),
+                Set.of("DAILY_TRAVEL", "FUNCTION_CONFIRM")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("场景标签");
     }
 }

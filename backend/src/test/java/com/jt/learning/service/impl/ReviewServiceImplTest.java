@@ -10,6 +10,7 @@ import com.jt.learning.entity.QuestionAnswer;
 import com.jt.learning.entity.ReviewCard;
 import com.jt.learning.entity.ReviewCycle;
 import com.jt.learning.entity.ReviewCycleQuestion;
+import com.jt.learning.entity.Tag;
 import com.jt.learning.entity.User;
 import com.jt.learning.entity.UserAnswer;
 import com.jt.learning.entity.UserErrorType;
@@ -309,7 +310,7 @@ class ReviewServiceImplTest {
 
         assertThat(result.cardStatus()).isEqualTo("MASTERED");
         assertThat(result.progress().netSuccessCount()).isEqualTo(4);
-        verify(questionClient, never()).generateQuestion(any());
+        verify(questionClient, never()).generateQuestion(any(), any(), any());
     }
 
     @Test
@@ -342,7 +343,7 @@ class ReviewServiceImplTest {
         when(cycleQuestionMapper.selectAllByCycleId(20L)).thenReturn(List.of(cycleQuestion("PASSED", "ORIGINAL", 1)));
         when(questionMapper.selectQuestionsByIds(any())).thenReturn(List.of(question()));
         when(answerMapper.selectActiveAnswersByQuestionIds(any())).thenReturn(List.of(answer()));
-        when(questionClient.generateQuestion(any())).thenThrow(new BusinessException(
+        when(questionClient.generateQuestion(any(), any(), any())).thenThrow(new BusinessException(
                 com.jt.learning.exception.ErrorCode.BUSINESS_ERROR, "生成失败"));
 
         var result = service.submitReviewAttempt(1L, new ReviewAttemptRequest(30L, 0, "電車に間に合いました"));
@@ -452,8 +453,16 @@ class ReviewServiceImplTest {
         when(cycleQuestionMapper.selectAllByCycleId(20L)).thenReturn(List.of(original));
         when(questionMapper.selectQuestionsByIds(List.of(100L))).thenReturn(List.of(question()));
         when(answerMapper.selectActiveAnswersByQuestionIds(List.of(100L))).thenReturn(List.of(answer()));
-        when(questionClient.generateQuestion(any())).thenReturn("""
-                {"question":{"sourceText":"我准时赶上了公交车。","contextText":"日常出行","grammarPoint":"に間に合う","answers":[{"answerText":"バスに間に合いました。","answerType":"STANDARD","primaryAnswer":true,"sortOrder":0}]}}
+        Tag selectedTag = new Tag();
+        selectedTag.setId(5L);
+        selectedTag.setTagType("SCENE");
+        selectedTag.setCode("DAILY_TRAVEL");
+        selectedTag.setName("日常出行");
+        selectedTag.setDescription("日常交通出行场景");
+        when(tagMapper.selectEnabledTagsByType("SCENE")).thenReturn(List.of(selectedTag));
+        when(tagMapper.selectEnabledTagsByType("FUNCTION")).thenReturn(List.of());
+        when(questionClient.generateQuestion(any(), any(), any())).thenReturn("""
+                {"question":{"sourceText":"我准时赶上了公交车。","contextText":"日常出行","grammarPoint":"に間に合う","tagCodes":["DAILY_TRAVEL"],"answers":[{"answerText":"バスに間に合いました。","answerType":"STANDARD","primaryAnswer":true,"sortOrder":0}]}}
                 """);
         when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
             Question derived = invocation.getArgument(0);
@@ -474,6 +483,7 @@ class ReviewServiceImplTest {
         verify(questionMapper).insertQuestion(questionCaptor.capture());
         assertThat(questionCaptor.getValue().getSourceType()).isEqualTo("REVIEW_DERIVED");
         verify(answerMapper).insertQuestionAnswer(any());
+        verify(questionTagMapper).insertQuestionTag(101L, 5L);
     }
 
     private ReviewCard stubReadyAttempt(String status, String role, int successfulCount, int targetCount) {

@@ -37,7 +37,7 @@ public class ReviewAttempt {
     /** SM-2质量分，范围0到5。 */
     private Integer sm2Quality;
 
-    /** 本次回答是否解决目标错误。 */
+    /** 本次回答是否掌握复习重点。 */
     private Boolean targetErrorResolved;
 
     /** 复习专用AI反馈。 */

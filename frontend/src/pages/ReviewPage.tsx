@@ -48,6 +48,7 @@ export default function ReviewPage() {
   const [detailReloadToken, setDetailReloadToken] = useState(0)
   const [answerText, setAnswerText] = useState('')
   const [submittedAnswer, setSubmittedAnswer] = useState('')
+  const [submittedQuestionSource, setSubmittedQuestionSource] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [attemptResult, setAttemptResult] = useState<ReviewAttemptResult | null>(null)
   const [actionNotice, setActionNotice] = useState<PracticeNotice | null>(null)
@@ -121,6 +122,7 @@ export default function ReviewPage() {
     setDetailError(null)
     setAnswerText('')
     setSubmittedAnswer('')
+    setSubmittedQuestionSource('')
     setAttemptResult(null)
     setActionNotice(null)
     setErrorCandidates([])
@@ -181,6 +183,7 @@ export default function ReviewPage() {
       return
     }
 
+    const questionSource = detail.currentQuestion.sourceText
     setSubmitting(true)
     setActionNotice(null)
     try {
@@ -191,6 +194,7 @@ export default function ReviewPage() {
         earlyReview,
       })
       setSubmittedAnswer(normalizedAnswer)
+      setSubmittedQuestionSource(questionSource)
       setAttemptResult(result)
       setErrorCandidates(result.errorAnalysis.map(toErrorCandidateState))
       setErrorConfirmationNotice(null)
@@ -247,6 +251,7 @@ export default function ReviewPage() {
     if (selectedCardId === null) return
     setAnswerText('')
     setSubmittedAnswer('')
+    setSubmittedQuestionSource('')
     setAttemptResult(null)
     setActionNotice(null)
     setErrorCandidates([])
@@ -263,7 +268,7 @@ export default function ReviewPage() {
       setUserErrorTypes(result.items)
     } catch (error: unknown) {
       setUserErrorTypes([])
-      setErrorConfirmationNotice({ kind: 'error', title: '无法加载已有类型', message: getErrorMessage(error) })
+      setErrorConfirmationNotice({ kind: 'error', title: '无法加载已有复习卡片', message: getErrorMessage(error) })
     } finally {
       setUserErrorTypesLoading(false)
     }
@@ -272,7 +277,7 @@ export default function ReviewPage() {
   function openErrorConfirmation() {
     setErrorConfirmationNotice(null)
     setErrorConfirmationOpen(true)
-    void loadActiveUserErrorTypes()
+    if (attemptResult?.errorAnalysis.length) void loadActiveUserErrorTypes()
   }
 
   function updateErrorCandidate(index: number, patch: Partial<ErrorCandidateState>) {
@@ -283,24 +288,24 @@ export default function ReviewPage() {
   }
 
   async function handleConfirmErrors() {
-    if (!attemptResult) return
+    if (!attemptResult) return false
     const selectedItems = attemptResult.errorAnalysis
       .map((analysis, index) => ({ analysis, candidate: errorCandidates[index], index }))
       .filter(({ candidate }) => candidate?.selected && !candidate.saved)
-    if (selectedItems.length === 0) return
+    if (selectedItems.length === 0) return false
 
     const payload: UserAnswerErrorConfirmation[] = []
     for (const { analysis, candidate, index } of selectedItems) {
       if (candidate.mode === 'NEW_USER_ERROR_TYPE') {
         if (!candidate.userErrorTypeName.trim() || !candidate.userErrorTypeDescription.trim()) {
-          setErrorConfirmationNotice({ kind: 'error', title: '请补充用户错误类型', message: '新建类型需要名称和说明。' })
-          return
+          setErrorConfirmationNotice({ kind: 'error', title: '请补充复习卡片', message: '新建复习卡片需要名称和说明。' })
+          return false
         }
         payload.push(toNewErrorConfirmation(analysis, candidate, index))
       } else {
         if (!candidate.userErrorTypeId) {
-          setErrorConfirmationNotice({ kind: 'error', title: '请选择已有类型', message: '追加记录前请选择对应的用户错误类型。' })
-          return
+          setErrorConfirmationNotice({ kind: 'error', title: '请选择已有复习卡片', message: '添加记录前请选择对应的复习卡片。' })
+          return false
         }
         payload.push(toExistingErrorConfirmation(analysis, candidate, index))
       }
@@ -314,12 +319,13 @@ export default function ReviewPage() {
       setErrorCandidates((current) => current.map((candidate, index) => (
         confirmedIndexes.has(index) ? { ...candidate, selected: false, saved: true } : candidate
       )))
-      setErrorConfirmationNotice({ kind: 'info', title: '错误已记录', message: `已确认 ${selectedItems.length} 条错误。` })
-      setErrorConfirmationOpen(false)
+      setErrorConfirmationNotice({ kind: 'info', title: '复习卡片已更新', message: `已添加 ${selectedItems.length} 项复习内容。` })
       setListReloadToken((value) => value + 1)
       void loadActiveUserErrorTypes()
+      return true
     } catch (error: unknown) {
       setErrorConfirmationNotice({ kind: 'error', title: '记录失败', message: getErrorMessage(error) })
+      return false
     } finally {
       setErrorConfirming(false)
     }
@@ -378,18 +384,22 @@ export default function ReviewPage() {
         notice={errorConfirmationNotice}
         confirming={errorConfirming}
         selectedCount={selectedErrorCount}
+        userAnswerId={attemptResult.userAnswerId}
+        reviewCardSource={{ kind: 'FIXED', sourceText: submittedQuestionSource }}
+        recommendedExpressions={attemptResult.standardAnswers.map((item) => item.answerText)}
         onUpdate={updateErrorCandidate}
         onConfirm={handleConfirmErrors}
+        onCustomSaved={() => { setListReloadToken((value) => value + 1); void loadActiveUserErrorTypes() }}
         onClose={() => setErrorConfirmationOpen(false)}
       /> : null}
     </ReviewResultView>
   }
 
-  return <section className="page-content target-page review-page" aria-label="错题复习">
+  return <section className="page-content target-page review-page" aria-label="复习卡片">
     <PageHeader
-      eyebrow="错题复习"
+      eyebrow="复习卡片"
       title="复习卡片"
-      description="按错误模式聚合的间隔复习计划，跟踪周期进度、待重试与下次到期时间。"
+      description="按复习重点聚合的间隔复习计划，跟踪周期进度、待重试与下次到期时间。"
       actions={<div className="segmented-control review-list-modes" aria-label="复习卡片视图">
           {(['DUE', 'ACTIVE', 'MASTERED'] as const).map((mode) => (
             <button key={mode} type="button" className={filters.mode === mode ? 'is-selected' : ''} onClick={() => changeMode(mode)}>
@@ -406,11 +416,11 @@ export default function ReviewPage() {
 
       {!listLoading && !listError && cards.items.length > 0 ? <div className="table-scroll">
         <table className="responsive-list-table review-card-table">
-          <thead><tr><th>错误模式</th><th>全局分类</th><th>到期状态</th><th>周期进度</th><th>原题</th><th>待重试</th><th>最近活动</th><th>操作</th></tr></thead>
+          <thead><tr><th>复习重点</th><th>全局分类</th><th>到期状态</th><th>周期进度</th><th>原题</th><th>待重试</th><th>最近活动</th><th>操作</th></tr></thead>
           <tbody>{cards.items.map((card) => {
             const due = card.status === 'ACTIVE' && isDue(card.dueAt)
             return <tr key={card.id}>
-              <td className="table-ellipsis-cell" data-label="错误模式" title={card.userErrorTypeName}><strong>{card.userErrorTypeName}</strong></td>
+              <td className="table-ellipsis-cell" data-label="复习重点" title={card.userErrorTypeName}><strong>{card.userErrorTypeName}</strong></td>
               <td className="table-ellipsis-cell" data-label="全局分类" title={`${card.errorTypeName} (${card.errorTypeCode})`}>{card.errorTypeName}<span className="table-secondary-text">{card.errorTypeCode}</span></td>
               <td data-label="到期状态"><span className={`review-state-badge ${card.status === 'MASTERED' ? 'is-mastered' : due ? 'is-ready' : 'is-waiting'}`}>{card.status === 'MASTERED' ? '已掌握' : due ? '已到期' : '等待中'}</span><span className="table-secondary-text">{card.status === 'MASTERED' ? formatDateTime(card.masteredAt) : dueText(card.dueAt)}</span></td>
               <td data-label="周期进度"><ProgressBar progress={card.progress} /></td>
@@ -441,7 +451,7 @@ function ReviewCardOverview({ detail, loading, error, onStart, onStartEarly, onR
   onBack: () => void
 }) {
   return <section className="page-content target-page review-page" aria-label="复习卡片查看">
-    <PageHeader eyebrow="错题复习" title="复习卡片详情" actions={<><button type="button" onClick={onBack}>返回列表</button><button type="button" disabled={loading} onClick={onReload}>重新加载</button></>} />
+    <PageHeader eyebrow="复习卡片" title="复习卡片详情" actions={<><button type="button" onClick={onBack}>返回列表</button><button type="button" disabled={loading} onClick={onReload}>重新加载</button></>} />
     <section className="surface review-surface review-detail-surface">
       {loading && !detail ? <p className="loading-text">正在加载卡片详情...</p> : null}
       {error ? <Notice notice={{ kind: 'error', title: '卡片加载失败', message: error }} actionLabel="重新加载" onAction={onReload} /> : null}
@@ -452,7 +462,7 @@ function ReviewCardOverview({ detail, loading, error, onStart, onStartEarly, onR
         {detail.reviewState === 'READY' ? <StateMessage title="卡片已到期" message="当前卡片已经可以复习。进入复习后才会显示题目和答案输入。" actionLabel="开始复习" onAction={onStart} /> : null}
         {detail.reviewState === 'WAITING' ? <StateMessage title="等待下次复习" message={`下次到期时间：${formatDateTime(detail.dueAt)}。也可以现在提前复习，计划将从本次实际作答日期重新计算。`} actionLabel="提前复习" onAction={onStartEarly} /> : null}
         {detail.reviewState === 'DERIVED_GENERATION_REQUIRED' ? <StateMessage title="需要继续本周期" message="本周期原题已经通过，但净成功尚未达到 4，需要生成衍生题继续复习。" actionLabel="继续复习" onAction={onStart} /> : null}
-        {detail.reviewState === 'MASTERED' ? <StateMessage title="本周期已掌握" message={`完成时间：${formatDateTime(detail.masteredAt)}。再次在普通练习中确认同类错误时，会开启下一周期。`} /> : null}
+        {detail.reviewState === 'MASTERED' ? <StateMessage title="本周期已掌握" message={`完成时间：${formatDateTime(detail.masteredAt)}。再次在普通练习中记录同一复习重点时，会开启下一周期。`} /> : null}
         <ReviewAttemptHistoryList attempts={detail.reviewAttempts} />
       </> : null}
     </section>
@@ -475,7 +485,7 @@ function ReviewDetailView({ detail, loading, error, answerText, submitting, deri
   onBack: () => void
 }) {
   return <section className="page-content target-page review-page" aria-label="复习卡片详情">
-    <PageHeader eyebrow="错题复习" title={earlyReview ? '提前复习' : '复习卡片详情'} actions={<><button type="button" disabled={submitting} onClick={onBack}>返回列表</button><button type="button" disabled={loading || submitting || derivedGenerating} onClick={onReload}>重新加载</button></>} />
+    <PageHeader eyebrow="复习卡片" title={earlyReview ? '提前复习' : '复习卡片详情'} actions={<><button type="button" disabled={submitting} onClick={onBack}>返回列表</button><button type="button" disabled={loading || submitting || derivedGenerating} onClick={onReload}>重新加载</button></>} />
     <section className="surface review-surface review-detail-surface">
       {loading && !detail ? <p className="loading-text">正在加载卡片详情...</p> : null}
       {error ? <Notice notice={{ kind: 'error', title: '卡片加载失败', message: error }} actionLabel="重新加载" onAction={onReload} /> : null}
@@ -491,7 +501,7 @@ function ReviewDetailView({ detail, loading, error, answerText, submitting, deri
         </div> : null}
         {detail.reviewState === 'WAITING' ? <StateMessage title="等待下次复习" message={`下次到期时间：${formatDateTime(detail.dueAt)}。到期前不能提交答案。`} /> : null}
         {detail.reviewState === 'DERIVED_GENERATION_REQUIRED' ? <StateMessage title="需要生成衍生题" message="本周期原题已通过，但净成功尚未达到 4，生成一道衍生题继续积累净成功。" actionLabel={derivedGenerating ? '生成中' : '生成衍生题'} actionDisabled={derivedGenerating} onAction={onGenerate} /> : null}
-        {detail.reviewState === 'MASTERED' ? <StateMessage title="本周期已掌握" message={`完成时间：${formatDateTime(detail.masteredAt)}。再次在普通练习中确认同类错误时，会开启下一周期。`} /> : null}
+        {detail.reviewState === 'MASTERED' ? <StateMessage title="本周期已掌握" message={`完成时间：${formatDateTime(detail.masteredAt)}。再次在普通练习中记录同一复习重点时，会开启下一周期。`} /> : null}
       </> : null}
     </section>
   </section>
@@ -502,7 +512,7 @@ function ReviewCardHeading({ detail, showDescription }: { detail: ReviewCardDeta
 }
 
 function ReviewSchedule({ detail }: { detail: ReviewCardDetail }) {
-  return <dl className="review-sm2-grid"><div><dt>难度因子</dt><dd>{detail.easeFactor.toFixed(4)}</dd></div><div><dt>连续成功</dt><dd>{detail.repetitionCount}</dd></div><div><dt>当前间隔</dt><dd>{detail.intervalDays} 天</dd></div><div><dt>累计错误次数</dt><dd>{detail.lapseCount}</dd></div><div><dt>最近复习</dt><dd>{formatDateTime(detail.lastReviewedAt)}</dd></div><div><dt>下次到期</dt><dd>{formatDateTime(detail.dueAt)}</dd></div></dl>
+  return <dl className="review-sm2-grid"><div><dt>难度因子</dt><dd>{detail.easeFactor.toFixed(4)}</dd></div><div><dt>连续成功</dt><dd>{detail.repetitionCount}</dd></div><div><dt>当前间隔</dt><dd>{detail.intervalDays} 天</dd></div><div><dt>累计未通过次数</dt><dd>{detail.lapseCount}</dd></div><div><dt>最近复习</dt><dd>{formatDateTime(detail.lastReviewedAt)}</dd></div><div><dt>下次到期</dt><dd>{formatDateTime(detail.dueAt)}</dd></div></dl>
 }
 
 function ReviewAttemptHistoryList({ attempts }: { attempts: ReviewAttemptHistory[] }) {
@@ -538,16 +548,16 @@ function ReviewResultView({ card, result, submittedAnswer, candidates, notice, d
   const passed = result.result === 'PASS'
   const savedCount = candidates.filter((candidate) => candidate.saved).length
   return <section className="page-content target-page review-page" aria-label="复习结果">
-    <PageHeader eyebrow="错题复习" title="复习结果" />
+    <PageHeader eyebrow="复习卡片" title="复习结果" />
     <section className="surface review-surface review-result-surface">
       <div className={`review-result-banner ${passed ? 'is-pass' : 'is-fail'}`}><div><span className="label">本次评分</span><h2>{passed ? '回答通过' : '需要重试'}</h2><p>{result.feedback}</p></div><div className="review-score-summary"><div className="review-total-score"><span>总分</span><strong>{formatTotalScore(result.totalScore)}</strong><small>/ 100</small></div><div className="review-quality"><span>复习质量</span><strong>{result.quality}</strong><small>/ 5</small></div></div></div>
       {notice ? <Notice notice={notice} /> : null}
-      <div className="review-result-grid"><section><span className="label">你的答案</span><p className="review-submitted-answer">{submittedAnswer}</p></section><section><span className="label">目标错误</span><strong>{result.targetErrorResolved ? '已解决' : '未解决'}</strong><p>{result.targetErrorResolved ? '本次回答已避开当前错误模式。' : '下一次仍会优先重试这道题。'}</p></section></div>
+      <div className="review-result-grid"><section><span className="label">你的答案</span><p className="review-submitted-answer">{submittedAnswer}</p></section><section><span className="label">目标内容</span><strong>{result.targetErrorResolved ? '已掌握' : '待加强'}</strong><p>{result.targetErrorResolved ? '本次回答已经体现当前复习重点。' : '下一次仍会优先重试这道题。'}</p></section></div>
       <dl className="score-grid review-score-grid"><div><dt>语法与词汇</dt><dd>{result.scores.grammarVocabularyScore}</dd></div><div><dt>自然流畅度</dt><dd>{result.scores.naturalFluencyScore}</dd></div><div><dt>场景适配度</dt><dd>{result.scores.scenarioAdaptationScore}</dd></div><div><dt>信息完整性</dt><dd>{result.scores.informationCompletenessScore}</dd></div></dl>
       <ReviewMetrics progress={result.progress} />
       <section className="review-standard-answers"><div className="section-title"><span className="label">评分后公开</span><strong>标准与参考答案</strong></div>{result.standardAnswers.length > 0 ? <ol>{[...result.standardAnswers].sort((left, right) => left.sortOrder - right.sortOrder).map((answer) => <li key={answer.id}><span>{answer.primaryAnswer ? '标准' : '参考'}</span><p>{answer.answerText}</p></li>)}</ol> : <p className="empty-inline">暂无标准答案。</p>}</section>
       <ReviewList title="候选新错误" emptyText="本次未发现需要确认的新错误。" items={result.errorAnalysis}>{(item) => <div><span>{item.errorTypeName} / {item.severity}</span><strong>{item.original}</strong><p>{item.issue}</p><p>{item.suggestion}</p></div>}</ReviewList>
-      {result.errorAnalysis.length > 0 ? <div className="error-record-action"><span>{savedCount} / {result.errorAnalysis.length} 条错误已记录</span><button type="button" className="primary-button" disabled={candidates.every((candidate) => candidate.saved)} onClick={onOpenErrorConfirmation}>记录错误</button></div> : null}
+      <div className="error-record-action"><span>{result.errorAnalysis.length > 0 ? `${savedCount} / ${result.errorAnalysis.length} 项已加入复习卡片` : '可手动记录希望继续练习的表达'}</span><button type="button" className="primary-button" onClick={onOpenErrorConfirmation}>添加复习卡片</button></div>
       {result.derivedGenerationStatus === 'FAILED' ? <div className="review-generation-row"><div><strong>衍生题生成失败</strong><p>本次评分和复习进度已经保存，可单独重试生成。</p></div><button type="button" className="primary-button" disabled={derivedGenerating} onClick={onGenerate}>{derivedGenerating ? '生成中' : '重试生成'}</button></div> : null}
       {result.derivedGenerationStatus === 'SUCCEEDED' ? <div className="notice"><strong>衍生题已生成</strong><p>卡片已准备好后续复习题。</p></div> : null}
       <div className="review-result-actions">{result.cardStatus === 'ACTIVE' ? <button type="button" className="primary-button" disabled={nextCardLoading || derivedGenerating} onClick={onContinueEarly}>继续提前复习当前卡片</button> : null}<button type="button" className={result.cardStatus === 'MASTERED' ? 'primary-button' : undefined} disabled={nextCardLoading || derivedGenerating} onClick={onNext}>{nextCardLoading ? '加载中' : '复习下一张'}</button><button type="button" disabled={nextCardLoading || derivedGenerating} onClick={onBack}>返回列表</button><span>{result.cardStatus === 'MASTERED' ? '当前卡片已掌握' : `下次到期：${formatDateTime(result.nextDueAt)}`}</span></div>

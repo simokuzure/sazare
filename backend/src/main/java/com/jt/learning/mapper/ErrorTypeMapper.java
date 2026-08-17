@@ -15,6 +15,8 @@ public interface ErrorTypeMapper {
 
     ErrorType selectEnabledLeafById(Long id);
 
+    ErrorType selectEnabledLeafByCode(String code);
+
     long countErrorTypes(@Param("request") ErrorTypeQueryRequest request);
 
     List<ErrorType> selectErrorTypeList(

@@ -28,7 +28,7 @@ public class AiAnswerScoringPromptBuilder {
             每个 original 必须是用户答案中连续出现的原文片段；不要推测未出现的错误，也不要重复相同 errorTypeCode 与 original 的组合。
             errorTypeCode 必须严格从输入 errorTypeOptions 中选择二级分类编码，不能使用一级分类或自行创造编码。
             issue、suggestion、suggestedUserErrorTypeName、suggestedUserErrorTypeDescription 使用简洁中文。
-            suggestedUserErrorTypeName 必须概括可在多次作答中复现的具体错误模式，包含关键语义/语法对象和误用方向或适用场景；不得使用“助词错误”“词汇错误”“句型错误”“不自然表达”等泛称。description 应说明触发情形、错误形式与正确用法。
+            suggestedUserErrorTypeName 必须概括可在多次作答中复习的具体重点，包含关键语义/语法对象和误用方向或适用场景；不得使用“助词错误”“词汇错误”“句型错误”“不自然表达”等泛称。description 应说明适用情形、需改进的表达与推荐用法。
             severity 只能是 LOW、MEDIUM、HIGH；recommendedExpressions.formality 只能是 CASUAL、NEUTRAL、POLITE、BUSINESS。
             scores 中四个维度均为 0 到 100 的整数；totalScore 是四个维度平均值，保留两位小数。
             """;

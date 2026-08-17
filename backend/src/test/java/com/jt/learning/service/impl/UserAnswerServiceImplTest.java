@@ -3,18 +3,23 @@ package com.jt.learning.service.impl;
 import com.jt.learning.dto.UserAnswerDetailRow;
 import com.jt.learning.dto.UserAnswerErrorConfirmItemRequest;
 import com.jt.learning.dto.UserAnswerErrorConfirmRequest;
+import com.jt.learning.dto.ReviewCardCreateRequest;
 import com.jt.learning.dto.UserAnswerListItemRow;
 import com.jt.learning.dto.UserAnswerQueryRequest;
 import com.jt.learning.entity.QuestionAnswer;
 import com.jt.learning.entity.Question;
+import com.jt.learning.entity.ReviewCard;
 import com.jt.learning.entity.ErrorType;
 import com.jt.learning.entity.Tag;
 import com.jt.learning.entity.User;
 import com.jt.learning.entity.UserAnswer;
+import com.jt.learning.entity.UserAnswerError;
 import com.jt.learning.entity.UserErrorType;
 import com.jt.learning.exception.BusinessException;
+import com.jt.learning.exception.ErrorCode;
 import com.jt.learning.mapper.QuestionAnswerMapper;
 import com.jt.learning.mapper.QuestionMapper;
+import com.jt.learning.mapper.QuestionTagMapper;
 import com.jt.learning.mapper.ErrorTypeMapper;
 import com.jt.learning.mapper.TagMapper;
 import com.jt.learning.mapper.UserAnswerErrorMapper;
@@ -22,13 +27,25 @@ import com.jt.learning.mapper.UserAnswerMapper;
 import com.jt.learning.mapper.UserErrorTypeMapper;
 import com.jt.learning.mapper.UserMapper;
 import com.jt.learning.service.ReviewService;
+import com.jt.learning.service.UserAnswerService;
+import com.jt.learning.service.ai.AiReviewQuestionClient;
+import com.jt.learning.service.ai.prompt.AiReviewTagPromptBuilder;
+import com.jt.learning.service.ai.validation.AiErrorAnalysisValidator;
+import com.jt.learning.service.ai.validation.ReviewAiResponseValidator;
 import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.UserAnswerDetailVO;
 import com.jt.learning.vo.UserAnswerErrorVO;
 import com.jt.learning.vo.UserAnswerListItemVO;
+import com.jt.learning.vo.ReviewCardCreatedVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
+import org.springframework.transaction.interceptor.TransactionInterceptor;
+import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -50,10 +67,12 @@ class UserAnswerServiceImplTest {
     private TagMapper tagMapper;
     private QuestionAnswerMapper questionAnswerMapper;
     private QuestionMapper questionMapper;
+    private QuestionTagMapper questionTagMapper;
     private ErrorTypeMapper errorTypeMapper;
     private UserErrorTypeMapper userErrorTypeMapper;
     private UserAnswerErrorMapper userAnswerErrorMapper;
     private ReviewService reviewService;
+    private AiReviewQuestionClient reviewQuestionClient;
     private UserAnswerServiceImpl userAnswerService;
 
     @BeforeEach
@@ -63,21 +82,28 @@ class UserAnswerServiceImplTest {
         tagMapper = mock(TagMapper.class);
         questionAnswerMapper = mock(QuestionAnswerMapper.class);
         questionMapper = mock(QuestionMapper.class);
+        questionTagMapper = mock(QuestionTagMapper.class);
         errorTypeMapper = mock(ErrorTypeMapper.class);
         userErrorTypeMapper = mock(UserErrorTypeMapper.class);
         userAnswerErrorMapper = mock(UserAnswerErrorMapper.class);
         reviewService = mock(ReviewService.class);
+        reviewQuestionClient = mock(AiReviewQuestionClient.class);
         when(questionMapper.selectQuestionById(any())).thenReturn(shortQuestion());
+        ObjectMapper objectMapper = new ObjectMapper();
         userAnswerService = new UserAnswerServiceImpl(
                 userMapper,
                 userAnswerMapper,
                 tagMapper,
                 questionAnswerMapper,
                 questionMapper,
+                questionTagMapper,
                 errorTypeMapper,
                 userErrorTypeMapper,
                 userAnswerErrorMapper,
-                reviewService
+                reviewService,
+                new AiReviewTagPromptBuilder(objectMapper),
+                reviewQuestionClient,
+                new ReviewAiResponseValidator(objectMapper, new AiErrorAnalysisValidator())
         );
     }
 
@@ -397,7 +423,12 @@ class UserAnswerServiceImplTest {
             question.setId(500L);
             return 1;
         });
-
+        Tag sceneTag = sceneTag();
+        Tag functionTag = functionTag();
+        when(tagMapper.selectEnabledTagsByType("SCENE")).thenReturn(List.of(sceneTag));
+        when(tagMapper.selectEnabledTagsByType("FUNCTION")).thenReturn(List.of(functionTag));
+        when(reviewQuestionClient.classifyTags(any(), any(), any())).thenReturn(
+                "{\"tagCodes\":[\"BANK\",\"FUNCTION_REQUEST\"]}");
         List<UserAnswerErrorVO> result = userAnswerService.confirmUserAnswerErrors(
                 10L,
                 new UserAnswerErrorConfirmRequest(List.of(new UserAnswerErrorConfirmItemRequest(
@@ -424,6 +455,8 @@ class UserAnswerServiceImplTest {
         verify(questionAnswerMapper).insertQuestionAnswer(answerCaptor.capture());
         assertThat(answerCaptor.getValue().getAnswerText())
                 .isEqualTo("天気はよくありませんでしたが、楽しく過ごしました。");
+        verify(questionTagMapper).insertQuestionTag(500L, sceneTag.getId());
+        verify(questionTagMapper).insertQuestionTag(500L, functionTag.getId());
         verify(reviewService).recordPracticeErrors(eq(1L), eq(10L), eq(List.of(500L)), eq(20L), any());
     }
 
@@ -484,6 +517,329 @@ class UserAnswerServiceImplTest {
         verify(questionAnswerMapper).insertQuestionAnswer(answerCaptor.capture());
         assertThat(answerCaptor.getValue().getAnswerText()).isEqualTo("私は昨日、図書館へ行きました。");
         verify(reviewService).recordPracticeErrors(eq(1L), eq(10L), eq(List.of(500L)), eq(20L), any());
+    }
+
+    @Test
+    void createReviewCardShouldCreateDerivedQuestionForShortAnswer() {
+        User user = localUser();
+        UserAnswer answer = reviewedUserAnswer();
+        ErrorType naturalExpression = enabledLeafErrorType(9L);
+        naturalExpression.setCode("UNNATURAL_EXPRESSION");
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
+        when(errorTypeMapper.selectEnabledLeafByCode("UNNATURAL_EXPRESSION")).thenReturn(naturalExpression);
+        when(userErrorTypeMapper.insertUserErrorType(any())).thenAnswer(invocation -> {
+            UserErrorType type = invocation.getArgument(0);
+            type.setId(20L);
+            return 1;
+        });
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(500L);
+            return 1;
+        });
+        Tag sourceTag = sceneTag();
+        when(tagMapper.selectEnabledTagsByQuestionId(100L)).thenReturn(List.of(sourceTag));
+        when(reviewService.recordPracticeError(eq(1L), eq(10L), eq(500L), eq(20L), any()))
+                .thenReturn(reviewCard(30L, 20L));
+
+        ReviewCardCreatedVO result = userAnswerService.createReviewCard(
+                10L,
+                new ReviewCardCreateRequest("练习更自然的移动表达", "明日の午後、公園を散歩します。", null, null)
+        );
+
+        assertThat(result.id()).isEqualTo(30L);
+        assertThat(result.name()).isEqualTo("练习更自然的移动表达");
+        ArgumentCaptor<Question> questionCaptor = ArgumentCaptor.forClass(Question.class);
+        verify(questionMapper).insertQuestion(questionCaptor.capture());
+        assertThat(questionCaptor.getValue().getQuestionType()).isEqualTo("TRANSLATION_ZH_TO_JA");
+        assertThat(questionCaptor.getValue().getSourceText()).isEqualTo("我明天下午去公园散步。");
+        assertThat(questionCaptor.getValue().getSourceType()).isEqualTo("REVIEW_DERIVED");
+        ArgumentCaptor<QuestionAnswer> answerCaptor = ArgumentCaptor.forClass(QuestionAnswer.class);
+        verify(questionAnswerMapper).insertQuestionAnswer(answerCaptor.capture());
+        assertThat(answerCaptor.getValue().getAnswerText()).isEqualTo("明日の午後、公園を散歩します。");
+        verify(questionTagMapper).insertQuestionTag(500L, sourceTag.getId());
+        ArgumentCaptor<UserAnswerError> reviewItemCaptor = ArgumentCaptor.forClass(UserAnswerError.class);
+        verify(userAnswerErrorMapper).insertUserAnswerError(reviewItemCaptor.capture());
+        UserAnswerError reviewItem = reviewItemCaptor.getValue();
+        assertThat(reviewItem.getErrorTypeId()).isEqualTo(9L);
+        assertThat(reviewItem.getOriginalText()).isEqualTo("我明天下午去公园散步。");
+        assertThat(reviewItem.getIssue()).isEqualTo("练习更自然的移动表达");
+        assertThat(reviewItem.getSuggestion()).isEqualTo("明日の午後、公園を散歩します。");
+        assertThat(reviewItem.getSeverity()).isEqualTo("LOW");
+    }
+
+    @Test
+    void createReviewCardShouldSupportReviewDerivedQuestionAnswer() {
+        User user = localUser();
+        UserAnswer answer = reviewedUserAnswer();
+        Question reviewQuestion = shortQuestion();
+        reviewQuestion.setSourceType("REVIEW_DERIVED");
+        ErrorType naturalExpression = enabledLeafErrorType(9L);
+        naturalExpression.setCode("UNNATURAL_EXPRESSION");
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
+        when(questionMapper.selectQuestionById(100L)).thenReturn(reviewQuestion);
+        when(errorTypeMapper.selectEnabledLeafByCode("UNNATURAL_EXPRESSION")).thenReturn(naturalExpression);
+        when(userErrorTypeMapper.insertUserErrorType(any())).thenAnswer(invocation -> {
+            UserErrorType type = invocation.getArgument(0);
+            type.setId(20L);
+            return 1;
+        });
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(500L);
+            return 1;
+        });
+        when(reviewService.recordPracticeError(eq(1L), eq(10L), eq(500L), eq(20L), any()))
+                .thenReturn(reviewCard(30L, 20L));
+
+        userAnswerService.createReviewCard(
+                10L,
+                new ReviewCardCreateRequest("继续巩固移动表达", "明日の午後、公園を散歩します。", null, null)
+        );
+
+        ArgumentCaptor<Question> questionCaptor = ArgumentCaptor.forClass(Question.class);
+        verify(questionMapper).insertQuestion(questionCaptor.capture());
+        assertThat(questionCaptor.getValue().getSourceText()).isEqualTo("我明天下午去公园散步。");
+        assertThat(questionCaptor.getValue().getSourceType()).isEqualTo("REVIEW_DERIVED");
+    }
+
+    @Test
+    void createReviewCardShouldUseSelectedArticleSourceSegment() {
+        User user = localUser();
+        UserAnswer answer = reviewedUserAnswer();
+        Question article = articleQuestion();
+        ErrorType naturalExpression = enabledLeafErrorType(9L);
+        naturalExpression.setCode("UNNATURAL_EXPRESSION");
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
+        when(questionMapper.selectQuestionById(100L)).thenReturn(article);
+        when(errorTypeMapper.selectEnabledLeafByCode("UNNATURAL_EXPRESSION")).thenReturn(naturalExpression);
+        when(userErrorTypeMapper.insertUserErrorType(any())).thenAnswer(invocation -> {
+            UserErrorType type = invocation.getArgument(0);
+            type.setId(20L);
+            return 1;
+        });
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(500L);
+            return 1;
+        });
+        when(reviewService.recordPracticeError(eq(1L), eq(10L), eq(500L), eq(20L), any()))
+                .thenReturn(reviewCard(30L, 20L));
+
+        userAnswerService.createReviewCard(
+                10L,
+                new ReviewCardCreateRequest(
+                        "练习逆接表达",
+                        "天気はよくありませんでしたが、楽しく過ごしました。",
+                        1,
+                        null
+                )
+        );
+
+        ArgumentCaptor<Question> questionCaptor = ArgumentCaptor.forClass(Question.class);
+        verify(questionMapper).insertQuestion(questionCaptor.capture());
+        assertThat(questionCaptor.getValue().getSourceText()).isEqualTo("天气不太好，但我们过得很愉快。");
+    }
+
+    @Test
+    void createReviewCardShouldRequireChineseSourceForCorrection() {
+        User user = localUser();
+        UserAnswer correction = reviewedUserAnswer();
+        correction.setQuestionId(null);
+        ErrorType naturalExpression = enabledLeafErrorType(9L);
+        naturalExpression.setCode("UNNATURAL_EXPRESSION");
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(correction);
+        when(errorTypeMapper.selectEnabledLeafByCode("UNNATURAL_EXPRESSION")).thenReturn(naturalExpression);
+        when(userErrorTypeMapper.insertUserErrorType(any())).thenAnswer(invocation -> {
+            UserErrorType type = invocation.getArgument(0);
+            type.setId(20L);
+            return 1;
+        });
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(500L);
+            return 1;
+        });
+        when(reviewService.recordPracticeError(eq(1L), eq(10L), eq(500L), eq(20L), any()))
+                .thenReturn(reviewCard(30L, 20L));
+
+        userAnswerService.createReviewCard(
+                10L,
+                new ReviewCardCreateRequest("练习自然的目的地表达", "私は昨日、図書館へ行きました。", null, "我昨天去了图书馆。")
+        );
+
+        ArgumentCaptor<Question> questionCaptor = ArgumentCaptor.forClass(Question.class);
+        verify(questionMapper).insertQuestion(questionCaptor.capture());
+        assertThat(questionCaptor.getValue().getSourceText()).isEqualTo("我昨天去了图书馆。");
+        assertThat(questionCaptor.getValue().getLevel()).isEqualTo("N3");
+        assertThat(questionCaptor.getValue().getDifficulty()).isEqualTo(3);
+    }
+
+    @Test
+    void createReviewCardShouldRejectInvalidArticleSegmentIndex() {
+        User user = localUser();
+        UserAnswer answer = reviewedUserAnswer();
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
+        when(questionMapper.selectQuestionById(100L)).thenReturn(articleQuestion());
+
+        assertThatThrownBy(() -> userAnswerService.createReviewCard(
+                10L,
+                new ReviewCardCreateRequest("练习自然表达", "自然な表現です。", 2, null)
+        )).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("超出文章原句范围");
+
+        verify(userErrorTypeMapper, never()).insertUserErrorType(any());
+    }
+
+    @Test
+    void createReviewCardShouldRejectMissingArticleSegmentIndex() {
+        User user = localUser();
+        UserAnswer answer = reviewedUserAnswer();
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
+        when(questionMapper.selectQuestionById(100L)).thenReturn(articleQuestion());
+
+        assertThatThrownBy(() -> userAnswerService.createReviewCard(
+                10L,
+                new ReviewCardCreateRequest("练习自然表达", "自然な表現です。", null, null)
+        )).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("必须选择中文原句");
+
+        verify(userErrorTypeMapper, never()).insertUserErrorType(any());
+    }
+
+    @Test
+    void createReviewCardShouldRejectFieldsThatDoNotApplyToShortQuestion() {
+        User user = localUser();
+        UserAnswer answer = reviewedUserAnswer();
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
+
+        assertThatThrownBy(() -> userAnswerService.createReviewCard(
+                10L,
+                new ReviewCardCreateRequest("练习自然表达", "自然な表現です。", null, "额外中文题面")
+        )).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("有题目作答不能提交复习题中文");
+
+        verify(userErrorTypeMapper, never()).insertUserErrorType(any());
+    }
+
+    @Test
+    void createReviewCardShouldRejectInvalidCorrectionSourceText() {
+        User user = localUser();
+        UserAnswer correction = reviewedUserAnswer();
+        correction.setQuestionId(null);
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(correction);
+
+        assertThatThrownBy(() -> userAnswerService.createReviewCard(
+                10L,
+                new ReviewCardCreateRequest("练习自然表达", "自然な表現です。", null, "今日は去图书馆")
+        )).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("中文文本");
+
+        verify(userErrorTypeMapper, never()).insertUserErrorType(any());
+    }
+
+    @Test
+    void createReviewCardShouldRequireOwnedReviewedAnswer() {
+        User user = localUser();
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(null);
+
+        assertThatThrownBy(() -> userAnswerService.createReviewCard(
+                10L,
+                new ReviewCardCreateRequest("练习自然表达", "自然な表現です。", null, null)
+        )).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("作答记录不存在");
+
+        verify(userAnswerMapper).selectActiveUserAnswerById(1L, 10L);
+        verify(questionMapper, never()).insertQuestion(any());
+    }
+
+    @Test
+    void createReviewCardShouldRejectUnreviewedAnswer() {
+        User user = localUser();
+        UserAnswer answer = reviewedUserAnswer();
+        answer.setAnswerStatus("SUBMITTED");
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
+
+        assertThatThrownBy(() -> userAnswerService.createReviewCard(
+                10L,
+                new ReviewCardCreateRequest("练习自然表达", "自然な表現です。", null, null)
+        )).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("仅已评分的作答");
+
+        verify(questionMapper, never()).insertQuestion(any());
+    }
+
+    @Test
+    void createReviewCardShouldRejectDuplicateName() {
+        User user = localUser();
+        UserAnswer answer = reviewedUserAnswer();
+        ErrorType naturalExpression = enabledLeafErrorType(9L);
+        naturalExpression.setCode("UNNATURAL_EXPRESSION");
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
+        when(errorTypeMapper.selectEnabledLeafByCode("UNNATURAL_EXPRESSION")).thenReturn(naturalExpression);
+        when(userErrorTypeMapper.selectByUserIdAndErrorTypeIdAndName(1L, 9L, "练习自然表达"))
+                .thenReturn(new UserErrorType());
+
+        assertThatThrownBy(() -> userAnswerService.createReviewCard(
+                10L,
+                new ReviewCardCreateRequest("练习自然表达", "自然な表現です。", null, null)
+        )).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("同名复习卡片已存在");
+
+        verify(userAnswerErrorMapper, never()).insertUserAnswerError(any());
+    }
+
+    @Test
+    void createReviewCardShouldRollbackTransactionWhenCardCreationFails() {
+        User user = localUser();
+        UserAnswer answer = reviewedUserAnswer();
+        ErrorType naturalExpression = enabledLeafErrorType(9L);
+        naturalExpression.setCode("UNNATURAL_EXPRESSION");
+        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
+        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
+        when(errorTypeMapper.selectEnabledLeafByCode("UNNATURAL_EXPRESSION")).thenReturn(naturalExpression);
+        when(userErrorTypeMapper.insertUserErrorType(any())).thenAnswer(invocation -> {
+            UserErrorType type = invocation.getArgument(0);
+            type.setId(20L);
+            return 1;
+        });
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(500L);
+            return 1;
+        });
+        when(reviewService.recordPracticeError(eq(1L), eq(10L), eq(500L), eq(20L), any()))
+                .thenThrow(new BusinessException(ErrorCode.BUSINESS_ERROR, "卡片创建失败"));
+
+        PlatformTransactionManager transactionManager = mock(PlatformTransactionManager.class);
+        TransactionStatus transactionStatus = mock(TransactionStatus.class);
+        when(transactionManager.getTransaction(any())).thenReturn(transactionStatus);
+        ProxyFactory proxyFactory = new ProxyFactory(userAnswerService);
+        proxyFactory.addAdvice(new TransactionInterceptor(
+                transactionManager,
+                new AnnotationTransactionAttributeSource()
+        ));
+        UserAnswerService transactionalService = (UserAnswerService) proxyFactory.getProxy();
+
+        assertThatThrownBy(() -> transactionalService.createReviewCard(
+                10L,
+                new ReviewCardCreateRequest("练习自然表达", "自然な表現です。", null, null)
+        )).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("卡片创建失败");
+
+        verify(transactionManager).rollback(transactionStatus);
+        verify(transactionManager, never()).commit(transactionStatus);
     }
 
     private User localUser() {
@@ -585,6 +941,16 @@ class UserAnswerServiceImplTest {
         return errorType;
     }
 
+    private ReviewCard reviewCard(Long id, Long userErrorTypeId) {
+        ReviewCard card = new ReviewCard();
+        card.setId(id);
+        card.setUserId(1L);
+        card.setUserErrorTypeId(userErrorTypeId);
+        card.setStatus("ACTIVE");
+        card.setDueAt(LocalDateTime.of(2026, 8, 18, 7, 0));
+        return card;
+    }
+
     private Tag sceneTag() {
         Tag tag = new Tag();
         tag.setId(20L);
@@ -592,6 +958,17 @@ class UserAnswerServiceImplTest {
         tag.setCode("BANK");
         tag.setName("银行");
         tag.setDescription("银行业务场景");
+        tag.setSortOrder(1);
+        return tag;
+    }
+
+    private Tag functionTag() {
+        Tag tag = new Tag();
+        tag.setId(21L);
+        tag.setTagType("FUNCTION");
+        tag.setCode("FUNCTION_REQUEST");
+        tag.setName("请求");
+        tag.setDescription("提出请求");
         tag.setSortOrder(1);
         return tag;
     }

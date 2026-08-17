@@ -1,6 +1,7 @@
 package com.jt.learning.service.ai.prompt;
 
 import com.jt.learning.dto.AiErrorTypeOptionDTO;
+import com.jt.learning.dto.AiQuestionTagOptionDTO;
 import com.jt.learning.entity.ErrorType;
 import com.jt.learning.entity.Question;
 import com.jt.learning.entity.QuestionAnswer;
@@ -16,14 +17,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AiReviewPromptBuilderTest {
 
     @Test
-    void scoringPromptShouldContainTargetErrorAndQualityContract() {
+    void scoringPromptShouldContainReviewFocusAndQualityContract() {
         var prompt = new AiReviewScoringPromptBuilder(new ObjectMapper()).build(
                 userErrorType(), errorType(), question(), List.of(answer()),
                 List.of(new AiErrorTypeOptionDTO(1L, "PARTICLE_CASE", "格助词", "说明", "PARTICLE", "助词")),
                 "電車に間に合いました"
         );
 
-        assertThat(prompt.systemPrompt()).contains("quality", "targetErrorResolved", "0到2", "0到100");
+        assertThat(prompt.systemPrompt()).contains("复习重点", "自然", "quality", "targetErrorResolved", "0到2", "0到100");
         assertThat(prompt.userPrompt()).contains(
                 "赶上交通工具时误用を", "電車に間に合いました", "grammarVocabularyScore");
     }
@@ -31,12 +32,26 @@ class AiReviewPromptBuilderTest {
     @Test
     void questionPromptShouldContainExistingQuestionsAndSingleQuestionContract() {
         var prompt = new AiReviewQuestionPromptBuilder(new ObjectMapper()).build(
-                userErrorType(), errorType(), List.of(question()), Map.of(10L, List.of(answer())));
+                userErrorType(), errorType(), List.of(question()), Map.of(10L, List.of(answer())),
+                List.of(new AiQuestionTagOptionDTO("DAILY_TRAVEL", "日常出行", "日常交通出行场景")),
+                List.of(new AiQuestionTagOptionDTO("FUNCTION_CONFIRM", "确认", "确认信息")));
 
         assertThat(prompt.systemPrompt())
-                .contains("一道", "1到10个答案")
+                .contains("复习重点", "一道", "1到10个答案")
                 .contains("contextText只能客观说明", "不得包含考查意图", "语法或词汇要求只写入grammarPoint");
-        assertThat(prompt.userPrompt()).contains("请翻译", "電車に間に合いました");
+        assertThat(prompt.userPrompt()).contains(
+                "请翻译", "電車に間に合いました", "DAILY_TRAVEL", "FUNCTION_CONFIRM", "tagCodes");
+    }
+
+    @Test
+    void tagPromptShouldRequireReclassificationFromSentenceMeaning() {
+        var prompt = new AiReviewTagPromptBuilder(new ObjectMapper()).build(
+                question(),
+                List.of(new AiQuestionTagOptionDTO("DAILY_TRAVEL", "日常出行", "日常交通出行场景")),
+                List.of(new AiQuestionTagOptionDTO("FUNCTION_CONFIRM", "确认", "确认信息")));
+
+        assertThat(prompt.systemPrompt()).contains("实际语义重新选择", "不得照搬文章体裁标签", "1个场景标签");
+        assertThat(prompt.userPrompt()).contains("请翻译", "DAILY_TRAVEL", "FUNCTION_CONFIRM", "tagCodes");
     }
 
     private UserErrorType userErrorType() {

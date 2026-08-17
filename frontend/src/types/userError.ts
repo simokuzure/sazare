@@ -52,3 +52,17 @@ export type UserAnswerError = {
   sortOrder: number
   createdAt: string
 }
+
+export type ReviewCardCreatePayload = {
+  name: string
+  targetExpression: string
+  sourceSegmentIndex?: number
+  reviewSourceText?: string
+}
+
+export type ReviewCardCreated = {
+  id: number
+  name: string
+  status: 'ACTIVE'
+  dueAt: string
+}

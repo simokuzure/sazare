@@ -150,7 +150,7 @@ function StatisticsContent({ statistics, scoreDimensions, correctionScoreDimensi
       <MetricCard label="翻译作答次数" value={String(statistics.overview.answerCount)} detail={`${statistics.period.startDate} 至 ${statistics.period.endDate}`} />
       <MetricCard label="翻译已评测" value={String(statistics.overview.reviewedAnswerCount)} detail="短句与文章翻译" />
       <MetricCard label="翻译平均总分" value={formatScore(statistics.overview.averageTotalScore)} detail="已评测翻译作答的平均值" />
-      <MetricCard label="已确认错误" value={String(statistics.overview.confirmedErrorCount)} detail="未确认 AI 候选不计入" />
+      <MetricCard label="已记录内容" value={String(statistics.overview.confirmedErrorCount)} detail="已加入复习卡片的内容记录数" />
     </section>
 
     <section className="statistics-chart-grid">
@@ -218,16 +218,16 @@ function StatisticsContent({ statistics, scoreDimensions, correctionScoreDimensi
     </section>
 
     <section className="statistics-chart-grid">
-      <ChartSurface title="薄弱项 Top 10" description="按已确认出现次数排序">
+      <ChartSurface title="复习重点 Top 10" description="按加入复习卡片的次数排序">
         {statistics.weaknesses.length > 0 ? <ResponsiveContainer width="100%" height={Math.max(240, statistics.weaknesses.length * 44)}>
           <BarChart data={[...statistics.weaknesses].reverse()} layout="vertical" margin={{ top: 8, right: 22, left: 18, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis type="number" allowDecimals={false} />
             <YAxis type="category" dataKey="userErrorTypeName" width={126} tick={{ fontSize: 12 }} />
             <Tooltip />
-            <Bar dataKey="confirmedCount" name="确认次数" fill="#ea580c" radius={[0, 3, 3, 0]} />
+            <Bar dataKey="confirmedCount" name="记录次数" fill="#ea580c" radius={[0, 3, 3, 0]} />
           </BarChart>
-        </ResponsiveContainer> : <EmptyChart text="所选期间内暂无已确认错误。" />}
+        </ResponsiveContainer> : <EmptyChart text="所选期间内暂无复习卡片内容。" />}
       </ChartSurface>
 
       <ChartSurface title="复习状态" description="卡片状态为当前实时状态">
@@ -249,8 +249,8 @@ function StatisticsContent({ statistics, scoreDimensions, correctionScoreDimensi
     </section>
 
     <section className="surface statistics-weakness-detail">
-      <div className="section-title"><span className="label">已确认错误</span><strong>薄弱项明细</strong></div>
-      {statistics.weaknesses.length === 0 ? <p className="empty-state">所选期间内暂无已确认错误。</p> : <div className="table-wrap"><table><thead><tr><th>用户错误类型</th><th>系统分类</th><th>确认次数</th><th>严重度</th><th>当前复习状态</th><th>最近确认</th></tr></thead><tbody>{statistics.weaknesses.map((item) => <tr key={item.userErrorTypeId}><td><strong>{item.userErrorTypeName}</strong>{item.userErrorTypeStatus === 'ARCHIVED' ? <span className="statistics-muted">已归档</span> : null}</td><td>{item.errorTypeName}</td><td>{item.confirmedCount}</td><td>低 {item.lowSeverityCount} / 中 {item.mediumSeverityCount} / 高 {item.highSeverityCount}</td><td>{reviewStateLabel(item.reviewState)}</td><td>{formatDateTime(item.lastConfirmedAt)}</td></tr>)}</tbody></table></div>}
+      <div className="section-title"><span className="label">已记录内容</span><strong>复习重点明细</strong></div>
+      {statistics.weaknesses.length === 0 ? <p className="empty-state">所选期间内暂无复习卡片内容。</p> : <div className="table-wrap"><table><thead><tr><th>复习重点</th><th>系统分类</th><th>记录次数</th><th>严重度</th><th>当前复习状态</th><th>最近记录</th></tr></thead><tbody>{statistics.weaknesses.map((item) => <tr key={item.userErrorTypeId}><td><strong>{item.userErrorTypeName}</strong>{item.userErrorTypeStatus === 'ARCHIVED' ? <span className="statistics-muted">已归档</span> : null}</td><td>{item.errorTypeName}</td><td>{item.confirmedCount}</td><td>低 {item.lowSeverityCount} / 中 {item.mediumSeverityCount} / 高 {item.highSeverityCount}</td><td>{reviewStateLabel(item.reviewState)}</td><td>{formatDateTime(item.lastConfirmedAt)}</td></tr>)}</tbody></table></div>}
     </section>
   </>
 }

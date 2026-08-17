@@ -66,11 +66,16 @@ public class ReviewAiResponseValidator {
         }
     }
 
-    public AiReviewGeneratedQuestionDTO parseQuestion(String content, Set<String> existingSourceTexts) {
+    public AiReviewGeneratedQuestionDTO parseQuestion(
+            String content,
+            Set<String> existingSourceTexts,
+            Set<String> sceneTagCodes,
+            Set<String> allowedTagCodes
+    ) {
         JsonNode root = parseRoot(content, "复习生题");
         requireOnlyFields(root, List.of("question"), "复习生题 JSON 顶层");
         JsonNode questionNode = root.get("question");
-        requireOnlyFields(questionNode, List.of("sourceText", "contextText", "grammarPoint", "answers"),
+        requireOnlyFields(questionNode, List.of("sourceText", "contextText", "grammarPoint", "tagCodes", "answers"),
                 "复习生题 question");
         JsonNode answersNode = questionNode.get("answers");
         if (answersNode == null || !answersNode.isArray()) {
@@ -85,11 +90,34 @@ public class ReviewAiResponseValidator {
             AiReviewGeneratedQuestionDTO question = objectMapper
                     .treeToValue(root, AiReviewQuestionResponseDTO.class)
                     .question();
-            validateQuestion(question, existingSourceTexts);
+            validateQuestion(question, existingSourceTexts, sceneTagCodes, allowedTagCodes);
             return question;
         } catch (JacksonException exception) {
             throw invalid("复习生题输出不是合法 JSON");
         }
+    }
+
+    public List<String> parseTagCodes(
+            String content,
+            Set<String> sceneTagCodes,
+            Set<String> allowedTagCodes
+    ) {
+        JsonNode root = parseRoot(content, "复习题标签分类");
+        requireOnlyFields(root, List.of("tagCodes"), "复习题标签分类 JSON 顶层");
+        JsonNode tagCodesNode = root.get("tagCodes");
+        if (tagCodesNode == null || !tagCodesNode.isArray()) {
+            throw invalid("复习题标签分类 tagCodes 必须是数组");
+        }
+        List<String> tagCodes = new java.util.ArrayList<>();
+        for (int i = 0; i < tagCodesNode.size(); i++) {
+            JsonNode tagCode = tagCodesNode.get(i);
+            if (tagCode == null || !tagCode.isTextual()) {
+                throw invalid("复习题标签分类 tagCodes 只能包含字符串");
+            }
+            tagCodes.add(tagCode.asString());
+        }
+        validateTagCodes(tagCodes, sceneTagCodes, allowedTagCodes, "复习题标签分类");
+        return List.copyOf(tagCodes);
     }
 
     private JsonNode parseRoot(String content, String source) {
@@ -149,7 +177,12 @@ public class ReviewAiResponseValidator {
         }
     }
 
-    private void validateQuestion(AiReviewGeneratedQuestionDTO question, Set<String> existingSourceTexts) {
+    private void validateQuestion(
+            AiReviewGeneratedQuestionDTO question,
+            Set<String> existingSourceTexts,
+            Set<String> sceneTagCodes,
+            Set<String> allowedTagCodes
+    ) {
         if (question == null) {
             throw invalid("复习生题 question 不能为空");
         }
@@ -160,6 +193,7 @@ public class ReviewAiResponseValidator {
         if (existingSourceTexts.stream().map(String::trim).anyMatch(sourceText::equals)) {
             throw invalid("复习生题题干与本周期已有题目重复");
         }
+        validateTagCodes(question.tagCodes(), sceneTagCodes, allowedTagCodes, "复习生题");
         if (question.answers() == null || question.answers().isEmpty() || question.answers().size() > 10) {
             throw invalid("复习生题 answers 数量必须在1到10之间");
         }
@@ -190,6 +224,35 @@ public class ReviewAiResponseValidator {
         }
         if (primaryCount != 1) {
             throw invalid("复习生题必须且只能有一个主答案");
+        }
+    }
+
+    private void validateTagCodes(
+            List<String> tagCodes,
+            Set<String> sceneTagCodes,
+            Set<String> allowedTagCodes,
+            String source
+    ) {
+        if (tagCodes == null || tagCodes.isEmpty() || tagCodes.size() > 3) {
+            throw invalid(source + " tagCodes 数量必须在1到3之间");
+        }
+        Set<String> normalizedCodes = new HashSet<>();
+        int sceneTagCount = 0;
+        for (String tagCode : tagCodes) {
+            requireText(tagCode, source + " tagCodes 不能包含空值");
+            String normalizedCode = tagCode.trim();
+            if (!normalizedCodes.add(normalizedCode)) {
+                throw invalid(source + " tagCodes 不能重复");
+            }
+            if (!allowedTagCodes.contains(normalizedCode)) {
+                throw invalid(source + " tagCodes 包含候选列表之外的标签");
+            }
+            if (sceneTagCodes.contains(normalizedCode)) {
+                sceneTagCount++;
+            }
+        }
+        if (sceneTagCount != 1) {
+            throw invalid(source + " tagCodes 必须且只能包含1个场景标签");
         }
     }
 

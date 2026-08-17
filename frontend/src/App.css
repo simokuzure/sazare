@@ -1059,6 +1059,74 @@ textarea:focus {
   min-height: 76px;
 }
 
+.custom-review-card-section {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #d8dee8;
+  padding-top: 16px;
+}
+
+.candidate-empty-message {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.custom-review-card-section > button {
+  justify-self: start;
+}
+
+.custom-review-card-form {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 14px;
+}
+
+.custom-review-card-form > label {
+  display: grid;
+  gap: 6px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.custom-review-card-form textarea {
+  min-height: 88px;
+}
+
+.custom-review-card-form textarea[readonly] {
+  background: #eef2f7;
+  color: #334155;
+}
+
+.custom-review-recommendations {
+  display: grid;
+  gap: 6px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.custom-review-recommendations ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.custom-review-recommendations li {
+  color: #172033;
+  line-height: 1.6;
+}
+
+.custom-review-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .review-surface {
   display: grid;
   gap: 16px;
@@ -2281,6 +2349,11 @@ tbody tr:last-child td {
   .error-record-action {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .custom-review-card-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
   }
 
   .modal-backdrop {
