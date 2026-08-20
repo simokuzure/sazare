@@ -458,7 +458,7 @@ function ShortSentencePractice() {
             <label><span>场景一级</span><select value={sceneParentId} disabled={practiceTagsLoading} onChange={(event) => { setSceneParentId(event.target.value); setSceneTagCode('') }}><option value="">{practiceTagsLoading ? '加载中' : '不限场景'}</option>{sceneParentTags.map((tag) => <option key={tag.id} value={tag.id}>{tag.name}</option>)}</select></label>
             <label><span>场景二级</span><select value={sceneTagCode} disabled={practiceTagsLoading || !sceneParentId} onChange={(event) => setSceneTagCode(event.target.value)}><option value="">{practiceTagsLoading ? '加载中' : sceneParentId ? '不限场景' : '请先选择一级场景'}</option>{selectedSceneChildTags.map((tag) => <option key={tag.id} value={tag.code}>{tag.name}</option>)}</select></label>
             <label className="wide-field"><span>补充要求</span><input value={extraRequirements} maxLength={500} placeholder="例如：使用敬语、指定场景或语法点" onChange={(event) => setExtraRequirements(event.target.value)} /></label>
-            <button type="button" disabled={questionLoading} onClick={handleRandomQuestion}>{questionRandomizing ? '抽题中' : '随机题目'}</button>
+            <button type="button" className="primary-button" disabled={questionLoading} onClick={handleRandomQuestion}>{questionRandomizing ? '抽题中' : '随机题目'}</button>
             <button type="button" className="primary-button" disabled={questionLoading} onClick={handleGenerateQuestion}>{questionGenerating ? '生成中' : '生成题目'}</button>
           </form>
           {practiceTagsError ? <div className="error-message">标签加载失败：{practiceTagsError}</div> : null}

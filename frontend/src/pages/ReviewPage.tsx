@@ -397,7 +397,6 @@ export default function ReviewPage() {
 
   return <section className="page-content target-page review-page" aria-label="复习卡片">
     <PageHeader
-      eyebrow="复习卡片"
       title="复习卡片"
       description="按复习重点聚合的间隔复习计划，跟踪周期进度、待重试与下次到期时间。"
       actions={<div className="segmented-control review-list-modes" aria-label="复习卡片视图">

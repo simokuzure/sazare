@@ -12,8 +12,10 @@ export default function PageHeader({ eyebrow, title, description, actions }: Pag
     <header className="page-header">
       <div className="page-header-copy">
         {eyebrow ? <span className="page-eyebrow">{eyebrow}</span> : null}
-        <h2>{title}</h2>
-        {description ? <p>{description}</p> : null}
+        <div className="page-title-row">
+          <h2>{title}</h2>
+          {description ? <p>{description}</p> : null}
+        </div>
       </div>
       {actions ? <div className="page-header-actions">{actions}</div> : null}
     </header>

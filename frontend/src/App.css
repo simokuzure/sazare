@@ -472,6 +472,7 @@ button:disabled {
 
 .answer-panel {
   grid-area: answer;
+  align-content: start;
 }
 
 .section-title {
@@ -872,7 +873,7 @@ textarea:focus {
 
 .modal-backdrop {
   position: fixed;
-  z-index: 20;
+  z-index: 50;
   inset: 0;
   display: grid;
   place-items: center;
@@ -1098,6 +1099,7 @@ textarea:focus {
 }
 
 .custom-review-card-form textarea[readonly] {
+  min-height: 56px;
   background: #eef2f7;
   color: #334155;
 }
@@ -2788,6 +2790,13 @@ button:hover:not(:disabled) {
   min-width: 0;
 }
 
+.page-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px 14px;
+}
+
 .page-eyebrow,
 .label {
   display: block;
@@ -2811,7 +2820,7 @@ button:hover:not(:disabled) {
 
 .page-header p {
   max-width: 680px;
-  margin: 6px 0 0;
+  margin: 0 0 2px;
   color: var(--muted-foreground);
   font-size: 14px;
   line-height: 1.6;
@@ -2922,6 +2931,7 @@ textarea:focus {
 
 .practice-grid {
   gap: 16px;
+  align-items: stretch;
 }
 
 .practice-grid .surface {
@@ -2935,6 +2945,7 @@ textarea:focus {
 
 .question-panel,
 .answer-panel {
+  height: 100%;
   overflow: hidden;
 }
 
@@ -2957,7 +2968,9 @@ textarea:focus {
 }
 
 .question-details div {
+  align-items: center;
   border-bottom-color: var(--border);
+  padding-top: 8px;
 }
 
 .question-details dt,
@@ -3082,6 +3095,42 @@ textarea:focus {
   padding: 18px 20px;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 }
+
+.question-page .question-filter-bar {
+  grid-template-columns: repeat(5, minmax(112px, 1fr));
+}
+
+.answer-record-table {
+  --question-answer-column-width: 21%;
+}
+
+.answer-record-table th:nth-child(1),
+.answer-record-table td:nth-child(1),
+.answer-record-table th:nth-child(2),
+.answer-record-table td:nth-child(2) { width: 4%; }
+
+.answer-record-table th:nth-child(3),
+.answer-record-table td:nth-child(3) { width: 7%; }
+
+.answer-record-table th:nth-child(4),
+.answer-record-table td:nth-child(4),
+.answer-record-table th:nth-child(6),
+.answer-record-table td:nth-child(6) { width: 21%; }
+
+.answer-record-table th:nth-child(5),
+.answer-record-table td:nth-child(5) { width: 8%; }
+
+.answer-record-table th:nth-child(7),
+.answer-record-table td:nth-child(7) { width: 7%; }
+
+.answer-record-table th:nth-child(8),
+.answer-record-table td:nth-child(8) { width: 6%; }
+
+.answer-record-table th:nth-child(9),
+.answer-record-table td:nth-child(9) { width: 14%; }
+
+.answer-record-table th:nth-child(10),
+.answer-record-table td:nth-child(10) { width: 8%; }
 
 .target-list-panel .table-wrap,
 .review-workbench {
@@ -3319,6 +3368,15 @@ tbody tr:hover {
 
   .page-header-actions {
     justify-content: flex-start;
+  }
+
+  .page-title-row {
+    display: grid;
+    gap: 4px;
+  }
+
+  .page-header p {
+    margin: 0;
   }
 
   .practice-tabs,

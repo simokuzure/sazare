@@ -109,7 +109,6 @@ export default function AnswerRecordsPage() {
       {viewMode === 'list' ? (
       <>
       <PageHeader
-        eyebrow="答题记录"
         title="答题记录"
         description="查看历次作答的评分结果，可按题型、状态、分数与等级筛选。"
       />
@@ -204,7 +203,6 @@ export default function AnswerRecordsPage() {
                 <th>用户答案</th>
                 <th>状态</th>
                 <th>总分</th>
-                <th>四项评分</th>
                 <th>提交时间</th>
                 <th>操作</th>
               </tr>
@@ -220,7 +218,6 @@ export default function AnswerRecordsPage() {
                   <td className="table-question-answer-cell" data-label="用户答案" title={record.answerText}>{record.answerText}</td>
                   <td data-label="状态"><span className={record.answerStatus === 'REVIEWED' ? 'data-badge is-success' : record.answerStatus === 'FAILED' ? 'data-badge is-danger' : 'data-badge'}>{STATUS_LABELS[record.answerStatus]}</span></td>
                   <td data-label="总分">{formatReviewedScore(record.answerStatus, record.totalScore)}</td>
-                  <td data-label="四项评分">{formatScores(record)}</td>
                   <td data-label="提交时间">{formatDateTime(record.createdAt)}</td>
                   <td data-label="操作">
                     <div className="table-actions">
@@ -424,22 +421,6 @@ function formatScore(score: number | null | undefined) {
 
 function formatReviewedScore(status: Exclude<AnswerStatus, ''>, score: number | null | undefined) {
   return status === 'REVIEWED' ? formatScore(score) : '-'
-}
-
-function formatScores(record: Pick<UserAnswerRecord, 'answerStatus' | 'scores'>) {
-  if (record.answerStatus !== 'REVIEWED') {
-    return '- / - / - / -'
-  }
-
-  const scores = record.scores
-  return [
-    scores.grammarVocabularyScore,
-    scores.naturalFluencyScore,
-    scores.scenarioAdaptationScore,
-    scores.informationCompletenessScore,
-  ]
-    .map((score) => (score == null ? '-' : String(score)))
-    .join(' / ')
 }
 
 function formatDateTime(value: string) {

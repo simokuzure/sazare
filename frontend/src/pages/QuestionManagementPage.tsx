@@ -357,7 +357,6 @@ export default function QuestionManagementPage() {
           <section className="page-content target-page question-page" aria-label="question management page">
             {viewMode === 'list' ? (
               <PageHeader
-                eyebrow="问题管理"
                 title="问题管理"
                 description="管理题库中的短句与文章，可筛选并进行查看、编辑、停用或删除。"
                 actions={<button type="button" className="primary-button" onClick={handleStartCreateQuestion}>新建短句</button>}
@@ -421,15 +420,6 @@ export default function QuestionManagementPage() {
                     <option value="false">停用</option>
                     <option value="all">全部</option>
                   </select>
-                </label>
-
-                <label>
-                  <span>标签 code</span>
-                  <input
-                    value={questionFilters.tagCodes}
-                    placeholder="多个 code 用逗号分隔"
-                    onChange={(event) => updateQuestionFilters({ tagCodes: event.target.value })}
-                  />
                 </label>
 
               </form>

@@ -284,7 +284,7 @@ export default function ArticlePractice() {
           <label><span>文章体裁</span><select value={genreTagCode} disabled={genreTagsLoading} onChange={(event) => setGenreTagCode(event.target.value)}><option value="">{genreTagsLoading ? '加载中' : '不限（随机体裁）'}</option>{genreTags.map((tag) => <option key={tag.id} value={tag.code}>{tag.name}</option>)}</select></label>
           <label><span>主题</span><input value={topic} maxLength={100} placeholder="可选，例如：周末旅行" onChange={(event) => setTopic(event.target.value)} /></label>
           <label className="wide-field"><span>补充要求</span><input value={extraRequirements} maxLength={500} placeholder="例如：书面语、保持敬体、关注篇章衔接" onChange={(event) => setExtraRequirements(event.target.value)} /></label>
-          <button type="button" disabled={questionLoading} onClick={handleRandomArticle}>{questionRandomizing ? '抽题中' : '随机文章'}</button>
+          <button type="button" className="primary-button" disabled={questionLoading} onClick={handleRandomArticle}>{questionRandomizing ? '抽题中' : '随机文章'}</button>
           <button type="button" className="primary-button" disabled={questionLoading} onClick={handleGenerateArticle}>{questionGenerating ? '生成中' : '生成文章'}</button>
         </form>
         {genreTagsError ? <div className="error-message">体裁标签加载失败：{genreTagsError}</div> : null}
