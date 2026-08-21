@@ -45,8 +45,8 @@
 jt/
 ├─ backend/                  Spring Boot 后端
 │  └─ src/main/resources/
-│     ├─ db/schema.sql       全新数据库基线
-│     ├─ db/migrations/      已有数据库增量 SQL
+│     ├─ db/schema.sql       数据库结构
+│     ├─ db/seed.sql         初始化数据
 │     └─ mapper/             MyBatis XML
 ├─ frontend/                 React 前端
 ├─ docs/                     API 与 AI Prompt 设计
@@ -77,20 +77,9 @@ docker compose down
 
 `docker compose down -v` 会删除本地 PostgreSQL 和 Redis 数据卷，仅在确认不需要保留数据时使用。
 
-### 2. 初始化或升级数据库
+### 2. 初始化数据库
 
-全新数据库使用 [schema.sql](backend/src/main/resources/db/schema.sql) 初始化。项目没有集成自动迁移工具，SQL 需要通过 PostgreSQL 客户端手动执行。
-
-已有数据库升级时：
-
-1. 先备份数据库。
-2. 不要删除 `postgres_data` 数据卷。
-3. 按文件名顺序执行 [db/migrations](backend/src/main/resources/db/migrations) 中尚未应用的 SQL。
-
-当前增量文件：
-
-- `20260813_add_japanese_corrections.sql`：允许保存无题目关联的纯日语纠错记录及完整修订稿。
-- `20260820_add_review_card_logical_delete.sql`：增加复习卡片逻辑删除，并允许归档后重新创建同名全新卡片。
+项目没有集成自动迁移工具。请通过 PostgreSQL 客户端依次执行 [schema.sql](backend/src/main/resources/db/schema.sql) 和 [seed.sql](backend/src/main/resources/db/seed.sql)：前者创建数据库结构，后者写入默认用户、标签和错误类型初始化数据。
 
 ### 3. 选择 AI 提供方
 
