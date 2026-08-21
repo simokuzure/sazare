@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getErrorMessage } from '../api/client'
 import {
+  deleteReviewCard,
   fetchReviewCard,
   fetchReviewCards,
   generateDerivedReviewQuestion,
@@ -38,7 +39,9 @@ export default function ReviewPage() {
   const [cards, setCards] = useState<PageData<ReviewCard>>(EMPTY_PAGE)
   const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState<string | null>(null)
+  const [listNotice, setListNotice] = useState<PracticeNotice | null>(null)
   const [listReloadToken, setListReloadToken] = useState(0)
+  const [deletingCardId, setDeletingCardId] = useState<number | null>(null)
   const [view, setView] = useState<WorkbenchView>('LIST')
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null)
   const [earlyReview, setEarlyReview] = useState(false)
@@ -173,6 +176,47 @@ export default function ReviewPage() {
   function reloadDetail() {
     setActionNotice(null)
     setDetailReloadToken((value) => value + 1)
+  }
+
+  function refreshListAfterDeletion() {
+    if (cards.items.length === 1 && filters.page > 1) {
+      setFilters((current) => ({ ...current, page: current.page - 1 }))
+      return
+    }
+    setListReloadToken((value) => value + 1)
+  }
+
+  async function deleteCard(cardId: number, cardName: string, returnToListAfterDelete: boolean) {
+    const confirmed = window.confirm(
+      `确认删除复习卡片“${cardName}”？\n\n删除后将从复习列表移除；历史记录保留，再次添加会创建全新卡片。`,
+    )
+    if (!confirmed) return
+
+    setDeletingCardId(cardId)
+    setListNotice(null)
+    try {
+      await deleteReviewCard(cardId)
+      setListNotice({ kind: 'info', title: '复习卡片已删除', message: `“${cardName}”已从复习列表移除。` })
+      if (returnToListAfterDelete) {
+        setView('LIST')
+        setSelectedCardId(null)
+        setEarlyReview(false)
+        setDetail(null)
+        setDetailError(null)
+        setAttemptResult(null)
+        setActionNotice(null)
+      }
+      refreshListAfterDeletion()
+    } catch (error: unknown) {
+      const notice = { kind: 'error' as const, title: '删除失败', message: getErrorMessage(error) }
+      if (returnToListAfterDelete) {
+        setActionNotice(notice)
+      } else {
+        setListNotice(notice)
+      }
+    } finally {
+      setDeletingCardId(null)
+    }
   }
 
   async function handleSubmitAttempt() {
@@ -336,10 +380,15 @@ export default function ReviewPage() {
       detail={detail}
       loading={detailLoading}
       error={detailError}
+      notice={actionNotice}
+      deleting={deletingCardId === selectedCardId}
       onStart={startReviewFromDetail}
       onStartEarly={startEarlyReviewFromDetail}
       onReload={reloadDetail}
       onBack={returnToList}
+      onDelete={() => {
+        if (detail) void deleteCard(detail.id, detail.userErrorTypeName, true)
+      }}
     />
   }
 
@@ -409,6 +458,7 @@ export default function ReviewPage() {
     />
     <section className="surface review-surface review-workbench target-list-panel">
 
+      {listNotice ? <Notice notice={listNotice} /> : null}
       {listError ? <Notice notice={{ kind: 'error', title: '加载失败', message: listError }} actionLabel="重试" onAction={() => setListReloadToken((value) => value + 1)} /> : null}
       {listLoading ? <p className="loading-text">正在加载复习卡片...</p> : null}
       {!listLoading && !listError && cards.items.length === 0 ? <div className="empty-state">{emptyListText(filters.mode)}</div> : null}
@@ -418,6 +468,7 @@ export default function ReviewPage() {
           <thead><tr><th>复习重点</th><th>全局分类</th><th>到期状态</th><th>周期进度</th><th>原题</th><th>待重试</th><th>最近活动</th><th>操作</th></tr></thead>
           <tbody>{cards.items.map((card) => {
             const due = card.status === 'ACTIVE' && isDue(card.dueAt)
+            const deleting = deletingCardId === card.id
             return <tr key={card.id}>
               <td className="table-ellipsis-cell" data-label="复习重点" title={card.userErrorTypeName}><strong>{card.userErrorTypeName}</strong></td>
               <td className="table-ellipsis-cell" data-label="全局分类" title={`${card.errorTypeName} (${card.errorTypeCode})`}>{card.errorTypeName}<span className="table-secondary-text">{card.errorTypeCode}</span></td>
@@ -426,7 +477,7 @@ export default function ReviewPage() {
               <td data-label="原题">{card.progress.originalPassedCount} / {card.progress.originalQuestionCount}</td>
               <td data-label="待重试">{card.progress.retryQuestionCount}</td>
               <td data-label="最近活动">{formatDateTime(card.status === 'MASTERED' ? card.masteredAt : card.lastReviewedAt)}</td>
-              <td data-label="操作"><div className="review-card-actions"><button type="button" className="compact-button" onClick={() => viewCard(card.id)}>查看</button>{due ? <button type="button" className="primary-button compact-button" onClick={() => startReview(card.id)}>开始复习</button> : filters.mode === 'ACTIVE' ? <button type="button" className="primary-button compact-button" onClick={() => startEarlyReview(card.id)}>提前复习</button> : null}</div></td>
+              <td data-label="操作"><div className="review-card-actions"><button type="button" className="compact-button" disabled={deleting} onClick={() => viewCard(card.id)}>查看</button>{due ? <button type="button" className="primary-button compact-button" disabled={deleting} onClick={() => startReview(card.id)}>开始复习</button> : filters.mode === 'ACTIVE' ? <button type="button" className="primary-button compact-button" disabled={deleting} onClick={() => startEarlyReview(card.id)}>提前复习</button> : null}<button type="button" className="danger-button compact-button" disabled={deleting} onClick={() => void deleteCard(card.id, card.userErrorTypeName, false)}>{deleting ? '删除中' : '删除'}</button></div></td>
             </tr>
           })}</tbody>
         </table>
@@ -440,18 +491,22 @@ export default function ReviewPage() {
   </section>
 }
 
-function ReviewCardOverview({ detail, loading, error, onStart, onStartEarly, onReload, onBack }: {
+function ReviewCardOverview({ detail, loading, error, notice, deleting, onStart, onStartEarly, onReload, onBack, onDelete }: {
   detail: ReviewCardDetail | null
   loading: boolean
   error: string | null
+  notice: PracticeNotice | null
+  deleting: boolean
   onStart: () => void
   onStartEarly: () => void
   onReload: () => void
   onBack: () => void
+  onDelete: () => void
 }) {
   return <section className="page-content target-page review-page" aria-label="复习卡片查看">
-    <PageHeader eyebrow="复习卡片" title="复习卡片详情" actions={<><button type="button" onClick={onBack}>返回列表</button><button type="button" disabled={loading} onClick={onReload}>重新加载</button></>} />
+    <PageHeader eyebrow="复习卡片" title="复习卡片详情" actions={<><button type="button" disabled={deleting} onClick={onBack}>返回列表</button><button type="button" disabled={loading || deleting} onClick={onReload}>重新加载</button><button type="button" className="danger-button" disabled={!detail || deleting} onClick={onDelete}>{deleting ? '删除中' : '删除卡片'}</button></>} />
     <section className="surface review-surface review-detail-surface">
+      {notice ? <Notice notice={notice} /> : null}
       {loading && !detail ? <p className="loading-text">正在加载卡片详情...</p> : null}
       {error ? <Notice notice={{ kind: 'error', title: '卡片加载失败', message: error }} actionLabel="重新加载" onAction={onReload} /> : null}
       {detail ? <>

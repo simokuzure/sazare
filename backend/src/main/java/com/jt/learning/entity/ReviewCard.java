@@ -43,6 +43,9 @@ public class ReviewCard {
     /** 最近一次完成周期的时间，激活时为空。 */
     private LocalDateTime masteredAt;
 
+    /** 逻辑删除标记。 */
+    private Boolean deleted;
+
     /** 创建时间。 */
     private LocalDateTime createdAt;
 

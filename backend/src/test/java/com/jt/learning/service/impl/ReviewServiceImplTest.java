@@ -27,6 +27,7 @@ import com.jt.learning.mapper.TagMapper;
 import com.jt.learning.mapper.UserAnswerMapper;
 import com.jt.learning.mapper.UserErrorTypeMapper;
 import com.jt.learning.mapper.UserMapper;
+import com.jt.learning.service.ReviewService;
 import com.jt.learning.service.ai.AiReviewQuestionClient;
 import com.jt.learning.service.ai.AiReviewScoringClient;
 import com.jt.learning.service.ai.prompt.AiReviewQuestionPromptBuilder;
@@ -37,6 +38,11 @@ import com.jt.learning.service.review.Sm2Scheduler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
+import org.springframework.transaction.interceptor.TransactionInterceptor;
 import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
@@ -131,6 +137,59 @@ class ReviewServiceImplTest {
                 .isEqualTo("バスに間に合いました。");
         assertThat(result.reviewAttempts().getFirst().totalScore()).isEqualByComparingTo("91.50");
         assertThat(result.reviewAttempts().getLast().result()).isEqualTo("FAIL");
+    }
+
+    @Test
+    void deleteReviewCardShouldLogicalDeleteCardAndArchiveReviewFocus() {
+        stubLocalUser();
+        ReviewCard card = card("ACTIVE", LocalDateTime.now().plusDays(1));
+        when(cardMapper.selectForUpdateByIdAndUserId(1L, 1L)).thenReturn(card);
+        when(cardMapper.logicalDelete(eq(1L), eq(1L), any(LocalDateTime.class))).thenReturn(1);
+        when(userErrorTypeMapper.archiveByIdAndUserId(eq(2L), eq(1L), any(LocalDateTime.class)))
+                .thenReturn(1);
+
+        service.deleteReviewCard(1L);
+
+        verify(cardMapper).logicalDelete(eq(1L), eq(1L), any(LocalDateTime.class));
+        verify(userErrorTypeMapper).archiveByIdAndUserId(eq(2L), eq(1L), any(LocalDateTime.class));
+    }
+
+    @Test
+    void deleteReviewCardShouldRejectMissingOrDeletedCard() {
+        stubLocalUser();
+
+        assertThatThrownBy(() -> service.deleteReviewCard(99L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("复习卡片不存在或已删除");
+
+        verify(cardMapper, never()).logicalDelete(anyLong(), anyLong(), any(LocalDateTime.class));
+        verify(userErrorTypeMapper, never())
+                .archiveByIdAndUserId(anyLong(), anyLong(), any(LocalDateTime.class));
+    }
+
+    @Test
+    void deleteReviewCardShouldFailWhenReviewFocusCannotBeArchived() {
+        stubLocalUser();
+        ReviewCard card = card("ACTIVE", LocalDateTime.now().plusDays(1));
+        when(cardMapper.selectForUpdateByIdAndUserId(1L, 1L)).thenReturn(card);
+        when(cardMapper.logicalDelete(eq(1L), eq(1L), any(LocalDateTime.class))).thenReturn(1);
+
+        PlatformTransactionManager transactionManager = mock(PlatformTransactionManager.class);
+        TransactionStatus transactionStatus = mock(TransactionStatus.class);
+        when(transactionManager.getTransaction(any())).thenReturn(transactionStatus);
+        ProxyFactory proxyFactory = new ProxyFactory(service);
+        proxyFactory.addAdvice(new TransactionInterceptor(
+                transactionManager,
+                new AnnotationTransactionAttributeSource()
+        ));
+        ReviewService transactionalService = (ReviewService) proxyFactory.getProxy();
+
+        assertThatThrownBy(() -> transactionalService.deleteReviewCard(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("复习卡片不存在或已删除");
+
+        verify(transactionManager).rollback(transactionStatus);
+        verify(transactionManager, never()).commit(transactionStatus);
     }
 
     @Test
@@ -427,6 +486,7 @@ class ReviewServiceImplTest {
         service.recordPracticeError(1L, 50L, 100L, 2L, occurredAt);
 
         assertThat(insertedCard.get().getDueAt()).isEqualTo(LocalDateTime.of(2027, 1, 1, 7, 0));
+        assertThat(insertedCard.get().getDeleted()).isFalse();
         ArgumentCaptor<ReviewCycle> cycleCaptor = ArgumentCaptor.forClass(ReviewCycle.class);
         verify(cycleMapper).insertCycle(cycleCaptor.capture());
         assertThat(cycleCaptor.getValue().getFailedReviewCount()).isZero();

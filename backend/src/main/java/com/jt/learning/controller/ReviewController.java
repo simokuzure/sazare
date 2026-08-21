@@ -12,6 +12,7 @@ import com.jt.learning.vo.ReviewDerivedQuestionGenerationVO;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -45,6 +46,14 @@ public class ReviewController {
             @RequestParam(defaultValue = "false") boolean earlyReview
     ) {
         return ApiResponse.success(reviewService.getReviewCard(cardId, earlyReview));
+    }
+
+    @DeleteMapping("/{cardId}")
+    public ApiResponse<Void> deleteReviewCard(
+            @Positive(message = "cardId 必须大于 0") @PathVariable Long cardId
+    ) {
+        reviewService.deleteReviewCard(cardId);
+        return ApiResponse.success();
     }
 
     @PostMapping("/{cardId}/attempts")

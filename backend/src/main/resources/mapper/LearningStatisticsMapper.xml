@@ -130,6 +130,7 @@
         left join review_cards review_card
             on review_card.user_error_type_id = user_error_type.id
            and review_card.user_id = #{userId}
+           and review_card.deleted = false
         where answer_error.user_id = #{userId}
           and answer_error.created_at &gt;= #{startAt}
           and answer_error.created_at &lt; #{endAt}
@@ -151,8 +152,12 @@
             count(*) filter (where status = 'ACTIVE' and due_at &lt;= #{now}) as due_card_count,
             count(*) filter (where status = 'ACTIVE') as active_card_count,
             count(*) filter (where status = 'MASTERED') as mastered_card_count
-        from review_cards
-        where user_id = #{userId}
+        from review_cards review_card
+        inner join user_error_types user_error_type
+            on user_error_type.id = review_card.user_error_type_id
+           and user_error_type.status = 'ACTIVE'
+        where review_card.user_id = #{userId}
+          and review_card.deleted = false
     </select>
 
     <select id="selectPeriodReviewSummary" resultType="com.jt.learning.dto.LearningStatisticsPeriodReviewRow">

@@ -38,6 +38,11 @@ export async function fetchReviewCard(
   return result.data
 }
 
+export async function deleteReviewCard(cardId: number): Promise<void> {
+  const response = await fetch(`/api/review-cards/${cardId}`, { method: 'DELETE' })
+  await readApiResponse<null>(response)
+}
+
 export async function submitReviewAttempt(
   cardId: number,
   payload: ReviewAttemptPayload,

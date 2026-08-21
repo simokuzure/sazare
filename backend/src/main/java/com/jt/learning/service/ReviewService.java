@@ -18,6 +18,8 @@ public interface ReviewService {
 
     ReviewCardDetailVO getReviewCard(Long cardId, boolean earlyReview);
 
+    void deleteReviewCard(Long cardId);
+
     ReviewAttemptVO submitReviewAttempt(Long cardId, ReviewAttemptRequest request);
 
     ReviewDerivedQuestionGenerationVO generateDerivedQuestion(Long cardId);

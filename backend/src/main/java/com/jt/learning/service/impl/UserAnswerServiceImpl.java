@@ -240,7 +240,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         if (errorType == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "自定义复习卡片分类不可用");
         }
-        UserErrorType existing = userErrorTypeMapper.selectByUserIdAndErrorTypeIdAndName(
+        UserErrorType existing = userErrorTypeMapper.selectActiveByUserIdAndErrorTypeIdAndName(
                 user.getId(), errorType.getId(), name);
         if (existing != null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同名复习卡片已存在，请使用其他复习重点");
@@ -724,7 +724,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         );
         validateEnabledLeafErrorType(request.errorTypeId());
 
-        UserErrorType existing = userErrorTypeMapper.selectByUserIdAndErrorTypeIdAndName(
+        UserErrorType existing = userErrorTypeMapper.selectActiveByUserIdAndErrorTypeIdAndName(
                 userId,
                 request.errorTypeId(),
                 name

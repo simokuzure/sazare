@@ -206,6 +206,18 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     @Transactional
+    public void deleteReviewCard(Long cardId) {
+        User user = requireLocalUser();
+        LocalDateTime now = LocalDateTime.now();
+        ReviewCard card = requireCard(reviewCardMapper.selectForUpdateByIdAndUserId(cardId, user.getId()));
+        if (reviewCardMapper.logicalDelete(card.getId(), user.getId(), now) != 1
+                || userErrorTypeMapper.archiveByIdAndUserId(card.getUserErrorTypeId(), user.getId(), now) != 1) {
+            throw business("复习卡片不存在或已删除");
+        }
+    }
+
+    @Override
+    @Transactional
     public ReviewAttemptVO submitReviewAttempt(Long cardId, ReviewAttemptRequest request) {
         User user = requireLocalUser();
         LocalDateTime now = LocalDateTime.now();
@@ -702,7 +714,7 @@ public class ReviewServiceImpl implements ReviewService {
 
     private ReviewCard requireCard(ReviewCard card) {
         if (card == null) {
-            throw business("复习卡片不存在");
+            throw business("复习卡片不存在或已删除");
         }
         return card;
     }
@@ -776,6 +788,7 @@ public class ReviewServiceImpl implements ReviewService {
         card.setDueAt(ReviewDueAtCalculator.calculate(now, card.getIntervalDays()));
         card.setLastReviewedAt(null);
         card.setMasteredAt(null);
+        card.setDeleted(false);
         card.setCreatedAt(now);
         card.setUpdatedAt(now);
         return card;

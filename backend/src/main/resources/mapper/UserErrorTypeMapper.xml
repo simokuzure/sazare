@@ -40,7 +40,7 @@
           and status = 'ACTIVE'
     </select>
 
-    <select id="selectByUserIdAndErrorTypeIdAndName" resultType="com.jt.learning.entity.UserErrorType">
+    <select id="selectActiveByUserIdAndErrorTypeIdAndName" resultType="com.jt.learning.entity.UserErrorType">
         select
             id,
             user_id,
@@ -54,7 +54,17 @@
         where user_id = #{userId}
           and error_type_id = #{errorTypeId}
           and name = #{name}
+          and status = 'ACTIVE'
     </select>
+
+    <update id="archiveByIdAndUserId">
+        update user_error_types
+        set status = 'ARCHIVED',
+            updated_at = #{updatedAt}
+        where id = #{id}
+          and user_id = #{userId}
+          and status = 'ACTIVE'
+    </update>
 
     <select id="countUserErrorTypes" resultType="long">
         select count(1)

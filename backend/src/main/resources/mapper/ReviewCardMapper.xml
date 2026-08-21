@@ -4,16 +4,20 @@
 
     <sql id="cardColumns">
         id, user_id, user_error_type_id, status, ease_factor, repetition_count,
-        interval_days, lapse_count, due_at, last_reviewed_at, mastered_at, created_at, updated_at
+        interval_days, lapse_count, due_at, last_reviewed_at, mastered_at, deleted, created_at, updated_at
     </sql>
 
     <select id="countCards" resultType="long">
         select count(1)
-        from review_cards
-        where user_id = #{userId}
-          and status = #{status}
+        from review_cards card
+        inner join user_error_types user_error_type
+            on user_error_type.id = card.user_error_type_id
+           and user_error_type.status = 'ACTIVE'
+        where card.user_id = #{userId}
+          and card.deleted = false
+          and card.status = #{status}
         <if test="dueOnly">
-            and due_at &lt;= #{now}
+            and card.due_at &lt;= #{now}
         </if>
     </select>
 
@@ -57,6 +61,8 @@
             where review_cycle_id = cycle.id
         ) progress on true
         where card.user_id = #{userId}
+          and card.deleted = false
+          and user_error_type.status = 'ACTIVE'
           and card.status = #{status}
         <if test="dueOnly">
             and card.due_at &lt;= #{now}
@@ -69,13 +75,13 @@
     <select id="selectByIdAndUserId" resultType="com.jt.learning.entity.ReviewCard">
         select <include refid="cardColumns" />
         from review_cards
-        where id = #{id} and user_id = #{userId}
+        where id = #{id} and user_id = #{userId} and deleted = false
     </select>
 
     <select id="selectForUpdateByIdAndUserId" resultType="com.jt.learning.entity.ReviewCard">
         select <include refid="cardColumns" />
         from review_cards
-        where id = #{id} and user_id = #{userId}
+        where id = #{id} and user_id = #{userId} and deleted = false
         for update
     </select>
 
@@ -83,19 +89,29 @@
         select <include refid="cardColumns" />
         from review_cards
         where user_error_type_id = #{userErrorTypeId}
+          and deleted = false
         for update
     </select>
 
     <insert id="insertCardIfAbsent" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
         insert into review_cards (
             user_id, user_error_type_id, status, ease_factor, repetition_count, interval_days,
-            lapse_count, due_at, last_reviewed_at, mastered_at, created_at, updated_at
+            lapse_count, due_at, last_reviewed_at, mastered_at, deleted, created_at, updated_at
         ) values (
             #{userId}, #{userErrorTypeId}, #{status}, #{easeFactor}, #{repetitionCount}, #{intervalDays},
-            #{lapseCount}, #{dueAt}, #{lastReviewedAt}, #{masteredAt}, #{createdAt}, #{updatedAt}
+            #{lapseCount}, #{dueAt}, #{lastReviewedAt}, #{masteredAt}, #{deleted}, #{createdAt}, #{updatedAt}
         )
         on conflict (user_error_type_id) do nothing
     </insert>
+
+    <update id="logicalDelete">
+        update review_cards
+        set deleted = true,
+            updated_at = #{updatedAt}
+        where id = #{id}
+          and user_id = #{userId}
+          and deleted = false
+    </update>
 
     <update id="updateSchedule">
         update review_cards
@@ -109,5 +125,6 @@
             mastered_at = #{masteredAt},
             updated_at = #{updatedAt}
         where id = #{id}
+          and deleted = false
     </update>
 </mapper>

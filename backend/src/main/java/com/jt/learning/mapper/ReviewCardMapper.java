@@ -27,6 +27,9 @@ public interface ReviewCardMapper {
 
     int insertCardIfAbsent(ReviewCard card);
 
+    int logicalDelete(@Param("id") Long id, @Param("userId") Long userId,
+                      @Param("updatedAt") LocalDateTime updatedAt);
+
     int updateSchedule(@Param("id") Long id, @Param("status") String status,
                        @Param("easeFactor") BigDecimal easeFactor,
                        @Param("repetitionCount") int repetitionCount,
