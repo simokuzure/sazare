@@ -27,6 +27,7 @@ import com.jt.learning.mapper.UserAnswerMapper;
 import com.jt.learning.mapper.UserErrorTypeMapper;
 import com.jt.learning.mapper.UserMapper;
 import com.jt.learning.service.ReviewService;
+import com.jt.learning.service.DictionaryCacheService;
 import com.jt.learning.service.UserAnswerService;
 import com.jt.learning.service.ai.AiReviewQuestionClient;
 import com.jt.learning.service.ai.prompt.AiReviewTagPromptBuilder;
@@ -65,6 +66,7 @@ class UserAnswerServiceImplTest {
     private UserMapper userMapper;
     private UserAnswerMapper userAnswerMapper;
     private TagMapper tagMapper;
+    private DictionaryCacheService dictionaryCacheService;
     private QuestionAnswerMapper questionAnswerMapper;
     private QuestionMapper questionMapper;
     private QuestionTagMapper questionTagMapper;
@@ -80,6 +82,7 @@ class UserAnswerServiceImplTest {
         userMapper = mock(UserMapper.class);
         userAnswerMapper = mock(UserAnswerMapper.class);
         tagMapper = mock(TagMapper.class);
+        dictionaryCacheService = mock(DictionaryCacheService.class);
         questionAnswerMapper = mock(QuestionAnswerMapper.class);
         questionMapper = mock(QuestionMapper.class);
         questionTagMapper = mock(QuestionTagMapper.class);
@@ -94,6 +97,7 @@ class UserAnswerServiceImplTest {
                 userMapper,
                 userAnswerMapper,
                 tagMapper,
+                dictionaryCacheService,
                 questionAnswerMapper,
                 questionMapper,
                 questionTagMapper,
@@ -425,8 +429,8 @@ class UserAnswerServiceImplTest {
         });
         Tag sceneTag = sceneTag();
         Tag functionTag = functionTag();
-        when(tagMapper.selectEnabledTagsByType("SCENE")).thenReturn(List.of(sceneTag));
-        when(tagMapper.selectEnabledTagsByType("FUNCTION")).thenReturn(List.of(functionTag));
+        when(dictionaryCacheService.getEnabledTagsByType("SCENE")).thenReturn(List.of(sceneTag));
+        when(dictionaryCacheService.getEnabledTagsByType("FUNCTION")).thenReturn(List.of(functionTag));
         when(reviewQuestionClient.classifyTags(any(), any(), any())).thenReturn(
                 "{\"tagCodes\":[\"BANK\",\"FUNCTION_REQUEST\"]}");
         List<UserAnswerErrorVO> result = userAnswerService.confirmUserAnswerErrors(

@@ -7,7 +7,7 @@ import com.jt.learning.dto.AiJapaneseCorrectionReviewDTO;
 import com.jt.learning.dto.JapaneseCorrectionRequest;
 import com.jt.learning.entity.User;
 import com.jt.learning.entity.UserAnswer;
-import com.jt.learning.mapper.ErrorTypeMapper;
+import com.jt.learning.service.DictionaryCacheService;
 import com.jt.learning.mapper.UserAnswerMapper;
 import com.jt.learning.mapper.UserMapper;
 import com.jt.learning.service.ai.AiJapaneseCorrectionClient;
@@ -33,17 +33,17 @@ class JapaneseCorrectionServiceImplTest {
     void shouldSaveReviewedCorrectionWithoutQuestionAndRecalculateTotalScore() {
         UserMapper userMapper = mock(UserMapper.class);
         UserAnswerMapper userAnswerMapper = mock(UserAnswerMapper.class);
-        ErrorTypeMapper errorTypeMapper = mock(ErrorTypeMapper.class);
+        DictionaryCacheService dictionaryCacheService = mock(DictionaryCacheService.class);
         AiJapaneseCorrectionPromptBuilder promptBuilder = mock(AiJapaneseCorrectionPromptBuilder.class);
         AiJapaneseCorrectionClient client = mock(AiJapaneseCorrectionClient.class);
         JapaneseCorrectionAiResponseValidator validator = mock(JapaneseCorrectionAiResponseValidator.class);
         JapaneseCorrectionServiceImpl service = new JapaneseCorrectionServiceImpl(
-                userMapper, userAnswerMapper, errorTypeMapper, promptBuilder, client, validator);
+                userMapper, userAnswerMapper, dictionaryCacheService, promptBuilder, client, validator);
 
         User user = new User();
         user.setId(1L);
         when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
-        when(errorTypeMapper.selectEnabledLeafOptions()).thenReturn(List.of(
+        when(dictionaryCacheService.getEnabledLeafErrorTypes()).thenReturn(List.of(
                 new AiErrorTypeOptionDTO(
                         9L, "PARTICLE", "助词错误", "说明", "GRAMMAR_SYNTAX", "语法与句法"),
                 new AiErrorTypeOptionDTO(

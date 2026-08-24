@@ -43,6 +43,7 @@ import com.jt.learning.service.ai.prompt.AiReviewQuestionPromptBuilder;
 import com.jt.learning.service.ai.prompt.AiReviewScoringPromptBuilder;
 import com.jt.learning.service.ai.validation.ReviewAiResponseValidator;
 import com.jt.learning.service.ReviewService;
+import com.jt.learning.service.DictionaryCacheService;
 import com.jt.learning.service.review.Sm2Result;
 import com.jt.learning.service.review.Sm2Scheduler;
 import com.jt.learning.util.ReviewDueAtCalculator;
@@ -100,6 +101,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final UserMapper userMapper;
     private final UserErrorTypeMapper userErrorTypeMapper;
     private final ErrorTypeMapper errorTypeMapper;
+    private final DictionaryCacheService dictionaryCacheService;
     private final QuestionMapper questionMapper;
     private final QuestionAnswerMapper questionAnswerMapper;
     private final QuestionTagMapper questionTagMapper;
@@ -120,6 +122,7 @@ public class ReviewServiceImpl implements ReviewService {
             UserMapper userMapper,
             UserErrorTypeMapper userErrorTypeMapper,
             ErrorTypeMapper errorTypeMapper,
+            DictionaryCacheService dictionaryCacheService,
             QuestionMapper questionMapper,
             QuestionAnswerMapper questionAnswerMapper,
             QuestionTagMapper questionTagMapper,
@@ -139,6 +142,7 @@ public class ReviewServiceImpl implements ReviewService {
         this.userMapper = userMapper;
         this.userErrorTypeMapper = userErrorTypeMapper;
         this.errorTypeMapper = errorTypeMapper;
+        this.dictionaryCacheService = dictionaryCacheService;
         this.questionMapper = questionMapper;
         this.questionAnswerMapper = questionAnswerMapper;
         this.questionTagMapper = questionTagMapper;
@@ -235,7 +239,7 @@ public class ReviewServiceImpl implements ReviewService {
         List<QuestionAnswer> standardAnswers = requireAnswers(question.getId());
         UserErrorType userErrorType = requireUserErrorType(card, user.getId());
         ErrorType errorType = requireErrorType(userErrorType.getErrorTypeId());
-        List<AiErrorTypeOptionDTO> errorTypeOptions = errorTypeMapper.selectEnabledLeafOptions();
+        List<AiErrorTypeOptionDTO> errorTypeOptions = dictionaryCacheService.getEnabledLeafErrorTypes();
         Map<String, AiErrorTypeOptionDTO> errorTypesByCode = errorTypeOptions.stream()
                 .collect(Collectors.toMap(AiErrorTypeOptionDTO::code, Function.identity()));
 
@@ -526,8 +530,8 @@ public class ReviewServiceImpl implements ReviewService {
         List<QuestionAnswer> answers = questionAnswerMapper.selectActiveAnswersByQuestionIds(questionIds);
         Map<Long, List<QuestionAnswer>> answersByQuestionId = answers.stream()
                 .collect(Collectors.groupingBy(QuestionAnswer::getQuestionId, LinkedHashMap::new, Collectors.toList()));
-        List<Tag> sceneTags = tagMapper.selectEnabledTagsByType(TAG_TYPE_SCENE);
-        List<Tag> functionTags = tagMapper.selectEnabledTagsByType(TAG_TYPE_FUNCTION);
+        List<Tag> sceneTags = dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_SCENE);
+        List<Tag> functionTags = dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_FUNCTION);
         Map<String, Tag> allowedTagsByCode = java.util.stream.Stream.concat(
                         sceneTags.stream(), functionTags.stream())
                 .collect(Collectors.toMap(Tag::getCode, Function.identity(), (left, right) -> left, LinkedHashMap::new));

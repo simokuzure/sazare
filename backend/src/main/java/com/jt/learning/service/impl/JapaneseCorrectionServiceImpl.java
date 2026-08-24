@@ -9,10 +9,10 @@ import com.jt.learning.entity.User;
 import com.jt.learning.entity.UserAnswer;
 import com.jt.learning.exception.BusinessException;
 import com.jt.learning.exception.ErrorCode;
-import com.jt.learning.mapper.ErrorTypeMapper;
 import com.jt.learning.mapper.UserAnswerMapper;
 import com.jt.learning.mapper.UserMapper;
 import com.jt.learning.service.JapaneseCorrectionService;
+import com.jt.learning.service.DictionaryCacheService;
 import com.jt.learning.service.ai.AiJapaneseCorrectionClient;
 import com.jt.learning.service.ai.AiQuestionPrompt;
 import com.jt.learning.service.ai.prompt.AiJapaneseCorrectionPromptBuilder;
@@ -44,7 +44,7 @@ public class JapaneseCorrectionServiceImpl implements JapaneseCorrectionService 
 
     private final UserMapper userMapper;
     private final UserAnswerMapper userAnswerMapper;
-    private final ErrorTypeMapper errorTypeMapper;
+    private final DictionaryCacheService dictionaryCacheService;
     private final AiJapaneseCorrectionPromptBuilder promptBuilder;
     private final AiJapaneseCorrectionClient correctionClient;
     private final JapaneseCorrectionAiResponseValidator responseValidator;
@@ -52,14 +52,14 @@ public class JapaneseCorrectionServiceImpl implements JapaneseCorrectionService 
     public JapaneseCorrectionServiceImpl(
             UserMapper userMapper,
             UserAnswerMapper userAnswerMapper,
-            ErrorTypeMapper errorTypeMapper,
+            DictionaryCacheService dictionaryCacheService,
             AiJapaneseCorrectionPromptBuilder promptBuilder,
             AiJapaneseCorrectionClient correctionClient,
             JapaneseCorrectionAiResponseValidator responseValidator
     ) {
         this.userMapper = userMapper;
         this.userAnswerMapper = userAnswerMapper;
-        this.errorTypeMapper = errorTypeMapper;
+        this.dictionaryCacheService = dictionaryCacheService;
         this.promptBuilder = promptBuilder;
         this.correctionClient = correctionClient;
         this.responseValidator = responseValidator;
@@ -81,7 +81,7 @@ public class JapaneseCorrectionServiceImpl implements JapaneseCorrectionService 
             throw new BusinessException(ErrorCode.PARAM_ERROR, "japaneseText 长度不能超过 5000");
         }
 
-        List<AiErrorTypeOptionDTO> errorTypeOptions = errorTypeMapper.selectEnabledLeafOptions().stream()
+        List<AiErrorTypeOptionDTO> errorTypeOptions = dictionaryCacheService.getEnabledLeafErrorTypes().stream()
                 .filter(option -> !UNSUPPORTED_ERROR_CODES.contains(option.code()))
                 .toList();
         if (errorTypeOptions.isEmpty()) {

@@ -26,6 +26,7 @@ import com.jt.learning.mapper.QuestionTagMapper;
 import com.jt.learning.mapper.TagMapper;
 import com.jt.learning.mapper.UserAnswerMapper;
 import com.jt.learning.mapper.UserMapper;
+import com.jt.learning.service.DictionaryCacheService;
 import com.jt.learning.service.ai.AiAnswerScoringClient;
 import com.jt.learning.service.ai.AiQuestionClient;
 import com.jt.learning.service.ai.AiQuestionPrompt;
@@ -67,6 +68,7 @@ class QuestionServiceImplTest {
     private UserMapper userMapper;
     private UserAnswerMapper userAnswerMapper;
     private ErrorTypeMapper errorTypeMapper;
+    private DictionaryCacheService dictionaryCacheService;
     private AiQuestionClient aiQuestionClient;
     private AiAnswerScoringClient aiAnswerScoringClient;
     private QuestionEmbeddingService questionEmbeddingService;
@@ -82,13 +84,14 @@ class QuestionServiceImplTest {
         userMapper = mock(UserMapper.class);
         userAnswerMapper = mock(UserAnswerMapper.class);
         errorTypeMapper = mock(ErrorTypeMapper.class);
+        dictionaryCacheService = mock(DictionaryCacheService.class);
         aiQuestionClient = mock(AiQuestionClient.class);
         aiAnswerScoringClient = mock(AiAnswerScoringClient.class);
         questionEmbeddingService = mock(QuestionEmbeddingService.class);
         articleGenerationMetadataMapper = mock(ArticleGenerationMetadataMapper.class);
 
         ObjectMapper objectMapper = new ObjectMapper();
-        when(errorTypeMapper.selectEnabledLeafOptions()).thenReturn(List.of(errorTypeOption()));
+        when(dictionaryCacheService.getEnabledLeafErrorTypes()).thenReturn(List.of(errorTypeOption()));
         questionService = new QuestionServiceImpl(
                 tagMapper,
                 questionMapper,
@@ -97,6 +100,7 @@ class QuestionServiceImplTest {
                 userMapper,
                 userAnswerMapper,
                 errorTypeMapper,
+                dictionaryCacheService,
                 new AiQuestionPromptBuilder(objectMapper),
                 aiQuestionClient,
                 new AiAnswerScoringPromptBuilder(objectMapper),
@@ -188,7 +192,7 @@ class QuestionServiceImplTest {
     @Test
     void generateArticleByAiShouldRandomlySelectEnabledGenreWhenNotSpecified() {
         Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
-        when(tagMapper.selectEnabledTagsByType("GENRE")).thenReturn(List.of(genreTag));
+        when(dictionaryCacheService.getEnabledTagsByType("GENRE")).thenReturn(List.of(genreTag));
         when(aiQuestionClient.generateArticle(any(), any(), anyString()))
                 .thenAnswer(invocation -> validArticleJson(invocation.getArgument(2)));
         when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
@@ -206,7 +210,7 @@ class QuestionServiceImplTest {
                 ArgumentCaptor.forClass(AiArticleGenerationRequest.class);
         verify(aiQuestionClient).generateArticle(any(), requestCaptor.capture(), anyString());
         assertThat(requestCaptor.getValue().genreTagCode()).isEqualTo("NARRATIVE");
-        verify(tagMapper).selectEnabledTagsByType("GENRE");
+        verify(dictionaryCacheService).getEnabledTagsByType("GENRE");
     }
 
     @Test
@@ -431,8 +435,8 @@ class QuestionServiceImplTest {
     @Test
     void generateQuestionsByAiShouldUseDefaultRequestValues() {
         Tag sceneTag = tag(1L, "SCENE", "DAILY_LIFE_WEATHER", "天气");
-        when(tagMapper.selectEnabledTagsByType("SCENE")).thenReturn(List.of(sceneTag));
-        when(tagMapper.selectEnabledTagsByType("FUNCTION")).thenReturn(List.of());
+        when(dictionaryCacheService.getEnabledTagsByType("SCENE")).thenReturn(List.of(sceneTag));
+        when(dictionaryCacheService.getEnabledTagsByType("FUNCTION")).thenReturn(List.of());
         when(aiQuestionClient.generateQuestions(any(), any(), anyList(), anyList())).thenReturn("""
                 {
                   "questions": [
@@ -483,8 +487,8 @@ class QuestionServiceImplTest {
         assertThat(questions).hasSize(1);
         assertThat(questions.getFirst().level()).isEqualTo("N3");
         assertThat(questions.getFirst().difficulty()).isEqualTo(3);
-        verify(tagMapper).selectEnabledTagsByType("SCENE");
-        verify(tagMapper).selectEnabledTagsByType("FUNCTION");
+        verify(dictionaryCacheService).getEnabledTagsByType("SCENE");
+        verify(dictionaryCacheService).getEnabledTagsByType("FUNCTION");
     }
 
     @Test

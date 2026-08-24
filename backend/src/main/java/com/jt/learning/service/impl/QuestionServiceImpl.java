@@ -52,6 +52,7 @@ import com.jt.learning.service.ai.prompt.ArticleGenreRoleRegistry;
 import com.jt.learning.service.ai.prompt.AiQuestionPromptBuilder;
 import com.jt.learning.service.ai.validation.AiErrorAnalysisValidator;
 import com.jt.learning.service.QuestionService;
+import com.jt.learning.service.DictionaryCacheService;
 import com.jt.learning.service.question.QuestionEmbeddingService;
 import com.jt.learning.vo.AnswerErrorAnalysisVO;
 import com.jt.learning.vo.AnswerRecommendedExpressionVO;
@@ -120,6 +121,7 @@ public class QuestionServiceImpl implements QuestionService {
     private final UserMapper userMapper;
     private final UserAnswerMapper userAnswerMapper;
     private final ErrorTypeMapper errorTypeMapper;
+    private final DictionaryCacheService dictionaryCacheService;
     private final AiQuestionPromptBuilder promptBuilder;
     private final AiQuestionClient aiQuestionClient;
     private final AiAnswerScoringPromptBuilder answerScoringPromptBuilder;
@@ -137,6 +139,7 @@ public class QuestionServiceImpl implements QuestionService {
             UserMapper userMapper,
             UserAnswerMapper userAnswerMapper,
             ErrorTypeMapper errorTypeMapper,
+            DictionaryCacheService dictionaryCacheService,
             AiQuestionPromptBuilder promptBuilder,
             AiQuestionClient aiQuestionClient,
             AiAnswerScoringPromptBuilder answerScoringPromptBuilder,
@@ -153,6 +156,7 @@ public class QuestionServiceImpl implements QuestionService {
         this.userMapper = userMapper;
         this.userAnswerMapper = userAnswerMapper;
         this.errorTypeMapper = errorTypeMapper;
+        this.dictionaryCacheService = dictionaryCacheService;
         this.promptBuilder = promptBuilder;
         this.aiQuestionClient = aiQuestionClient;
         this.answerScoringPromptBuilder = answerScoringPromptBuilder;
@@ -259,7 +263,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     private Tag resolveArticleGenre(String genreTagCode) {
         if (genreTagCode == null) {
-            List<Tag> genreTags = tagMapper.selectEnabledTagsByType(TAG_TYPE_GENRE);
+            List<Tag> genreTags = dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_GENRE);
             if (genreTags.isEmpty()) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "没有可用文章体裁");
             }
@@ -497,7 +501,7 @@ public class QuestionServiceImpl implements QuestionService {
 
         List<Tag> tags = tagMapper.selectEnabledTagsByQuestionId(questionId);
         List<AiQuestionTagOptionDTO> tagOptions = toTagOptions(tags);
-        List<AiErrorTypeOptionDTO> errorTypeOptions = errorTypeMapper.selectEnabledLeafOptions();
+        List<AiErrorTypeOptionDTO> errorTypeOptions = dictionaryCacheService.getEnabledLeafErrorTypes();
         if (errorTypeOptions.isEmpty()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "没有可用的二级错误类型");
         }
@@ -1039,7 +1043,7 @@ public class QuestionServiceImpl implements QuestionService {
     private List<Tag> loadCandidateTags(String tagType, List<String> requestedCodes) {
         List<String> codes = normalizeCodes(requestedCodes);
         if (codes.isEmpty()) {
-            return tagMapper.selectEnabledTagsByType(tagType);
+            return dictionaryCacheService.getEnabledTagsByType(tagType);
         }
 
         List<Tag> tags = tagMapper.selectEnabledTagsByCodes(tagType, codes);

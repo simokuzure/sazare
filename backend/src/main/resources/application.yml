@@ -16,6 +16,9 @@ spring:
       host: localhost
       port: 6379
 
+dictionary-cache:
+  ttl: 24h
+
 ai:
   provider: ${AI_PROVIDER:google}
   request-timeout: ${AI_REQUEST_TIMEOUT:180s}

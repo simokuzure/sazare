@@ -27,6 +27,7 @@ import com.jt.learning.mapper.TagMapper;
 import com.jt.learning.mapper.UserAnswerMapper;
 import com.jt.learning.mapper.UserErrorTypeMapper;
 import com.jt.learning.mapper.UserMapper;
+import com.jt.learning.service.DictionaryCacheService;
 import com.jt.learning.service.ReviewService;
 import com.jt.learning.service.ai.AiReviewQuestionClient;
 import com.jt.learning.service.ai.AiReviewScoringClient;
@@ -74,6 +75,7 @@ class ReviewServiceImplTest {
     private UserMapper userMapper;
     private UserErrorTypeMapper userErrorTypeMapper;
     private ErrorTypeMapper errorTypeMapper;
+    private DictionaryCacheService dictionaryCacheService;
     private QuestionMapper questionMapper;
     private QuestionAnswerMapper answerMapper;
     private QuestionTagMapper questionTagMapper;
@@ -92,6 +94,7 @@ class ReviewServiceImplTest {
         userMapper = mock(UserMapper.class);
         userErrorTypeMapper = mock(UserErrorTypeMapper.class);
         errorTypeMapper = mock(ErrorTypeMapper.class);
+        dictionaryCacheService = mock(DictionaryCacheService.class);
         questionMapper = mock(QuestionMapper.class);
         answerMapper = mock(QuestionAnswerMapper.class);
         questionTagMapper = mock(QuestionTagMapper.class);
@@ -104,7 +107,7 @@ class ReviewServiceImplTest {
         AiErrorAnalysisValidator errorValidator = new AiErrorAnalysisValidator();
         service = new ReviewServiceImpl(
                 cardMapper, cycleMapper, cycleQuestionMapper, attemptMapper, userMapper,
-                userErrorTypeMapper, errorTypeMapper, questionMapper, answerMapper, questionTagMapper,
+                userErrorTypeMapper, errorTypeMapper, dictionaryCacheService, questionMapper, answerMapper, questionTagMapper,
                 tagMapper, userAnswerMapper, new Sm2Scheduler(),
                 new AiReviewScoringPromptBuilder(objectMapper),
                 new AiReviewQuestionPromptBuilder(objectMapper),
@@ -528,8 +531,8 @@ class ReviewServiceImplTest {
         selectedTag.setCode("DAILY_TRAVEL");
         selectedTag.setName("日常出行");
         selectedTag.setDescription("日常交通出行场景");
-        when(tagMapper.selectEnabledTagsByType("SCENE")).thenReturn(List.of(selectedTag));
-        when(tagMapper.selectEnabledTagsByType("FUNCTION")).thenReturn(List.of());
+        when(dictionaryCacheService.getEnabledTagsByType("SCENE")).thenReturn(List.of(selectedTag));
+        when(dictionaryCacheService.getEnabledTagsByType("FUNCTION")).thenReturn(List.of());
         when(questionClient.generateQuestion(any(), any(), any())).thenReturn("""
                 {"question":{"sourceText":"我准时赶上了公交车。","contextText":"日常出行","grammarPoint":"に間に合う","tagCodes":["DAILY_TRAVEL"],"answers":[{"answerText":"バスに間に合いました。","answerType":"STANDARD","primaryAnswer":true,"sortOrder":0}]}}
                 """);
@@ -569,7 +572,7 @@ class ReviewServiceImplTest {
         when(answerMapper.selectActiveAnswersByQuestionId(100L)).thenReturn(List.of(answer()));
         when(userErrorTypeMapper.selectActiveByIdAndUserId(2L, 1L)).thenReturn(userErrorType());
         when(errorTypeMapper.selectEnabledLeafById(3L)).thenReturn(errorType());
-        when(errorTypeMapper.selectEnabledLeafOptions()).thenReturn(List.of(errorTypeOption()));
+        when(dictionaryCacheService.getEnabledLeafErrorTypes()).thenReturn(List.of(errorTypeOption()));
         when(userAnswerMapper.insertUserAnswer(any())).thenAnswer(invocation -> {
             UserAnswer userAnswer = invocation.getArgument(0);
             userAnswer.setId(40L);

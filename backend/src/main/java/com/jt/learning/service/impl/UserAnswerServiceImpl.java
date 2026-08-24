@@ -30,6 +30,7 @@ import com.jt.learning.mapper.UserAnswerMapper;
 import com.jt.learning.mapper.UserErrorTypeMapper;
 import com.jt.learning.mapper.UserMapper;
 import com.jt.learning.service.UserAnswerService;
+import com.jt.learning.service.DictionaryCacheService;
 import com.jt.learning.service.ReviewService;
 import com.jt.learning.service.ai.AiQuestionPrompt;
 import com.jt.learning.service.ai.AiReviewQuestionClient;
@@ -80,6 +81,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     private final UserMapper userMapper;
     private final UserAnswerMapper userAnswerMapper;
     private final TagMapper tagMapper;
+    private final DictionaryCacheService dictionaryCacheService;
     private final QuestionAnswerMapper questionAnswerMapper;
     private final QuestionMapper questionMapper;
     private final QuestionTagMapper questionTagMapper;
@@ -95,6 +97,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             UserMapper userMapper,
             UserAnswerMapper userAnswerMapper,
             TagMapper tagMapper,
+            DictionaryCacheService dictionaryCacheService,
             QuestionAnswerMapper questionAnswerMapper,
             QuestionMapper questionMapper,
             QuestionTagMapper questionTagMapper,
@@ -109,6 +112,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         this.userMapper = userMapper;
         this.userAnswerMapper = userAnswerMapper;
         this.tagMapper = tagMapper;
+        this.dictionaryCacheService = dictionaryCacheService;
         this.questionAnswerMapper = questionAnswerMapper;
         this.questionMapper = questionMapper;
         this.questionTagMapper = questionTagMapper;
@@ -663,8 +667,8 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     }
 
     private void classifyAndSaveArticleReviewTags(Question reviewQuestion) {
-        List<Tag> sceneTags = tagMapper.selectEnabledTagsByType(TAG_TYPE_SCENE);
-        List<Tag> functionTags = tagMapper.selectEnabledTagsByType(TAG_TYPE_FUNCTION);
+        List<Tag> sceneTags = dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_SCENE);
+        List<Tag> functionTags = dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_FUNCTION);
         Map<String, Tag> allowedTagsByCode = new LinkedHashMap<>();
         sceneTags.forEach(tag -> allowedTagsByCode.put(tag.getCode(), tag));
         functionTags.forEach(tag -> allowedTagsByCode.put(tag.getCode(), tag));
