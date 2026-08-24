@@ -21,7 +21,6 @@ import java.util.Map;
 public class GoogleAiQuestionClient implements AiQuestionClient {
 
     private static final String CONTENT_TYPE = "application/json";
-    private static final int ERROR_DETAIL_LIMIT = 500;
 
     private final AiProperties.Google properties;
     private final ObjectMapper objectMapper;
@@ -68,7 +67,12 @@ public class GoogleAiQuestionClient implements AiQuestionClient {
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
-                    buildErrorMessage(response.statusCode(), response.body())
+                    GoogleAiErrorMessageBuilder.build(
+                            objectMapper,
+                            "Google AI 服务返回异常",
+                            response.statusCode(),
+                            response.body()
+                    )
             );
         }
         return extractText(response.body());
@@ -138,7 +142,7 @@ public class GoogleAiQuestionClient implements AiQuestionClient {
         try {
             return objectMapper.writeValueAsString(body);
         } catch (JacksonException exception) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 请求体序列化失败");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 请求体序列化失败", exception);
         }
     }
 
@@ -169,49 +173,8 @@ public class GoogleAiQuestionClient implements AiQuestionClient {
             }
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 响应缺少文本内容");
         } catch (JacksonException exception) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 响应解析失败");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 响应解析失败", exception);
         }
-    }
-
-    private String buildErrorMessage(int statusCode, String responseBody) {
-        String prefix = "Google AI 服务返回异常: HTTP " + statusCode;
-        if (responseBody == null || responseBody.isBlank()) {
-            return prefix;
-        }
-
-        try {
-            JsonNode root = objectMapper.readTree(responseBody);
-            JsonNode error = getChild(root, "error");
-            if (error == null) {
-                return prefix;
-            }
-            String errorStatus = textualValue(error, "status");
-            String errorDetail = textualValue(error, "message");
-            String details = String.join(" - ", List.of(errorStatus, errorDetail).stream()
-                    .filter(value -> !value.isBlank())
-                    .toList());
-            if (details.isBlank()) {
-                return prefix;
-            }
-            return prefix + " " + truncate(details);
-        } catch (JacksonException exception) {
-            return prefix;
-        }
-    }
-
-    private String textualValue(JsonNode node, String fieldName) {
-        JsonNode value = getChild(node, fieldName);
-        if (value == null || !value.isTextual()) {
-            return "";
-        }
-        return value.asString().replaceAll("\\s+", " ").trim();
-    }
-
-    private String truncate(String value) {
-        if (value.length() <= ERROR_DETAIL_LIMIT) {
-            return value;
-        }
-        return value.substring(0, ERROR_DETAIL_LIMIT);
     }
 
     private JsonNode getChild(JsonNode node, String fieldName) {

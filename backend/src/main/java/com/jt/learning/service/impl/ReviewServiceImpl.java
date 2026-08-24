@@ -58,6 +58,8 @@ import com.jt.learning.vo.ReviewCycleProgressVO;
 import com.jt.learning.vo.ReviewDerivedQuestionGenerationVO;
 import com.jt.learning.vo.ReviewQuestionVO;
 import com.jt.learning.vo.TagVO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -75,6 +77,7 @@ import java.util.stream.Collectors;
 @Service
 public class ReviewServiceImpl implements ReviewService {
 
+    private static final Logger log = LoggerFactory.getLogger(ReviewServiceImpl.class);
     private static final String LOCAL_DEFAULT_USER_CODE = "LOCAL_DEFAULT";
     private static final String CARD_ACTIVE = "ACTIVE";
     private static final String CARD_MASTERED = "MASTERED";
@@ -298,6 +301,12 @@ public class ReviewServiceImpl implements ReviewService {
                 generationStatus = "SUCCEEDED";
                 progress = loadProgress(cycle);
             } catch (BusinessException exception) {
+                log.error(
+                        "复习衍生题生成失败: cardId={}, cycleId={}",
+                        card.getId(),
+                        cycle.getId(),
+                        exception
+                );
                 generationStatus = "FAILED";
             }
         }

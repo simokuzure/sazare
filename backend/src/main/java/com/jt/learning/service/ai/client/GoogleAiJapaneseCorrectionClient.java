@@ -43,7 +43,15 @@ public class GoogleAiJapaneseCorrectionClient implements AiJapaneseCorrectionCli
                 buildRequestBody(prompt)
         );
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 日语纠错服务返回异常");
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    GoogleAiErrorMessageBuilder.build(
+                            objectMapper,
+                            "Google AI 日语纠错服务返回异常",
+                            response.statusCode(),
+                            response.body()
+                    )
+            );
         }
         return extractText(response.body());
     }
@@ -82,7 +90,7 @@ public class GoogleAiJapaneseCorrectionClient implements AiJapaneseCorrectionCli
         try {
             return objectMapper.writeValueAsString(body);
         } catch (JacksonException exception) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 日语纠错请求体序列化失败");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 日语纠错请求体序列化失败", exception);
         }
     }
 
@@ -111,7 +119,7 @@ public class GoogleAiJapaneseCorrectionClient implements AiJapaneseCorrectionCli
             }
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 日语纠错响应缺少文本内容");
         } catch (JacksonException exception) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 日语纠错响应解析失败");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 日语纠错响应解析失败", exception);
         }
     }
 

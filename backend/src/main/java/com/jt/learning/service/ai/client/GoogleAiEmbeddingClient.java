@@ -46,7 +46,15 @@ public class GoogleAiEmbeddingClient implements AiEmbeddingClient {
                 buildRequestBody(content)
         );
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 嵌入服务返回异常");
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    GoogleAiErrorMessageBuilder.build(
+                            objectMapper,
+                            "Google AI 嵌入服务返回异常",
+                            response.statusCode(),
+                            response.body()
+                    )
+            );
         }
         return extractEmbedding(response.body());
     }
@@ -86,7 +94,7 @@ public class GoogleAiEmbeddingClient implements AiEmbeddingClient {
         try {
             return objectMapper.writeValueAsString(body);
         } catch (JacksonException exception) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 嵌入请求体序列化失败");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 嵌入请求体序列化失败", exception);
         }
     }
 
@@ -115,7 +123,7 @@ public class GoogleAiEmbeddingClient implements AiEmbeddingClient {
             }
             return embedding;
         } catch (JacksonException exception) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 嵌入响应解析失败");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 嵌入响应解析失败", exception);
         }
     }
 

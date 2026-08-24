@@ -37,7 +37,10 @@ import com.jt.learning.service.ai.validation.ReviewAiResponseValidator;
 import com.jt.learning.service.review.Sm2Scheduler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionStatus;
@@ -392,7 +395,8 @@ class ReviewServiceImplTest {
     }
 
     @Test
-    void generationFailureAfterPassShouldKeepAttemptAndReturnFailedStatus() {
+    @ExtendWith(OutputCaptureExtension.class)
+    void generationFailureAfterPassShouldKeepAttemptAndReturnFailedStatus(CapturedOutput output) {
         stubReadyAttempt("RETRY", "ORIGINAL", 0, 4);
         when(scoringClient.scoreAnswer(any())).thenReturn("""
                 {"review":{"quality":4,"targetErrorResolved":true,"feedback":"目标错误已解决。","scores":{"grammarVocabularyScore":88,"naturalFluencyScore":86,"scenarioAdaptationScore":90,"informationCompletenessScore":92},"errorAnalysis":[]}}
@@ -408,6 +412,11 @@ class ReviewServiceImplTest {
         var result = service.submitReviewAttempt(1L, new ReviewAttemptRequest(30L, 0, "電車に間に合いました"));
 
         assertThat(result.derivedGenerationStatus()).isEqualTo("FAILED");
+        assertThat(output.getOut())
+                .contains("复习衍生题生成失败")
+                .contains("cardId=1")
+                .contains("cycleId=20")
+                .contains("生成失败");
         verify(attemptMapper).insertAttempt(any());
         verify(userAnswerMapper).updateReviewed(
                 eq(40L), eq(88), eq(86), eq(90), eq(92), eq(new BigDecimal("89.00")),

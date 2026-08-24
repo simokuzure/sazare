@@ -55,7 +55,15 @@ public class GoogleAiAnswerScoringClient implements AiAnswerScoringClient {
                 buildRequestBody(prompt)
         );
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 服务返回异常");
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    GoogleAiErrorMessageBuilder.build(
+                            objectMapper,
+                            "Google AI 服务返回异常",
+                            response.statusCode(),
+                            response.body()
+                    )
+            );
         }
         return extractText(response.body());
     }
@@ -106,7 +114,7 @@ public class GoogleAiAnswerScoringClient implements AiAnswerScoringClient {
         try {
             return objectMapper.writeValueAsString(body);
         } catch (JacksonException exception) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 请求体序列化失败");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 请求体序列化失败", exception);
         }
     }
 
@@ -137,7 +145,7 @@ public class GoogleAiAnswerScoringClient implements AiAnswerScoringClient {
             }
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 响应缺少文本内容");
         } catch (JacksonException exception) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 响应解析失败");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 响应解析失败", exception);
         }
     }
 
