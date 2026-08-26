@@ -1,5 +1,6 @@
 package com.jt.learning.service.ai.prompt;
 
+import com.jt.learning.common.TranslationDirection;
 import com.jt.learning.dto.AiAnswerScoringRequest;
 import com.jt.learning.dto.AiErrorTypeOptionDTO;
 import com.jt.learning.dto.AiQuestionTagOptionDTO;
@@ -65,14 +66,17 @@ public class AiAnswerScoringPromptBuilder {
             List<AiErrorTypeOptionDTO> errorTypeOptions,
             AiAnswerScoringRequest request
     ) {
-        if (ARTICLE_QUESTION_TYPE.equals(question.getQuestionType())) {
+        TranslationDirection direction = TranslationDirection.fromQuestionType(question.getQuestionType());
+        if (direction.isArticle(question.getQuestionType())) {
             return new AiQuestionPrompt(
-                    ARTICLE_SYSTEM_PROMPT,
-                    buildArticleUserPrompt(question, standardAnswers, tagOptions, errorTypeOptions, request)
+                    direction.adaptPrompt(ARTICLE_SYSTEM_PROMPT),
+                    direction.adaptPrompt(buildArticleUserPrompt(
+                            question, standardAnswers, tagOptions, errorTypeOptions, request))
             );
         }
-        return new AiQuestionPrompt(SYSTEM_PROMPT,
-                buildUserPrompt(question, standardAnswers, tagOptions, errorTypeOptions, request));
+        return new AiQuestionPrompt(direction.adaptPrompt(SYSTEM_PROMPT),
+                direction.adaptPrompt(buildUserPrompt(
+                        question, standardAnswers, tagOptions, errorTypeOptions, request)));
     }
 
     private String buildArticleUserPrompt(

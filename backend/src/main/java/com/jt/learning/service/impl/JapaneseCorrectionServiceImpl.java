@@ -1,5 +1,6 @@
 package com.jt.learning.service.impl;
 
+import com.jt.learning.common.TranslationDirection;
 import com.jt.learning.dto.AiAnswerRecommendedExpressionDTO;
 import com.jt.learning.dto.AiErrorTypeOptionDTO;
 import com.jt.learning.dto.AiJapaneseCorrectionErrorDTO;
@@ -81,8 +82,14 @@ public class JapaneseCorrectionServiceImpl implements JapaneseCorrectionService 
             throw new BusinessException(ErrorCode.PARAM_ERROR, "japaneseText 长度不能超过 5000");
         }
 
+        TranslationDirection direction = TranslationDirection.fromLearningMode(request.learningMode());
         List<AiErrorTypeOptionDTO> errorTypeOptions = dictionaryCacheService.getEnabledLeafErrorTypes().stream()
                 .filter(option -> !UNSUPPORTED_ERROR_CODES.contains(option.code()))
+                .map(option -> new AiErrorTypeOptionDTO(
+                        option.id(), option.code(),
+                        direction.displayText(option.name(), option.nameEn()),
+                        direction.displayText(option.description(), option.descriptionEn()),
+                        option.parentCode(), direction.displayText(option.parentName(), option.parentNameEn())))
                 .toList();
         if (errorTypeOptions.isEmpty()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "没有适用于日语纠错的二级错误类型");
@@ -95,7 +102,7 @@ public class JapaneseCorrectionServiceImpl implements JapaneseCorrectionService 
                         LinkedHashMap::new
                 ));
 
-        JapaneseCorrectionRequest normalizedRequest = new JapaneseCorrectionRequest(originalText);
+        JapaneseCorrectionRequest normalizedRequest = new JapaneseCorrectionRequest(originalText, request.learningMode());
         AiQuestionPrompt prompt = promptBuilder.build(errorTypeOptions, normalizedRequest);
         AiJapaneseCorrectionReviewDTO review = responseValidator.validate(
                 correctionClient.correct(prompt, normalizedRequest),
@@ -103,13 +110,15 @@ public class JapaneseCorrectionServiceImpl implements JapaneseCorrectionService 
                 errorTypesByCode
         );
         BigDecimal totalScore = calculateTotalScore(review);
-        UserAnswer userAnswer = saveReviewedCorrection(user.getId(), originalText, review, totalScore);
+        UserAnswer userAnswer = saveReviewedCorrection(
+                user.getId(), originalText, normalizedRequest.learningMode(), review, totalScore);
         return toVO(userAnswer, review, errorTypesByCode);
     }
 
     private UserAnswer saveReviewedCorrection(
             Long userId,
             String originalText,
+            String learningMode,
             AiJapaneseCorrectionReviewDTO review,
             BigDecimal totalScore
     ) {
@@ -117,6 +126,7 @@ public class JapaneseCorrectionServiceImpl implements JapaneseCorrectionService 
         UserAnswer userAnswer = new UserAnswer();
         userAnswer.setUserId(userId);
         userAnswer.setQuestionId(null);
+        userAnswer.setLearningMode(learningMode);
         userAnswer.setAnswerText(originalText);
         userAnswer.setAnswerStatus("REVIEWED");
         userAnswer.setGrammarVocabularyScore(review.scores().grammarVocabularyScore());

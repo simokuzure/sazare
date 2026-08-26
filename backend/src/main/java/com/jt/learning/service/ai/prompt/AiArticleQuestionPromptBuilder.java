@@ -1,5 +1,7 @@
 package com.jt.learning.service.ai.prompt;
 
+import com.jt.learning.common.ArticleLengthTier;
+import com.jt.learning.common.TranslationDirection;
 import com.jt.learning.dto.AiArticleGenerationRequest;
 import com.jt.learning.dto.AiArticleRetryContext;
 import com.jt.learning.dto.AiQuestionTagOptionDTO;
@@ -17,7 +19,17 @@ public class AiArticleQuestionPromptBuilder {
             直接原创一篇自然中文文章，并为每个中文句子提供忠实、自然的日语参考译文。
             不得复现、引用或声称改写真实文章、作者或出处。
             只输出合法 JSON 对象，不要输出 Markdown、代码块或额外说明。
-            中文文章去除空白后必须为 150 到 300 个 Unicode 字符。
+            源文章长度必须严格符合用户条件中的 articleLength；输出前自行计数并改写到指定范围，不得自行扩大或缩小。
+            JLPT 与 difficulty 只决定怎样表达，不决定写什么：不得据此限制、替换、弱化或回避主题、体裁、情节、人物、冲突、观点或抽象议题。
+            topic、genre、blueprint 和 extraRequirements 决定文章内容，必须完整保留；即使 JLPT 较低，也应使用较简单的词汇、语法和句式表达同样的内容。
+            源文章的句法负担和 japaneseReference 的日语词汇、语法、句式都必须符合 languageRequirements。
+            JLPT 是语言能力上限：
+            - N5 只使用 N5 范围内的日语词汇和语法，减少长修饰与复杂从句。
+            - N4 可以使用 N5 到 N4 范围内更丰富的词汇、语法和句式。
+            - N3 可以使用 N5 到 N3 范围内更丰富的词汇、语法和句式。
+            - N2 可以使用 N5 到 N2 范围内更丰富的词汇、语法和句式。
+            - N1 可以使用 N5 到 N1 范围内的词汇、语法和句式。
+            difficulty 只细分所选 JLPT 内的语言形式，不得突破 JLPT 上限：1 使用高频词、短句和直接表达；2 使用少量修饰和简单从句；3 使用该等级常规表达；4 使用更多复句、同级较低频词和篇章连接；5 接近该等级上限。
             sentences 按中文句子拆分；每项只能包含一个不换行的完整句子，索引从 0 连续递增。
             chineseText 必须包含中文，不得包含平假名或片假名，并以。？！之一结束。
             japaneseReference 必须包含平假名或片假名，不得换行，并忠实对应 chineseText。
@@ -64,13 +76,27 @@ public class AiArticleQuestionPromptBuilder {
             String seed,
             AiArticleRetryContext retryContext
     ) {
+        TranslationDirection direction = TranslationDirection.fromLearningMode(request.learningMode());
+        ArticleLengthTier lengthTier = ArticleLengthTier.from(request.lengthTier());
         Map<String, String> semanticRoleDefinitions = ArticleGenreRoleRegistry.rolesFor(genreTag.code());
         Map<String, String> responseRoleExample = new LinkedHashMap<>();
         semanticRoleDefinitions.forEach((key, description) -> responseRoleExample.put(key, description + "短语"));
 
+        Map<String, Object> articleLength = new LinkedHashMap<>();
+        articleLength.put("tier", lengthTier.name());
+        articleLength.put("minimum", lengthTier.minimum(direction));
+        articleLength.put("maximum", lengthTier.maximum(direction));
+        articleLength.put("unit", direction.articleLengthUnit());
+
         Map<String, Object> conditions = new LinkedHashMap<>();
         conditions.put("level", request.level());
         conditions.put("difficulty", request.difficulty());
+        conditions.put("articleLength", articleLength);
+        conditions.put("languageRequirements", Map.of(
+                "jlpt", jlptRequirement(request.level()),
+                "difficulty", difficultyRequirement(request.difficulty()),
+                "contentRule", "保持主题、体裁、情节、人物、冲突、观点和抽象程度不变，只调整语言表达难度"
+        ));
         conditions.put("genre", genreTag);
         conditions.put("topic", request.topic() == null ? "不限" : request.topic());
         conditions.put("extraRequirements", request.extraRequirements() == null ? "无" : request.extraRequirements());
@@ -126,7 +152,29 @@ public class AiArticleQuestionPromptBuilder {
                 request.level(),
                 request.difficulty()
         );
-        return new AiQuestionPrompt(SYSTEM_PROMPT, userPrompt);
+        return new AiQuestionPrompt(direction.adaptPrompt(SYSTEM_PROMPT), direction.adaptPrompt(userPrompt));
+    }
+
+    private String jlptRequirement(String level) {
+        return switch (level) {
+            case "N5" -> "只使用 N5 范围内的日语词汇和语法，源文使用短而清楚的句式，减少长修饰与复杂从句";
+            case "N4" -> "使用 N5 到 N4 范围内的日语词汇和语法，允许较简单的修饰、原因、条件和顺序表达";
+            case "N3" -> "使用 N5 到 N3 范围内的日语词汇和语法，允许中等长度复句和常用篇章连接";
+            case "N2" -> "使用 N5 到 N2 范围内的日语词汇和语法，允许较复杂复句和书面表达";
+            case "N1" -> "可以使用 N5 到 N1 范围内的日语词汇、语法和句式";
+            default -> throw new IllegalArgumentException("不支持的 JLPT 等级：" + level);
+        };
+    }
+
+    private String difficultyRequirement(Integer difficulty) {
+        return switch (difficulty) {
+            case 1 -> "同级内使用高频词、短句和直接表达，不依赖隐含关系";
+            case 2 -> "同级内允许少量修饰和简单从句";
+            case 3 -> "使用所选 JLPT 等级的常规表达复杂度";
+            case 4 -> "同级内使用更多复句、较低频词和篇章连接，可包含少量隐含关系";
+            case 5 -> "接近所选 JLPT 等级的表达上限，但不得使用明显超纲的词汇或语法";
+            default -> throw new IllegalArgumentException("不支持的难度：" + difficulty);
+        };
     }
 
     private String toJson(Object value) {

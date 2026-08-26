@@ -7,6 +7,7 @@ import java.util.List;
 public record UserAnswerDetailVO(
         Long id,
         Long questionId,
+        String learningMode,
         String questionType,
         String sourceText,
         String contextText,

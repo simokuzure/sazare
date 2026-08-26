@@ -1,5 +1,6 @@
 package com.jt.learning.service.ai.prompt;
 
+import com.jt.learning.common.TranslationDirection;
 import com.jt.learning.dto.AiErrorTypeOptionDTO;
 import com.jt.learning.dto.JapaneseCorrectionRequest;
 import com.jt.learning.service.ai.AiQuestionPrompt;
@@ -85,7 +86,8 @@ public class AiJapaneseCorrectionPromptBuilder {
                 }
                 没有明确错误时 errorAnalysis 必须返回 []；没有推荐表达时 recommendedExpressions 必须返回 []。
                 """.formatted(toJson(errorTypeOptions), request.japaneseText().trim());
-        return new AiQuestionPrompt(SYSTEM_PROMPT, userPrompt);
+        TranslationDirection direction = TranslationDirection.fromLearningMode(request.learningMode());
+        return new AiQuestionPrompt(direction.adaptPrompt(SYSTEM_PROMPT), direction.adaptPrompt(userPrompt));
     }
 
     private String toJson(Object value) {

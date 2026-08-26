@@ -20,6 +20,7 @@ public class MockAiJapaneseCorrectionClient implements AiJapaneseCorrectionClien
 
     @Override
     public String correct(AiQuestionPrompt prompt, JapaneseCorrectionRequest request) {
+        boolean english = "EN_TO_JA".equals(request.learningMode());
         String original = request.japaneseText().trim();
         String corrected = "これは自然な日本語です。";
         Map<String, Object> review = new LinkedHashMap<>();
@@ -31,29 +32,35 @@ public class MockAiJapaneseCorrectionClient implements AiJapaneseCorrectionClien
         ));
         review.put("totalScore", 83.50);
         review.put("correctedText", corrected);
-        review.put("overallComment", "基本意思清楚，修订后表达更自然。" );
+        review.put("overallComment", english
+                ? "The meaning is clear, and the revised version sounds more natural."
+                : "基本意思清楚，修订后表达更自然。" );
         review.put("comments", Map.of(
-                "grammarVocabularyComment", "语法与词汇基本正确。",
-                "naturalFluencyComment", "个别表达可以更符合日语习惯。",
-                "styleConsistencyComment", "语体保持一致。",
-                "writingCompletenessComment", "表记和输入内容完整。"
+                "grammarVocabularyComment", english ? "The grammar and vocabulary are generally correct." : "语法与词汇基本正确。",
+                "naturalFluencyComment", english ? "Some phrasing could be more idiomatic in Japanese." : "个别表达可以更符合日语习惯。",
+                "styleConsistencyComment", english ? "The register is consistent." : "语体保持一致。",
+                "writingCompletenessComment", english ? "The writing and content are complete." : "表记和输入内容完整。"
         ));
         review.put("errorAnalysis", List.of(Map.of(
                 "errorTypeCode", "UNNATURAL_EXPRESSION",
                 "original", original,
-                "issue", "表达可以更自然。",
+                "issue", english ? "The phrasing could be more natural." : "表达可以更自然。",
                 "suggestion", corrected,
-                "reviewSourceText", "这是自然的日语。",
+                "reviewSourceText", english ? "This is natural Japanese." : "这是自然的日语。",
                 "severity", "MEDIUM",
-                "suggestedUserErrorTypeName", "使用不自然的整体表达",
-                "suggestedUserErrorTypeDescription", "句意可理解，但整体表达不符合常见日语习惯时，改用自然的固定表达。"
+                "suggestedUserErrorTypeName", english ? "Unnatural overall phrasing" : "使用不自然的整体表达",
+                "suggestedUserErrorTypeDescription", english
+                        ? "When the meaning is clear but the sentence is not idiomatic, use a natural established expression."
+                        : "句意可理解，但整体表达不符合常见日语习惯时，改用自然的固定表达。"
         )));
-        review.put("revisionSuggestions", List.of("检查搭配和句尾语体是否自然。"));
+        review.put("revisionSuggestions", List.of(english
+                ? "Check whether the collocations and sentence-ending register sound natural."
+                : "检查搭配和句尾语体是否自然。"));
         review.put("recommendedExpressions", List.of(Map.of(
                 "expression", corrected,
-                "usage", "表达某段日语自然无误时。",
+                "usage", english ? "Use when confirming that a Japanese passage sounds natural." : "表达某段日语自然无误时。",
                 "formality", "NEUTRAL",
-                "note", "可根据上下文调整礼貌程度。"
+                "note", english ? "Adjust the politeness level to the context." : "可根据上下文调整礼貌程度。"
         )));
 
         try {

@@ -6,6 +6,7 @@ import type { QuestionType } from './question'
 export type AnswerStatus = '' | 'SUBMITTED' | 'REVIEWED' | 'FAILED'
 
 export type UserAnswerFilterState = {
+  learningMode?: 'ZH_TO_JA' | 'EN_TO_JA'
   answerStatus: AnswerStatus
   questionType: '' | QuestionType | 'JAPANESE_CORRECTION'
   questionId: string
@@ -19,6 +20,7 @@ export type UserAnswerFilterState = {
 export type UserAnswerRecord = {
   id: number
   questionId: number | null
+  learningMode: 'ZH_TO_JA' | 'EN_TO_JA'
   questionType: QuestionType | null
   sourceText: string | null
   level: string | null

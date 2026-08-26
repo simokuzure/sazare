@@ -1,6 +1,10 @@
 import type { Tag } from './tag'
 
-export type QuestionType = 'TRANSLATION_ZH_TO_JA' | 'TRANSLATION_ZH_TO_JA_ARTICLE'
+export type QuestionType =
+  | 'TRANSLATION_ZH_TO_JA'
+  | 'TRANSLATION_ZH_TO_JA_ARTICLE'
+  | 'TRANSLATION_EN_TO_JA'
+  | 'TRANSLATION_EN_TO_JA_ARTICLE'
 
 export type QuestionAnswer = {
   id: number
@@ -64,6 +68,7 @@ export type RandomQuestionFilter = {
 }
 
 export type AiQuestionGenerationPayload = {
+  learningMode?: 'ZH_TO_JA' | 'EN_TO_JA'
   questionCount?: number
   level?: string
   difficulty?: number
@@ -73,9 +78,13 @@ export type AiQuestionGenerationPayload = {
   extraRequirements?: string
 }
 
+export type AiArticleLengthTier = 'SHORT' | 'MEDIUM' | 'LONG'
+
 export type AiArticleGenerationPayload = {
+  learningMode?: 'ZH_TO_JA' | 'EN_TO_JA'
   level?: string
   difficulty?: number
+  lengthTier?: AiArticleLengthTier
   genreTagCode?: string
   topic?: string
   extraRequirements?: string

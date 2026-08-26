@@ -7,6 +7,8 @@ public record TagVO(
         String code,
         String name,
         String description,
+        String nameEn,
+        String descriptionEn,
         Integer sortOrder
 ) {
 }

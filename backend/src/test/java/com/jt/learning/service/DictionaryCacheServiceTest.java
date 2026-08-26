@@ -25,7 +25,7 @@ import static org.mockito.Mockito.doThrow;
 
 class DictionaryCacheServiceTest {
 
-    private static final String ERROR_TYPE_CACHE_KEY = "dictionary:error-types:enabled-leaf:v1";
+    private static final String ERROR_TYPE_CACHE_KEY = "dictionary:error-types:enabled-leaf:v2";
     private static final Duration CACHE_TTL = Duration.ofHours(24);
 
     private StringRedisTemplate stringRedisTemplate;
@@ -71,7 +71,7 @@ class DictionaryCacheServiceTest {
 
         assertThat(tags).isEmpty();
         verify(valueOperations).set(
-                eq("dictionary:tags:SCENE:enabled:v1"), eq("[]"), eq(CACHE_TTL));
+                eq("dictionary:tags:SCENE:enabled:v2"), eq("[]"), eq(CACHE_TTL));
     }
 
     @Test
@@ -81,18 +81,23 @@ class DictionaryCacheServiceTest {
         tag.setTagType("FUNCTION");
         tag.setCode("FUNCTION_REQUEST");
         tag.setName("请求");
+        tag.setDescription("请求功能标签");
+        tag.setNameEn("Request");
+        tag.setDescriptionEn("Request tag");
         when(tagMapper.selectEnabledTagsByType("FUNCTION")).thenReturn(List.of(tag));
 
         dictionaryCacheService.getEnabledTagsByType("FUNCTION");
 
         ArgumentCaptor<String> valueCaptor = ArgumentCaptor.forClass(String.class);
         verify(valueOperations).set(
-                eq("dictionary:tags:FUNCTION:enabled:v1"), valueCaptor.capture(), eq(CACHE_TTL));
-        when(valueOperations.get("dictionary:tags:FUNCTION:enabled:v1")).thenReturn(valueCaptor.getValue());
+                eq("dictionary:tags:FUNCTION:enabled:v2"), valueCaptor.capture(), eq(CACHE_TTL));
+        when(valueOperations.get("dictionary:tags:FUNCTION:enabled:v2")).thenReturn(valueCaptor.getValue());
 
         List<Tag> cached = dictionaryCacheService.getEnabledTagsByType("FUNCTION");
 
         assertThat(cached).extracting(Tag::getCode).containsExactly("FUNCTION_REQUEST");
+        assertThat(cached).extracting(Tag::getNameEn).containsExactly("Request");
+        assertThat(cached).extracting(Tag::getDescriptionEn).containsExactly("Request tag");
         verify(tagMapper, times(1)).selectEnabledTagsByType("FUNCTION");
     }
 

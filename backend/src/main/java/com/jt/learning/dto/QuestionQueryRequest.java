@@ -1,5 +1,7 @@
 package com.jt.learning.dto;
 
+import com.jt.learning.common.TranslationDirection;
+
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
@@ -8,8 +10,8 @@ import java.util.List;
 
 public record QuestionQueryRequest(
         @Pattern(
-                regexp = "TRANSLATION_ZH_TO_JA|TRANSLATION_ZH_TO_JA_ARTICLE",
-                message = "questionType 只能是 TRANSLATION_ZH_TO_JA 或 TRANSLATION_ZH_TO_JA_ARTICLE"
+                regexp = TranslationDirection.QUESTION_TYPE_PATTERN,
+                message = "questionType 不合法"
         )
         String questionType,
 

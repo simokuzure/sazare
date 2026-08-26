@@ -29,7 +29,20 @@ class LearningStatisticsMapperSqlTest {
     void periodReviewSqlShouldExcludePracticeErrorEvents() throws Exception {
         BoundSql boundSql = getBoundSql("selectPeriodReviewSummary");
 
-        assertThat(boundSql.getSql()).contains("attempt_source = 'REVIEW'");
+        assertThat(boundSql.getSql())
+                .contains("review_attempt.attempt_source = 'REVIEW'")
+                .contains("review_attempt.created_at >= ?")
+                .contains("review_attempt.created_at < ?");
+    }
+
+    @Test
+    void currentReviewSqlShouldQualifyReviewCardStatusAndDueDate() throws Exception {
+        BoundSql boundSql = getBoundSql("selectCurrentReviewSummary");
+
+        assertThat(boundSql.getSql())
+                .contains("review_card.status = 'ACTIVE'")
+                .contains("review_card.status = 'MASTERED'")
+                .contains("review_card.due_at <= ?");
     }
 
     private BoundSql getBoundSql(String statementId) throws Exception {

@@ -201,6 +201,7 @@ export type ReviewAttemptResult = {
 export type ReviewCardListMode = 'DUE' | 'ACTIVE' | 'MASTERED'
 
 export type ReviewCardFilterState = {
+  learningMode?: 'ZH_TO_JA' | 'EN_TO_JA'
   mode: ReviewCardListMode
   page: number
   size: number

@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 public record UserAnswerListItemVO(
         Long id,
         Long questionId,
+        String learningMode,
         String questionType,
         String sourceText,
         String level,

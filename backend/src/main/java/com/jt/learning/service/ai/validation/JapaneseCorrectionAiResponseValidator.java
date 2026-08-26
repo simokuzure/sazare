@@ -176,7 +176,6 @@ public class JapaneseCorrectionAiResponseValidator {
         String reviewSourceText = error.reviewSourceText().trim();
         return correctedText.contains(suggestion)
                 && reviewSourceText.length() <= 1000
-                && HAN_PATTERN.matcher(reviewSourceText).find()
                 && !JAPANESE_KANA_PATTERN.matcher(reviewSourceText).find();
     }
 

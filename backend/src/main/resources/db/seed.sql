@@ -331,12 +331,55 @@ insert into seed_tags (tag_type, parent_code, code, name, description, sort_orde
 ('FUNCTION', null, 'FUNCTION_GENERAL', '泛用', '功能一级标签', 41000),
 ('FUNCTION', 'FUNCTION_GENERAL', 'FUNCTION_OTHER', '其他', '泛用功能标签', 41010);
 
+with localized_seed_tags as (
+    select
+        seed_tags.*,
+        case code
+            when 'PART_TIME_JOB' then 'Part-time Work'
+            when 'PUBLIC_SERVICE' then 'Public Services'
+            when 'DAILY_LIFE_DATE_TIME' then 'Dates & Times'
+            when 'WORK_SUPERVISOR_SUBORDINATE' then 'Managers & Team Members'
+            when 'WORK_TASK_COMMUNICATION' then 'Task Discussion'
+            when 'SHOPPING_RETURN_EXCHANGE' then 'Returns & Exchanges'
+            when 'DINING_TAKEOUT_DELIVERY' then 'Takeout & Delivery'
+            when 'TRANSPORT_STATION_AIRPORT' then 'Stations & Airports'
+            when 'TRAVEL_HOTEL_CHECKIN' then 'Hotel Check-in'
+            when 'HEALTHCARE_PHYSICAL_CONDITION' then 'Physical Condition'
+            when 'PUBLIC_SERVICE_GOVERNMENT_OFFICE' then 'Government Offices'
+            when 'COMMUNICATION_DELIVERY_LOGISTICS' then 'Delivery & Logistics'
+            when 'LEISURE_ANIME_FILM' then 'Anime & Film'
+            when 'RELATIONSHIP_SENIOR_JUNIOR' then 'Senior–Junior Relationships'
+            when 'EMERGENCY_REPORT_POLICE' then 'Calling the Police'
+            when 'GENERAL_NO_SPECIFIC_SCENE' then 'No Specific Context'
+            when 'FUNCTION_STATE_FACT' then 'Stating Facts'
+            when 'FUNCTION_EXPRESS_HABIT' then 'Describing Habits'
+            when 'FUNCTION_INFO_EXCHANGE' then 'Information Exchange'
+            when 'FUNCTION_REASON_LOGIC' then 'Reasons & Logic'
+            when 'FUNCTION_TIME_ACTION' then 'Time & Actions'
+            when 'FUNCTION_ABILITY_OBLIGATION' then 'Ability & Obligation'
+            when 'FUNCTION_CHOICE_DECISION' then 'Choices & Decisions'
+            when 'FUNCTION_RELATION_INTERACTION' then 'Social Interaction'
+            when 'FUNCTION_INFO_SEEKING' then 'Finding Information'
+            else initcap(replace(
+                case
+                    when tag_type = 'SCENE' and parent_code is not null
+                        then regexp_replace(code, '^' || parent_code || '_', '')
+                    else regexp_replace(code, '^(SCENE|FUNCTION)_', '')
+                end,
+                '_',
+                ' '
+            ))
+        end as name_en
+    from seed_tags
+)
 insert into tags (
     tag_type,
     parent_id,
     code,
     name,
     description,
+    name_en,
+    description_en,
     sort_order,
     enabled,
     deleted,
@@ -349,18 +392,25 @@ select
     code,
     name,
     description,
+    name_en,
+    case
+        when tag_type = 'SCENE' then 'Practice situations involving ' || lower(name_en) || '.'
+        else 'Communicative function: ' || name_en || '.'
+    end,
     sort_order,
     true,
     false,
     current_timestamp,
     current_timestamp
-from seed_tags
+from localized_seed_tags
 order by sort_order
 on conflict (code) do update set
     tag_type = excluded.tag_type,
     parent_id = null,
     name = excluded.name,
     description = excluded.description,
+    name_en = excluded.name_en,
+    description_en = excluded.description_en,
     sort_order = excluded.sort_order,
     enabled = true,
     deleted = false,
@@ -384,6 +434,8 @@ insert into tags (
     code,
     name,
     description,
+    name_en,
+    description_en,
     sort_order,
     enabled,
     deleted,
@@ -391,23 +443,25 @@ insert into tags (
     updated_at
 )
 values
-    ('GENRE', null, 'NARRATIVE', '叙事文', '按时间或事件发展叙述经历和故事', 30000, true, false, current_timestamp, current_timestamp),
-    ('GENRE', null, 'EXPOSITORY', '说明文', '说明事物、方法、现象或知识', 30010, true, false, current_timestamp, current_timestamp),
-    ('GENRE', null, 'OPINION', '观点文', '表达观点并说明理由', 30020, true, false, current_timestamp, current_timestamp),
-    ('GENRE', null, 'PRACTICAL', '实用文', '通知、邮件、报告等实际用途文章', 30030, true, false, current_timestamp, current_timestamp),
-    ('GENRE', null, 'ESSAY', '随笔', '围绕见闻、感受和思考自由展开', 30040, true, false, current_timestamp, current_timestamp),
-    ('GENRE', null, 'DIARY', '日记', '记录特定时间的经历、情绪和想法', 30050, true, false, current_timestamp, current_timestamp),
-    ('GENRE', null, 'DIALOGUE', '对话', '以人物对话推动信息交流或冲突', 30060, true, false, current_timestamp, current_timestamp),
-    ('GENRE', null, 'NEWS_REPORT', '新闻报道', '客观报道事件、影响和应对', 30070, true, false, current_timestamp, current_timestamp),
-    ('GENRE', null, 'INTERVIEW', '访谈', '通过问答呈现受访者经历和观点', 30080, true, false, current_timestamp, current_timestamp),
-    ('GENRE', null, 'REVIEW', '评测', '评价产品、作品、服务或体验', 30090, true, false, current_timestamp, current_timestamp),
-    ('GENRE', null, 'GUIDE', '指南', '面向目标人群提供步骤和实用建议', 30100, true, false, current_timestamp, current_timestamp),
-    ('GENRE', null, 'FICTION', '小说', '通过虚构人物、环境和冲突展开内容', 30110, true, false, current_timestamp, current_timestamp)
+    ('GENRE', null, 'NARRATIVE', '叙事文', '按时间或事件发展叙述经历和故事', 'Narrative', 'Narrates experiences or stories in chronological or event order', 30000, true, false, current_timestamp, current_timestamp),
+    ('GENRE', null, 'EXPOSITORY', '说明文', '说明事物、方法、现象或知识', 'Expository', 'Explains objects, methods, phenomena, or knowledge', 30010, true, false, current_timestamp, current_timestamp),
+    ('GENRE', null, 'OPINION', '观点文', '表达观点并说明理由', 'Opinion', 'Presents an opinion and supporting reasons', 30020, true, false, current_timestamp, current_timestamp),
+    ('GENRE', null, 'PRACTICAL', '实用文', '通知、邮件、报告等实际用途文章', 'Practical', 'Practical writing such as notices, emails, and reports', 30030, true, false, current_timestamp, current_timestamp),
+    ('GENRE', null, 'ESSAY', '随笔', '围绕见闻、感受和思考自由展开', 'Essay', 'Develops observations, feelings, and reflections freely', 30040, true, false, current_timestamp, current_timestamp),
+    ('GENRE', null, 'DIARY', '日记', '记录特定时间的经历、情绪和想法', 'Diary', 'Records experiences, emotions, and thoughts', 30050, true, false, current_timestamp, current_timestamp),
+    ('GENRE', null, 'DIALOGUE', '对话', '以人物对话推动信息交流或冲突', 'Dialogue', 'Uses dialogue to exchange information or develop conflict', 30060, true, false, current_timestamp, current_timestamp),
+    ('GENRE', null, 'NEWS_REPORT', '新闻报道', '客观报道事件、影响和应对', 'News report', 'Reports events, effects, and responses objectively', 30070, true, false, current_timestamp, current_timestamp),
+    ('GENRE', null, 'INTERVIEW', '访谈', '通过问答呈现受访者经历和观点', 'Interview', 'Presents experiences and views through questions and answers', 30080, true, false, current_timestamp, current_timestamp),
+    ('GENRE', null, 'REVIEW', '评测', '评价产品、作品、服务或体验', 'Review', 'Evaluates a product, work, service, or experience', 30090, true, false, current_timestamp, current_timestamp),
+    ('GENRE', null, 'GUIDE', '指南', '面向目标人群提供步骤和实用建议', 'Guide', 'Provides practical steps and advice', 30100, true, false, current_timestamp, current_timestamp),
+    ('GENRE', null, 'FICTION', '小说', '通过虚构人物、环境和冲突展开内容', 'Fiction', 'Develops fictional characters, settings, and conflicts', 30110, true, false, current_timestamp, current_timestamp)
 on conflict (code) do update set
     tag_type = excluded.tag_type,
     parent_id = excluded.parent_id,
     name = excluded.name,
     description = excluded.description,
+    name_en = excluded.name_en,
+    description_en = excluded.description_en,
     sort_order = excluded.sort_order,
     enabled = true,
     deleted = false,
@@ -421,6 +475,8 @@ insert into error_types (
     code,
     name,
     description,
+    name_en,
+    description_en,
     sort_order,
     enabled,
     deleted,
@@ -428,12 +484,20 @@ insert into error_types (
     updated_at
 )
 values
-    (null, 1, 'SEMANTIC', '语义与信息完整性', '含义传达和信息保留方面的错误', 1000, true, false, current_timestamp, current_timestamp),
-    (null, 1, 'LEXICAL_EXPRESSION', '词汇与表达自然度', '词义、搭配和表达自然度方面的错误', 2000, true, false, current_timestamp, current_timestamp),
-    (null, 1, 'GRAMMAR_SYNTAX', '语法与句法', '语法结构、助词和动词使用方面的错误', 3000, true, false, current_timestamp, current_timestamp),
-    (null, 1, 'PRAGMATICS_CONTEXT', '语用与场景适配', '敬语、语体和场景适配方面的错误', 4000, true, false, current_timestamp, current_timestamp),
-    (null, 1, 'WRITING_FORMAT', '书写与格式', '假名、汉字和书写格式方面的错误', 5000, true, false, current_timestamp, current_timestamp)
-on conflict (code) do nothing;
+    (null, 1, 'SEMANTIC', '语义与信息完整性', '含义传达和信息保留方面的错误', 'Meaning and completeness', 'Errors in meaning transfer and information retention', 1000, true, false, current_timestamp, current_timestamp),
+    (null, 1, 'LEXICAL_EXPRESSION', '词汇与表达自然度', '词义、搭配和表达自然度方面的错误', 'Vocabulary and natural expression', 'Errors in word meaning, collocation, and natural expression', 2000, true, false, current_timestamp, current_timestamp),
+    (null, 1, 'GRAMMAR_SYNTAX', '语法与句法', '语法结构、助词和动词使用方面的错误', 'Grammar and syntax', 'Errors in grammar, particles, and verb usage', 3000, true, false, current_timestamp, current_timestamp),
+    (null, 1, 'PRAGMATICS_CONTEXT', '语用与场景适配', '敬语、语体和场景适配方面的错误', 'Pragmatics and context', 'Errors in register, politeness, and contextual fit', 4000, true, false, current_timestamp, current_timestamp),
+    (null, 1, 'WRITING_FORMAT', '书写与格式', '假名、汉字和书写格式方面的错误', 'Writing and format', 'Errors in kana, kanji, orthography, and formatting', 5000, true, false, current_timestamp, current_timestamp)
+on conflict (code) do update set
+    name = excluded.name,
+    description = excluded.description,
+    name_en = excluded.name_en,
+    description_en = excluded.description_en,
+    sort_order = excluded.sort_order,
+    enabled = true,
+    deleted = false,
+    updated_at = current_timestamp;
 
 insert into error_types (
     parent_id,
@@ -441,6 +505,8 @@ insert into error_types (
     code,
     name,
     description,
+    name_en,
+    description_en,
     sort_order,
     enabled,
     deleted,
@@ -453,6 +519,8 @@ select
     seed.code,
     seed.name,
     seed.description,
+    seed.name_en,
+    seed.description_en,
     seed.sort_order,
     true,
     false,
@@ -460,43 +528,51 @@ select
     current_timestamp
 from (
     values
-        ('SEMANTIC', 'OMISSION', '漏译', '遗漏原文中的必要信息', 1010),
-        ('SEMANTIC', 'MISTRANSLATION', '误译', '对原文含义的理解或翻译错误', 1020),
-        ('SEMANTIC', 'ADDITION', '过度发挥', '加入原文没有的信息', 1030),
-        ('SEMANTIC', 'SUBJECT_OBJECT', '主语或对象错误', '人物、对象或动作归属错误', 1040),
-        ('SEMANTIC', 'LOGIC_RELATION', '逻辑关系错误', '因果、转折、条件等逻辑关系错误', 1050),
-        ('LEXICAL_EXPRESSION', 'WORD_SENSE', '词义混淆', '未按语境选择正确词义', 2010),
-        ('LEXICAL_EXPRESSION', 'SYNONYM', '近义词误用', '近义词的语义范围或使用条件不符', 2020),
-        ('LEXICAL_EXPRESSION', 'COLLOCATION', '搭配错误', '词语组合不符合日语常用搭配', 2030),
-        ('LEXICAL_EXPRESSION', 'FALSE_FRIEND', '中日同形词误用', '误按中文含义使用日语同形词', 2040),
-        ('LEXICAL_EXPRESSION', 'CHINESE_CALQUE', '中文直译', '直接套用中文表达导致不自然', 2050),
-        ('LEXICAL_EXPRESSION', 'WORD_ORDER', '语序生硬', '语序可理解但不符合自然日语习惯', 2060),
-        ('LEXICAL_EXPRESSION', 'REDUNDANCY', '冗余表达', '存在不必要的重复或累赘表达', 2070),
-        ('LEXICAL_EXPRESSION', 'UNNATURAL_EXPRESSION', '不自然表达', '语义正确但整体表达不地道', 2080),
-        ('GRAMMAR_SYNTAX', 'SENTENCE_PATTERN', '句型错误', '句型选择或结构不正确', 3010),
-        ('GRAMMAR_SYNTAX', 'CONJUGATION', '活用错误', '动词、形容词或助动词活用错误', 3020),
-        ('GRAMMAR_SYNTAX', 'CONNECTION', '接续错误', '词语或句子之间的接续形式错误', 3030),
-        ('GRAMMAR_SYNTAX', 'NEGATION', '否定表达错误', '否定形式或否定范围使用错误', 3040),
-        ('GRAMMAR_SYNTAX', 'CONDITION', '条件表达错误', '条件句型或条件关系使用错误', 3050),
-        ('GRAMMAR_SYNTAX', 'PARTICLE', '助词错误', '助词的选择、位置或语义功能错误', 3060),
-        ('GRAMMAR_SYNTAX', 'TENSE_ASPECT', '时态体貌错误', '时态、持续、完成或状态表达错误', 3070),
-        ('GRAMMAR_SYNTAX', 'TRANSITIVE_INTRANSITIVE', '自他动词错误', '自动词和他动词的选择或格助词搭配错误', 3080),
-        ('GRAMMAR_SYNTAX', 'GIVING_RECEIVING', '授受关系错误', '授受动词或受益关系表达错误', 3090),
-        ('PRAGMATICS_CONTEXT', 'POLITENESS', '礼貌程度错误', '礼貌程度与交际关系不匹配', 4010),
-        ('PRAGMATICS_CONTEXT', 'HONORIFIC', '尊敬语错误', '对对方或第三方的尊敬语使用错误', 4020),
-        ('PRAGMATICS_CONTEXT', 'HUMBLE', '谦让语错误', '对己方行为的谦让语使用错误', 4030),
-        ('PRAGMATICS_CONTEXT', 'STYLE_CONSISTENCY', '语体不一致', '普通体、敬体或书面语体前后混用', 4040),
-        ('PRAGMATICS_CONTEXT', 'FORMALITY', '正式程度错误', '表达正式程度与场景不匹配', 4050),
-        ('PRAGMATICS_CONTEXT', 'ADDRESSEE', '对象身份不匹配', '未根据说话对象选择合适表达', 4060),
-        ('WRITING_FORMAT', 'KANA', '假名错误', '平假名、片假名或假名拼写错误', 5010),
-        ('WRITING_FORMAT', 'KANJI', '汉字错误', '汉字选择、写法或读写对应错误', 5020),
-        ('WRITING_FORMAT', 'ORTHOGRAPHY', '表记错误', '长音、促音、送假名等表记错误', 5030),
-        ('WRITING_FORMAT', 'PUNCTUATION', '标点错误', '标点符号或断句方式不恰当', 5040),
-        ('WRITING_FORMAT', 'INCOMPLETE_INPUT', '输入残缺', '答案存在缺字、截断或未完成输入', 5050)
-) as seed(parent_code, code, name, description, sort_order)
+        ('SEMANTIC', 'OMISSION', '漏译', '遗漏原文中的必要信息', 'Missing information', 'Required information from the source is missing.', 1010),
+        ('SEMANTIC', 'MISTRANSLATION', '误译', '对原文含义的理解或翻译错误', 'Incorrect meaning', 'The source meaning was misunderstood or translated incorrectly.', 1020),
+        ('SEMANTIC', 'ADDITION', '过度发挥', '加入原文没有的信息', 'Unsupported addition', 'The answer adds information that is not present in the source.', 1030),
+        ('SEMANTIC', 'SUBJECT_OBJECT', '主语或对象错误', '人物、对象或动作归属错误', 'Wrong subject or object', 'A person, object, or action is assigned to the wrong participant.', 1040),
+        ('SEMANTIC', 'LOGIC_RELATION', '逻辑关系错误', '因果、转折、条件等逻辑关系错误', 'Incorrect logical relationship', 'A causal, contrasting, conditional, or other logical relationship is incorrect.', 1050),
+        ('LEXICAL_EXPRESSION', 'WORD_SENSE', '词义混淆', '未按语境选择正确词义', 'Wrong word sense', 'The selected meaning of a word does not fit the context.', 2010),
+        ('LEXICAL_EXPRESSION', 'SYNONYM', '近义词误用', '近义词的语义范围或使用条件不符', 'Inappropriate synonym', 'A synonym does not fit the intended nuance or usage conditions.', 2020),
+        ('LEXICAL_EXPRESSION', 'COLLOCATION', '搭配错误', '词语组合不符合日语常用搭配', 'Unnatural collocation', 'The word combination is not idiomatic in Japanese.', 2030),
+        ('LEXICAL_EXPRESSION', 'FALSE_FRIEND', '中日同形词误用', '误按中文含义使用日语同形词', 'False friend', 'A similar-looking Chinese and Japanese word is used with the wrong meaning.', 2040),
+        ('LEXICAL_EXPRESSION', 'CHINESE_CALQUE', '中文直译', '直接套用中文表达导致不自然', 'Chinese calque', 'Chinese phrasing is copied too literally, resulting in unnatural Japanese.', 2050),
+        ('LEXICAL_EXPRESSION', 'WORD_ORDER', '语序生硬', '语序可理解但不符合自然日语习惯', 'Unnatural word order', 'The meaning is understandable, but the word order is not natural in Japanese.', 2060),
+        ('LEXICAL_EXPRESSION', 'REDUNDANCY', '冗余表达', '存在不必要的重复或累赘表达', 'Redundant wording', 'The answer contains unnecessary repetition or wording.', 2070),
+        ('LEXICAL_EXPRESSION', 'UNNATURAL_EXPRESSION', '不自然表达', '语义正确但整体表达不地道', 'Unnatural expression', 'The meaning is correct, but the overall expression is not idiomatic.', 2080),
+        ('GRAMMAR_SYNTAX', 'SENTENCE_PATTERN', '句型错误', '句型选择或结构不正确', 'Incorrect sentence pattern', 'The sentence pattern or structure is incorrect.', 3010),
+        ('GRAMMAR_SYNTAX', 'CONJUGATION', '活用错误', '动词、形容词或助动词活用错误', 'Incorrect conjugation', 'A verb, adjective, or auxiliary is conjugated incorrectly.', 3020),
+        ('GRAMMAR_SYNTAX', 'CONNECTION', '接续错误', '词语或句子之间的接续形式错误', 'Incorrect linking form', 'Words or clauses are connected with an incorrect form.', 3030),
+        ('GRAMMAR_SYNTAX', 'NEGATION', '否定表达错误', '否定形式或否定范围使用错误', 'Incorrect negation', 'The negative form or scope of negation is incorrect.', 3040),
+        ('GRAMMAR_SYNTAX', 'CONDITION', '条件表达错误', '条件句型或条件关系使用错误', 'Incorrect conditional', 'A conditional pattern or relationship is used incorrectly.', 3050),
+        ('GRAMMAR_SYNTAX', 'PARTICLE', '助词错误', '助词的选择、位置或语义功能错误', 'Incorrect particle', 'A particle is incorrect in choice, placement, or function.', 3060),
+        ('GRAMMAR_SYNTAX', 'TENSE_ASPECT', '时态体貌错误', '时态、持续、完成或状态表达错误', 'Incorrect tense or aspect', 'Tense, duration, completion, or state is expressed incorrectly.', 3070),
+        ('GRAMMAR_SYNTAX', 'TRANSITIVE_INTRANSITIVE', '自他动词错误', '自动词和他动词的选择或格助词搭配错误', 'Transitivity error', 'A transitive or intransitive verb, or its particle pattern, is used incorrectly.', 3080),
+        ('GRAMMAR_SYNTAX', 'GIVING_RECEIVING', '授受关系错误', '授受动词或受益关系表达错误', 'Giving and receiving', 'A giving or receiving verb, or the beneficiary relationship, is incorrect.', 3090),
+        ('PRAGMATICS_CONTEXT', 'POLITENESS', '礼貌程度错误', '礼貌程度与交际关系不匹配', 'Inappropriate politeness', 'The level of politeness does not match the relationship or situation.', 4010),
+        ('PRAGMATICS_CONTEXT', 'HONORIFIC', '尊敬语错误', '对对方或第三方的尊敬语使用错误', 'Incorrect respectful language', 'Respectful language for the listener or a third party is used incorrectly.', 4020),
+        ('PRAGMATICS_CONTEXT', 'HUMBLE', '谦让语错误', '对己方行为的谦让语使用错误', 'Incorrect humble language', 'Humble language for the speaker or in-group is used incorrectly.', 4030),
+        ('PRAGMATICS_CONTEXT', 'STYLE_CONSISTENCY', '语体不一致', '普通体、敬体或书面语体前后混用', 'Inconsistent register', 'Plain, polite, or written styles are mixed inconsistently.', 4040),
+        ('PRAGMATICS_CONTEXT', 'FORMALITY', '正式程度错误', '表达正式程度与场景不匹配', 'Inappropriate formality', 'The level of formality does not fit the situation.', 4050),
+        ('PRAGMATICS_CONTEXT', 'ADDRESSEE', '对象身份不匹配', '未根据说话对象选择合适表达', 'Addressee mismatch', 'The expression is not appropriate for the person being addressed.', 4060),
+        ('WRITING_FORMAT', 'KANA', '假名错误', '平假名、片假名或假名拼写错误', 'Kana error', 'Hiragana, katakana, or kana spelling is incorrect.', 5010),
+        ('WRITING_FORMAT', 'KANJI', '汉字错误', '汉字选择、写法或读写对应错误', 'Kanji error', 'The kanji choice, written form, or reading is incorrect.', 5020),
+        ('WRITING_FORMAT', 'ORTHOGRAPHY', '表记错误', '长音、促音、送假名等表记错误', 'Orthographic error', 'A long vowel, small tsu, okurigana, or other written form is incorrect.', 5030),
+        ('WRITING_FORMAT', 'PUNCTUATION', '标点错误', '标点符号或断句方式不恰当', 'Punctuation error', 'Punctuation or sentence breaks are inappropriate.', 5040),
+        ('WRITING_FORMAT', 'INCOMPLETE_INPUT', '输入残缺', '答案存在缺字、截断或未完成输入', 'Incomplete input', 'The answer is missing characters, truncated, or unfinished.', 5050)
+) as seed(parent_code, code, name, description, name_en, description_en, sort_order)
 inner join error_types parent
     on parent.code = seed.parent_code
    and parent.type_level = 1
    and parent.deleted = false
-on conflict (code) do nothing;
-
+on conflict (code) do update set
+    parent_id = excluded.parent_id,
+    name = excluded.name,
+    description = excluded.description,
+    name_en = excluded.name_en,
+    description_en = excluded.description_en,
+    sort_order = excluded.sort_order,
+    enabled = true,
+    deleted = false,
+    updated_at = current_timestamp;

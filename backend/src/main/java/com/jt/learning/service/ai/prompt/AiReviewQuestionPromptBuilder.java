@@ -1,5 +1,6 @@
 package com.jt.learning.service.ai.prompt;
 
+import com.jt.learning.common.TranslationDirection;
 import com.jt.learning.entity.ErrorType;
 import com.jt.learning.entity.Question;
 import com.jt.learning.entity.QuestionAnswer;
@@ -75,7 +76,8 @@ public class AiReviewQuestionPromptBuilder {
                 toJson(existingQuestions),
                 toJson(sceneTagOptions),
                 toJson(functionTagOptions));
-        return new AiQuestionPrompt(SYSTEM_PROMPT, userPrompt);
+        TranslationDirection direction = TranslationDirection.fromLearningMode(userErrorType.getLearningMode());
+        return new AiQuestionPrompt(direction.adaptPrompt(SYSTEM_PROMPT), direction.adaptPrompt(userPrompt));
     }
 
     private String toJson(Object value) {

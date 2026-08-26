@@ -9,6 +9,7 @@ export async function fetchUserAnswers(
   const searchParams = new URLSearchParams({
     page: String(filters.page),
     size: String(filters.size),
+    learningMode: filters.learningMode ?? 'ZH_TO_JA',
   })
 
   if (filters.answerStatus) {

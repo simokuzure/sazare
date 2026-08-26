@@ -26,6 +26,11 @@ public class UserAnswer {
     private Long questionId;
 
     /**
+     * 学习模式：ZH_TO_JA=中译日，EN_TO_JA=英译日
+     */
+    private String learningMode;
+
+    /**
      * 用户提交的日语答案
      */
     private String answerText;

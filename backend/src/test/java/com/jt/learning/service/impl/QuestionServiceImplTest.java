@@ -39,6 +39,8 @@ import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.QuestionVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import tools.jackson.databind.ObjectMapper;
 
@@ -189,6 +191,101 @@ class QuestionServiceImplTest {
         );
     }
 
+    @ParameterizedTest
+    @CsvSource({
+            "SHORT,60",
+            "SHORT,100",
+            "MEDIUM,120",
+            "MEDIUM,180",
+            "LONG,200",
+            "LONG,280"
+    })
+    void generateArticleByAiShouldAcceptSelectedLengthTierBoundaries(String lengthTier, int articleLength) {
+        Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
+        when(tagMapper.selectEnabledTagsByCodes("GENRE", List.of("NARRATIVE")))
+                .thenReturn(List.of(genreTag));
+        when(aiQuestionClient.generateArticle(any(), any(), anyString()))
+                .thenAnswer(invocation -> articleJsonWithChineseLength(invocation.getArgument(2), articleLength));
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(120L);
+            return 1;
+        });
+        when(questionAnswerMapper.insertQuestionAnswer(any())).thenAnswer(invocation -> {
+            QuestionAnswer answer = invocation.getArgument(0);
+            answer.setId(220L);
+            return 1;
+        });
+
+        QuestionVO question = questionService.generateArticleByAi(
+                new AiArticleGenerationRequest(
+                        "N3", 3, "NARRATIVE", null, null, "ZH_TO_JA", lengthTier
+                )
+        );
+
+        assertThat(question.sourceText().replaceAll("\\s", "")).hasSize(articleLength);
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "SHORT,59,60,100",
+            "SHORT,101,60,100",
+            "MEDIUM,119,120,180",
+            "MEDIUM,181,120,180",
+            "LONG,199,200,280",
+            "LONG,281,200,280"
+    })
+    void generateArticleByAiShouldRejectTextOutsideSelectedLengthTier(
+            String lengthTier,
+            int articleLength,
+            int minimum,
+            int maximum
+    ) {
+        Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
+        when(tagMapper.selectEnabledTagsByCodes("GENRE", List.of("NARRATIVE")))
+                .thenReturn(List.of(genreTag));
+        when(aiQuestionClient.generateArticle(any(), any(), anyString()))
+                .thenAnswer(invocation -> articleJsonWithChineseLength(invocation.getArgument(2), articleLength));
+
+        assertThatThrownBy(() -> questionService.generateArticleByAi(
+                new AiArticleGenerationRequest(
+                        "N3", 3, "NARRATIVE", null, null, "ZH_TO_JA", lengthTier
+                )
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("AI 文章长度必须在 " + minimum + " 到 " + maximum + " 个非空白字符之间");
+        verify(questionMapper, never()).insertQuestion(any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"SHORT,45", "MEDIUM,135", "LONG,210"})
+    void generateEnglishArticleShouldUseWordRanges(String lengthTier, int wordCount) {
+        Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
+        when(tagMapper.selectEnabledTagsByCodes("GENRE", List.of("NARRATIVE")))
+                .thenReturn(List.of(genreTag));
+        when(aiQuestionClient.generateArticle(any(), any(), anyString()))
+                .thenAnswer(invocation -> articleJsonWithEnglishWordCount(invocation.getArgument(2), wordCount));
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(121L);
+            return 1;
+        });
+        when(questionAnswerMapper.insertQuestionAnswer(any())).thenAnswer(invocation -> {
+            QuestionAnswer answer = invocation.getArgument(0);
+            answer.setId(221L);
+            return 1;
+        });
+
+        QuestionVO question = questionService.generateArticleByAi(
+                new AiArticleGenerationRequest(
+                        "N3", 3, "NARRATIVE", null, null, "EN_TO_JA", lengthTier
+                )
+        );
+
+        assertThat(question.questionType()).isEqualTo("TRANSLATION_EN_TO_JA_ARTICLE");
+        assertThat(question.sourceText().trim().split("\\s+")).hasSize(wordCount);
+    }
+
     @Test
     void generateArticleByAiShouldRandomlySelectEnabledGenreWhenNotSpecified() {
         Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
@@ -220,7 +317,7 @@ class QuestionServiceImplTest {
                 .thenReturn(List.of(genreTag));
         when(aiQuestionClient.generateArticle(any(), any(), anyString()))
                 .thenAnswer(invocation -> validArticleJson(invocation.getArgument(2))
-                        .replace("上周末，我和朋友决定去郊外的一座小镇旅行。", "他说：“这次去郊外旅行吧。”"));
+                        .replace("上周末，我和朋友决定去郊外的一座小镇旅行。", "他说：“这次我们要按照原来的计划一起去郊外旅行吧。”"));
         when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
             Question question = invocation.getArgument(0);
             question.setId(104L);
@@ -231,7 +328,7 @@ class QuestionServiceImplTest {
                 new AiArticleGenerationRequest("N3", 3, "NARRATIVE", null, null)
         );
 
-        assertThat(question.sourceText()).startsWith("他说：“这次去郊外旅行吧。”");
+        assertThat(question.sourceText()).startsWith("他说：“这次我们要按照原来的计划一起去郊外旅行吧。”");
         verify(questionMapper).insertQuestion(any());
     }
 
@@ -1106,13 +1203,81 @@ class QuestionServiceImplTest {
                       {"index":1,"chineseText":"我们原本计划乘早班电车出发，却因为看错时间错过了车。","japaneseReference":"朝早い電車で出発する予定でしたが、時間を見間違えて乗り遅れました。"},
                       {"index":2,"chineseText":"下一班车要等一个小时，所以我们在车站附近吃了早餐。","japaneseReference":"次の電車まで一時間あったので、駅の近くで朝食を取りました。"},
                       {"index":3,"chineseText":"到达小镇时，天空突然下起了大雨，我们只好先找地方避雨。","japaneseReference":"町に着くと急に大雨が降り始めたため、まず雨宿りできる場所を探しました。"},
-                      {"index":4,"chineseText":"我们跑进一家旧书店，店主热情地介绍了当地的历史和老街。","japaneseReference":"古い本屋に駆け込むと、店主が町の歴史と古い町並みを親切に紹介してくれました。"},
-                      {"index":5,"chineseText":"雨停以后，我们按照他的建议慢慢参观了老街，还品尝了当地的点心。","japaneseReference":"雨がやんだ後、彼の勧めに従って古い町並みを歩き、名物のお菓子も味わいました。"},
-                      {"index":6,"chineseText":"虽然行程和预想完全不同，但这些意外的经历让这次旅行更加难忘。","japaneseReference":"予定とはまったく違う旅になりましたが、思いがけない経験のおかげで忘れられない旅になりました。"}
+                      {"index":4,"chineseText":"我们跑进一家旧书店，店主热情地介绍了当地的历史和老街。","japaneseReference":"古い本屋に駆け込むと、店主が町の歴史と古い町並みを親切に紹介してくれました。"}
                     ]
                   }
                 }
                 """.formatted(seed);
+    }
+
+    private String articleJsonWithChineseLength(String seed, int articleLength) {
+        String sourceText = "中".repeat(articleLength - 1) + "。";
+        return """
+                {
+                  "blueprint": {
+                    "seed": "%s",
+                    "coreConcept": "保持内容不变并调整表达难度",
+                    "roles": {
+                      "subject": "文章主体",
+                      "setting": "文章背景",
+                      "experience": "主要经历",
+                      "changeOrInsight": "可能的发展"
+                    }
+                  },
+                  "article": {
+                    "questionType": "TRANSLATION_ZH_TO_JA_ARTICLE",
+                    "contextText": "叙事文，使用自然连贯的书面语。",
+                    "level": "N3",
+                    "difficulty": 3,
+                    "grammarPoint": "文章：文章（ぶんしょう）",
+                    "spoken": false,
+                    "business": false,
+                    "exam": false,
+                    "sentences": [
+                      {
+                        "index": 0,
+                        "chineseText": "%s",
+                        "japaneseReference": "内容に対応する自然な日本語の参考文です。"
+                      }
+                    ]
+                  }
+                }
+                """.formatted(seed, sourceText);
+    }
+
+    private String articleJsonWithEnglishWordCount(String seed, int wordCount) {
+        String sourceText = ("word ".repeat(wordCount)).trim() + ".";
+        return """
+                {
+                  "blueprint": {
+                    "seed": "%s",
+                    "coreConcept": "Keep the content and adjust only its language",
+                    "roles": {
+                      "subject": "article subject",
+                      "setting": "article setting",
+                      "experience": "main experience",
+                      "changeOrInsight": "possible development"
+                    }
+                  },
+                  "article": {
+                    "questionType": "TRANSLATION_EN_TO_JA_ARTICLE",
+                    "contextText": "A narrative written in a natural style.",
+                    "level": "N3",
+                    "difficulty": 3,
+                    "grammarPoint": "article: 文章（ぶんしょう）",
+                    "spoken": false,
+                    "business": false,
+                    "exam": false,
+                    "sentences": [
+                      {
+                        "index": 0,
+                        "chineseText": "%s",
+                        "japaneseReference": "内容に対応する自然な日本語の参考文です。"
+                      }
+                    ]
+                  }
+                }
+                """.formatted(seed, sourceText);
     }
 
     private List<Float> vector() {

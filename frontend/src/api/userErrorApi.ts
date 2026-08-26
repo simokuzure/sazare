@@ -17,6 +17,7 @@ export async function fetchUserErrorTypes(
     status: filters.status,
     page: String(filters.page),
     size: String(filters.size),
+    learningMode: filters.learningMode ?? 'ZH_TO_JA',
   })
   const response = await fetch(`/api/user-error-types?${searchParams.toString()}`, { signal })
   const result = await readApiResponse<PageData<UserErrorType>>(response)

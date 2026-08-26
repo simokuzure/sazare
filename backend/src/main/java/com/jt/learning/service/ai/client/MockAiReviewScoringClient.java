@@ -18,12 +18,15 @@ public class MockAiReviewScoringClient implements AiReviewScoringClient {
 
     @Override
     public String scoreAnswer(AiQuestionPrompt prompt) {
+        boolean english = prompt.systemPrompt().startsWith("The source language");
         try {
             return objectMapper.writeValueAsString(Map.of(
                     "review", Map.of(
                             "quality", 4,
                             "targetErrorResolved", true,
-                            "feedback", "复习重点已经掌握，表达基本自然。",
+                            "feedback", english
+                                    ? "The review focus has been mastered and the expression is mostly natural."
+                                    : "复习重点已经掌握，表达基本自然。",
                             "scores", Map.of(
                                     "grammarVocabularyScore", 84,
                                     "naturalFluencyScore", 82,

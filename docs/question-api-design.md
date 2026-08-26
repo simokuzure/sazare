@@ -307,6 +307,30 @@ POST /api/questions/ai-generations
 - 入库时 `questions.source_type` 固定为 `AI`。
 - 建议使用事务保存 `questions`、`question_answers`、`question_tags`，任一题校验失败则本次请求整体失败。
 
+### AI 生成文章并入库
+
+```http
+POST /api/questions/article-ai-generations
+```
+
+请求示例：
+
+```json
+{
+  "learningMode": "ZH_TO_JA",
+  "level": "N5",
+  "difficulty": 1,
+  "lengthTier": "SHORT",
+  "genreTagCode": "NARRATIVE",
+  "topic": "复杂人物关系与社会冲突",
+  "extraRequirements": "保持开放结尾"
+}
+```
+
+`lengthTier` 可选值为 `SHORT`、`MEDIUM`、`LONG`，默认 `MEDIUM`。中文分别限制为 60～100、120～180、200～280 个非空白字符；英文分别限制为 45～75、90～135、150～210 个单词。响应仍为单个 `QuestionVO`，不新增数据库字段。
+
+`level` 和 `difficulty` 只控制源文章句式及日语参考译文的语言复杂度，不限制主题、体裁、情节、人物、冲突、观点或抽象程度。保存前必须校验 AI 返回的等级、难度和实际源文章长度。
+
 ### 人工创建题目
 
 ```http
@@ -393,7 +417,7 @@ POST /api/questions
 
 实现要求：
 
-- `questionType` 当前只允许 `TRANSLATION_ZH_TO_JA`。
+- `questionType` 允许中译日/英译日的短句与文章题型。
 - `sourceText` 必填，且应包含中文字符。
 - `contextText` 建议必填；数据库允许为空，但业务上应要求填写，便于学习者理解语境。
 - `level` 必填，且只能是 `N5`、`N4`、`N3`、`N2`、`N1`。
@@ -681,7 +705,7 @@ DELETE /api/questions/{id}
 
 ### 题目校验
 
-- `questionType` 必须是 `TRANSLATION_ZH_TO_JA`。
+- `questionType` 必须是当前支持的中译日或英译日题型。
 - `sourceText` 不能为空，且应包含中文字符。
 - `contextText` 不能为空。
 - `level` 必须是 `N5`、`N4`、`N3`、`N2`、`N1`。

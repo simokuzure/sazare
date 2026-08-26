@@ -62,35 +62,37 @@ public class LearningStatisticsServiceImpl implements LearningStatisticsService 
         User user = requireLocalUser();
 
         LearningStatisticsOverviewRow overview = learningStatisticsMapper.selectOverview(
-                user.getId(), period.startAt(), period.endAt());
+                user.getId(), request.learningMode(), period.startAt(), period.endAt());
         LearningStatisticsOverviewRow correctionOverview = learningStatisticsMapper.selectCorrectionOverview(
-                user.getId(), period.startAt(), period.endAt());
+                user.getId(), request.learningMode(), period.startAt(), period.endAt());
         long confirmedErrorCount = learningStatisticsMapper.countConfirmedErrors(
-                user.getId(), period.startAt(), period.endAt());
+                user.getId(), request.learningMode(), period.startAt(), period.endAt());
         LearningStatisticsScoreDimensionsRow scoreDimensions = learningStatisticsMapper.selectScoreDimensions(
-                user.getId(), period.startAt(), period.endAt());
+                user.getId(), request.learningMode(), period.startAt(), period.endAt());
         LearningStatisticsCurrentReviewRow currentReview = learningStatisticsMapper.selectCurrentReviewSummary(
-                user.getId(), LocalDateTime.now(learningStatisticsClock));
+                user.getId(), request.learningMode(), LocalDateTime.now(learningStatisticsClock));
         LearningStatisticsPeriodReviewRow periodReview = learningStatisticsMapper.selectPeriodReviewSummary(
-                user.getId(), period.startAt(), period.endAt());
+                user.getId(), request.learningMode(), period.startAt(), period.endAt());
         long completedCycleCount = learningStatisticsMapper.countCompletedReviewCycles(
-                user.getId(), period.startAt(), period.endAt());
+                user.getId(), request.learningMode(), period.startAt(), period.endAt());
 
         return new LearningStatisticsVO(
                 new LearningStatisticsPeriodVO(period.range(), period.startDate(), period.endDate()),
                 toOverview(overview, confirmedErrorCount),
-                fillDailyTrends(period, learningStatisticsMapper.selectDailyTrends(user.getId(), period.startAt(), period.endAt())),
+                fillDailyTrends(period, learningStatisticsMapper.selectDailyTrends(
+                        user.getId(), request.learningMode(), period.startAt(), period.endAt())),
                 toScoreDimensions(scoreDimensions),
-                learningStatisticsMapper.selectTopWeaknesses(user.getId(), period.startAt(), period.endAt())
+                learningStatisticsMapper.selectTopWeaknesses(
+                                user.getId(), request.learningMode(), period.startAt(), period.endAt())
                         .stream()
                         .map(row -> toWeakness(row, LocalDateTime.now(learningStatisticsClock)))
                         .toList(),
                 toReviewOverview(currentReview, periodReview, completedCycleCount),
                 toOverview(correctionOverview, 0),
                 fillDailyTrends(period, learningStatisticsMapper.selectCorrectionDailyTrends(
-                        user.getId(), period.startAt(), period.endAt())),
+                        user.getId(), request.learningMode(), period.startAt(), period.endAt())),
                 toScoreDimensions(learningStatisticsMapper.selectCorrectionScoreDimensions(
-                        user.getId(), period.startAt(), period.endAt()))
+                        user.getId(), request.learningMode(), period.startAt(), period.endAt()))
         );
     }
 

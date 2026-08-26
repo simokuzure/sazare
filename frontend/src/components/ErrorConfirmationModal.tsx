@@ -5,6 +5,7 @@ import type { PracticeNotice } from '../types/api'
 import type { AnswerErrorAnalysis } from '../types/review'
 import type { ReviewCardCreated, UserErrorType } from '../types/userError'
 import type { ErrorCandidateState } from './errorConfirmation'
+import { useLanguage } from '../i18n/LanguageContext'
 
 export type ReviewCardSource =
   | { kind: 'FIXED', sourceText: string }
@@ -27,6 +28,7 @@ export default function ErrorConfirmationModal({ analyses, candidates, userError
   onCustomSaved?: (card: ReviewCardCreated) => void
   onClose: () => void
 }) {
+  const { text } = useLanguage()
   const [customEditing, setCustomEditing] = useState(analyses.length === 0)
   const [customSaving, setCustomSaving] = useState(false)
   const [savingAll, setSavingAll] = useState(false)
@@ -64,15 +66,15 @@ export default function ErrorConfirmationModal({ analyses, candidates, userError
     const name = customName.trim()
     const expression = targetExpression.trim()
     if (!name || !expression) {
-      setCustomNotice({ kind: 'error', title: '请补充卡片内容', message: '复习重点和目标日语表达均不能为空。' })
+      setCustomNotice({ kind: 'error', title: text('请补充卡片内容', 'Complete the card'), message: text('复习重点和目标日语表达均不能为空。', 'The learning focus and target Japanese expression are required.') })
       return false
     }
     if (reviewCardSource.kind === 'ARTICLE' && !sourceSegmentIndex) {
-      setCustomNotice({ kind: 'error', title: '请选择中文原句', message: '文章复习卡片必须绑定一条中文原句。' })
+      setCustomNotice({ kind: 'error', title: text('请选择中文原句', 'Select a source sentence'), message: text('文章复习卡片必须绑定一条中文原句。', 'An article review card must be linked to one English source sentence.') })
       return false
     }
     if (reviewCardSource.kind === 'CORRECTION' && !reviewSourceText.trim()) {
-      setCustomNotice({ kind: 'error', title: '请填写复习题中文', message: '纯日语纠错需要提供中译日复习题面。' })
+      setCustomNotice({ kind: 'error', title: text('请填写复习题中文', 'Enter the review prompt'), message: text('纯日语纠错需要提供中译日复习题面。', 'Add an English prompt for this review card.') })
       return false
     }
     return true
@@ -91,7 +93,7 @@ export default function ErrorConfirmationModal({ analyses, candidates, userError
       onCustomSaved?.(card)
       return true
     } catch (error: unknown) {
-      setCustomNotice({ kind: 'error', title: '添加失败', message: getErrorMessage(error) })
+      setCustomNotice({ kind: 'error', title: text('添加失败', 'Add failed'), message: getErrorMessage(error) })
       return false
     } finally {
       setCustomSaving(false)
@@ -113,44 +115,44 @@ export default function ErrorConfirmationModal({ analyses, candidates, userError
   }
 
   return <div className="modal-backdrop" role="presentation">
-    <section className="error-confirmation error-confirmation-modal" role="dialog" aria-modal="true" aria-label="添加复习卡片">
+    <section className="error-confirmation error-confirmation-modal" role="dialog" aria-modal="true" aria-label={text('添加复习卡片', 'Add review cards')}>
       <header className="modal-header">
-        <div className="section-title"><span className="label">复习卡片</span><strong>{analyses.length === 0 ? '添加复习卡片' : '选择或添加复习内容'}</strong></div>
-        <button type="button" className="modal-close" aria-label="关闭" disabled={busy} onClick={onClose}>×</button>
+        <div className="section-title"><span className="label">{text('复习卡片', 'Review cards')}</span><strong>{analyses.length === 0 ? text('添加复习卡片', 'Add a review card') : text('选择或添加复习内容', 'Select or add review items')}</strong></div>
+        <button type="button" className="modal-close" aria-label={text('关闭', 'Close')} disabled={busy} onClick={onClose}>×</button>
       </header>
       <div className="error-confirmation-body">
         {analyses.length > 0 ? <>
-          <div className="error-confirmation-intro"><span className="candidate-count">已选 {selectedCount} 项</span><p className="error-confirmation-hint">AI 分析仅作候选；确认后才会加入复习卡片。</p></div>
+          <div className="error-confirmation-intro"><span className="candidate-count">{text(`已选 ${selectedCount} 项`, `${selectedCount} selected`)}</span><p className="error-confirmation-hint">{text('AI 分析仅作候选；确认后才会加入复习卡片。', 'AI suggestions are not saved until you confirm them.')}</p></div>
           {notice ? <div className={notice.kind === 'error' ? 'notice is-error' : 'notice'}><strong>{notice.title}</strong><p>{notice.message}</p></div> : null}
           {analyses.map((analysis, index) => {
             const candidate = candidates[index]
             if (!candidate) return null
             return <article key={`${analysis.errorTypeCode}-${index}`} className={candidate.selected ? 'candidate-error-item is-selected' : 'candidate-error-item'}>
-              <div className="candidate-error-header"><label className="candidate-select"><input type="checkbox" checked={candidate.selected || candidate.saved} disabled={candidate.saved || busy} onChange={(event) => onUpdate(index, { selected: event.target.checked })} /><span>{candidate.saved ? '已添加' : '添加此项'}</span></label><span>{analysis.errorTypeName} / {analysis.severity}</span></div>
+              <div className="candidate-error-header"><label className="candidate-select"><input type="checkbox" checked={candidate.selected || candidate.saved} disabled={candidate.saved || busy} onChange={(event) => onUpdate(index, { selected: event.target.checked })} /><span>{candidate.saved ? text('已添加', 'Added') : text('添加此项', 'Add item')}</span></label><span>{analysis.errorTypeName} / {analysis.severity}</span></div>
               <div className="candidate-error-content"><strong>{analysis.original}</strong><p>{analysis.issue}</p><p>{analysis.suggestion}</p></div>
               {candidate.selected && !candidate.saved ? <div className="candidate-error-controls">
-                <div className="choice-grid" role="radiogroup" aria-label="添加方式"><label><input type="radio" name={`mode-${index}`} checked={candidate.mode === 'NEW_USER_ERROR_TYPE'} onChange={() => onUpdate(index, { mode: 'NEW_USER_ERROR_TYPE' })} />新建复习卡片</label><label><input type="radio" name={`mode-${index}`} disabled={userErrorTypes.length === 0 || userErrorTypesLoading} checked={candidate.mode === 'EXISTING_USER_ERROR_TYPE'} onChange={() => onUpdate(index, { mode: 'EXISTING_USER_ERROR_TYPE', userErrorTypeId: '' })} />加入已有复习卡片</label></div>
-                {candidate.mode === 'NEW_USER_ERROR_TYPE' ? <div className="error-confirmation-fields"><label><span>卡片名称</span><input value={candidate.userErrorTypeName} maxLength={128} onChange={(event) => onUpdate(index, { userErrorTypeName: event.target.value })} /></label><label><span>卡片说明</span><textarea value={candidate.userErrorTypeDescription} maxLength={255} onChange={(event) => onUpdate(index, { userErrorTypeDescription: event.target.value })} /></label></div> : <label className="existing-error-type-select"><span>复习卡片列表</span><select value={candidate.userErrorTypeId} onChange={(event) => onUpdate(index, { userErrorTypeId: event.target.value })}><option value="">请选择要加入的复习卡片</option>{userErrorTypes.map((item) => <option key={item.id} value={item.id}>{item.name}（{item.errorTypeName}）</option>)}</select></label>}
+                <div className="choice-grid" role="radiogroup" aria-label={text('添加方式', 'Add method')}><label><input type="radio" name={`mode-${index}`} checked={candidate.mode === 'NEW_USER_ERROR_TYPE'} onChange={() => onUpdate(index, { mode: 'NEW_USER_ERROR_TYPE' })} />{text('新建复习卡片', 'Create review card')}</label><label><input type="radio" name={`mode-${index}`} disabled={userErrorTypes.length === 0 || userErrorTypesLoading} checked={candidate.mode === 'EXISTING_USER_ERROR_TYPE'} onChange={() => onUpdate(index, { mode: 'EXISTING_USER_ERROR_TYPE', userErrorTypeId: '' })} />{text('加入已有复习卡片', 'Add to existing card')}</label></div>
+                {candidate.mode === 'NEW_USER_ERROR_TYPE' ? <div className="error-confirmation-fields"><label><span>{text('卡片名称', 'Card name')}</span><input value={candidate.userErrorTypeName} maxLength={128} onChange={(event) => onUpdate(index, { userErrorTypeName: event.target.value })} /></label><label><span>{text('卡片说明', 'Card description')}</span><textarea value={candidate.userErrorTypeDescription} maxLength={255} onChange={(event) => onUpdate(index, { userErrorTypeDescription: event.target.value })} /></label></div> : <label className="existing-error-type-select"><span>{text('复习卡片列表', 'Review cards')}</span><select value={candidate.userErrorTypeId} onChange={(event) => onUpdate(index, { userErrorTypeId: event.target.value })}><option value="">{text('请选择要加入的复习卡片', 'Select a review card')}</option>{userErrorTypes.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.errorTypeName})</option>)}</select></label>}
               </div> : null}
             </article>
           })}
-        </> : <p className="candidate-empty-message">本次未发现明确错误。</p>}
+        </> : <p className="candidate-empty-message">{text('本次未发现明确错误。', 'No clear errors were found.')}</p>}
 
         <section className="custom-review-card-section">
           {customNotice ? <div className={customNotice.kind === 'error' ? 'notice is-error' : 'notice'}><strong>{customNotice.title}</strong><p>{customNotice.message}</p></div> : null}
-          {!customEditing ? <button type="button" className="primary-button" disabled={busy} onClick={() => { setCustomEditing(true); setCustomNotice(null) }}>{analyses.length > 0 ? '添加自定义复习卡片' : '添加复习卡片'}</button> : <div className="custom-review-card-form">
-            <div className="section-title"><span className="label">自定义</span><strong>添加自定义复习卡片</strong></div>
-            <label><span>复习重点</span><input value={customName} maxLength={128} disabled={busy} onChange={(event) => setCustomName(event.target.value)} /></label>
-            {reviewCardSource.kind === 'FIXED' ? <label><span>复习题中文</span><textarea value={reviewCardSource.sourceText} readOnly /></label> : null}
-            {reviewCardSource.kind === 'ARTICLE' ? <label><span>选择中文原句</span><select value={sourceSegmentIndex} disabled={busy} onChange={(event) => setSourceSegmentIndex(event.target.value)}><option value="">请选择</option>{reviewCardSource.segments.map((segment) => <option key={segment.index} value={segment.index}>第 {segment.index + 1} 句：{segment.text}</option>)}</select></label> : null}
-            {reviewCardSource.kind === 'CORRECTION' ? <label><span>复习题中文</span><textarea value={reviewSourceText} maxLength={1000} disabled={busy} placeholder="输入用于中译日复习的中文题面" onChange={(event) => setReviewSourceText(event.target.value)} /></label> : null}
-            {visibleRecommendedExpressions.length > 0 ? <div className="custom-review-recommendations"><span>{reviewCardSource.kind === 'ARTICLE' ? '所选原句的日语翻译答案' : '推荐日语表达'}</span><ul>{visibleRecommendedExpressions.map((expression) => <li key={expression}>{expression}</li>)}</ul></div> : null}
-            <label><span>目标日语表达</span><textarea value={targetExpression} maxLength={2000} disabled={busy} placeholder="输入希望掌握的完整日语表达" onChange={(event) => setTargetExpression(event.target.value)} /></label>
-            <div className="custom-review-card-actions"><button type="button" disabled={busy} onClick={cancelCustomEditing}>取消添加自定义卡片</button></div>
+          {!customEditing ? <button type="button" className="primary-button" disabled={busy} onClick={() => { setCustomEditing(true); setCustomNotice(null) }}>{analyses.length > 0 ? text('添加自定义复习卡片', 'Add custom review card') : text('添加复习卡片', 'Add review card')}</button> : <div className="custom-review-card-form">
+            <div className="section-title"><span className="label">{text('自定义', 'Custom')}</span><strong>{text('添加自定义复习卡片', 'Add custom review card')}</strong></div>
+            <label><span>{text('复习重点', 'Review focus')}</span><input value={customName} maxLength={128} disabled={busy} onChange={(event) => setCustomName(event.target.value)} /></label>
+            {reviewCardSource.kind === 'FIXED' ? <label><span>{text('复习题中文', 'Review source')}</span><textarea value={reviewCardSource.sourceText} readOnly /></label> : null}
+            {reviewCardSource.kind === 'ARTICLE' ? <label><span>{text('选择中文原句', 'Select an English source sentence')}</span><select value={sourceSegmentIndex} disabled={busy} onChange={(event) => setSourceSegmentIndex(event.target.value)}><option value="">{text('请选择', 'Select')}</option>{reviewCardSource.segments.map((segment) => <option key={segment.index} value={segment.index}>{text(`第 ${segment.index + 1} 句：`, `Sentence ${segment.index + 1}: `)}{segment.text}</option>)}</select></label> : null}
+            {reviewCardSource.kind === 'CORRECTION' ? <label><span>{text('复习题中文', 'Review source')}</span><textarea value={reviewSourceText} maxLength={1000} disabled={busy} placeholder={text('输入用于中译日复习的中文题面', 'Enter an English prompt for English-to-Japanese review')} onChange={(event) => setReviewSourceText(event.target.value)} /></label> : null}
+            {visibleRecommendedExpressions.length > 0 ? <div className="custom-review-recommendations"><span>{reviewCardSource.kind === 'ARTICLE' ? text('所选原句的日语翻译答案', 'Japanese answer for the selected source sentence') : text('推荐日语表达', 'Recommended Japanese expressions')}</span><ul>{visibleRecommendedExpressions.map((expression) => <li key={expression}>{expression}</li>)}</ul></div> : null}
+            <label><span>{text('目标日语表达', 'Target Japanese expression')}</span><textarea value={targetExpression} maxLength={2000} disabled={busy} placeholder={text('输入希望掌握的完整日语表达', 'Enter the complete Japanese expression to learn')} onChange={(event) => setTargetExpression(event.target.value)} /></label>
+            <div className="custom-review-card-actions"><button type="button" disabled={busy} onClick={cancelCustomEditing}>{text('取消添加自定义卡片', 'Cancel')}</button></div>
           </div>}
         </section>
       </div>
-      <footer className="error-confirmation-footer"><button type="button" className="primary-button" disabled={pendingCount === 0 || busy} onClick={() => void handleSaveAll()}>{busy ? '添加中' : `确认添加 ${pendingCount} 项`}</button></footer>
+      <footer className="error-confirmation-footer"><button type="button" className="primary-button" disabled={pendingCount === 0 || busy} onClick={() => void handleSaveAll()}>{busy ? text('添加中', 'Saving') : text(`确认添加 ${pendingCount} 项`, `Save ${pendingCount} item(s)`)}</button></footer>
     </section>
   </div>
 }

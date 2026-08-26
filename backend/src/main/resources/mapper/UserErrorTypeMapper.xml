@@ -8,6 +8,7 @@
         insert into user_error_types (
             user_id,
             error_type_id,
+            learning_mode,
             name,
             description,
             status,
@@ -16,6 +17,7 @@
         ) values (
             #{userId},
             #{errorTypeId},
+            #{learningMode},
             #{name},
             #{description},
             #{status},
@@ -29,6 +31,7 @@
             id,
             user_id,
             error_type_id,
+            learning_mode,
             name,
             description,
             status,
@@ -45,6 +48,7 @@
             id,
             user_id,
             error_type_id,
+            learning_mode,
             name,
             description,
             status,
@@ -53,6 +57,7 @@
         from user_error_types
         where user_id = #{userId}
           and error_type_id = #{errorTypeId}
+          and learning_mode = #{learningMode}
           and name = #{name}
           and status = 'ACTIVE'
     </select>
@@ -71,14 +76,16 @@
         from user_error_types
         where user_id = #{userId}
           and status = #{status}
+          and learning_mode = #{learningMode}
     </select>
 
     <select id="selectUserErrorTypeList" resultType="com.jt.learning.dto.UserErrorTypeListItemRow">
         select
             uet.id,
             uet.error_type_id,
+            uet.learning_mode,
             et.code as error_type_code,
-            et.name as error_type_name,
+            case when #{learningMode} = 'EN_TO_JA' then et.name_en else et.name end as error_type_name,
             uet.name,
             uet.description,
             uet.status,
@@ -88,6 +95,7 @@
         inner join error_types et on et.id = uet.error_type_id
         where uet.user_id = #{userId}
           and uet.status = #{status}
+          and uet.learning_mode = #{learningMode}
         order by uet.updated_at desc, uet.id desc
         limit #{limit}
         offset #{offset}

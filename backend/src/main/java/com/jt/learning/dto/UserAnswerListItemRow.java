@@ -14,6 +14,8 @@ public class UserAnswerListItemRow {
 
     private Long questionId;
 
+    private String learningMode;
+
     private String questionType;
 
     private String sourceText;

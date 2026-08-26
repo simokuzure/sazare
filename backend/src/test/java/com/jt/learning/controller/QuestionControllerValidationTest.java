@@ -49,7 +49,7 @@ class QuestionControllerValidationTest {
     void getRandomQuestionShouldReturnChineseMessageForInvalidQuestionType() {
         assertValidationMessage(
                 randomQuestionParameters("INVALID", null, null),
-                "questionType 只能是 TRANSLATION_ZH_TO_JA 或 TRANSLATION_ZH_TO_JA_ARTICLE"
+                "questionType 不合法"
         );
     }
 

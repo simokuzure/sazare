@@ -1,5 +1,7 @@
 package com.jt.learning.dto;
 
+import com.jt.learning.common.TranslationDirection;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -13,7 +15,7 @@ import java.util.List;
 
 public record QuestionCreateRequest(
         @NotBlank(message = "questionType 不能为空")
-        @Pattern(regexp = "TRANSLATION_ZH_TO_JA", message = "questionType 只能是 TRANSLATION_ZH_TO_JA")
+        @Pattern(regexp = TranslationDirection.SHORT_QUESTION_TYPE_PATTERN, message = "新建题目只能是中译日或英译日短句")
         String questionType,
 
         @NotBlank(message = "sourceText 不能为空")

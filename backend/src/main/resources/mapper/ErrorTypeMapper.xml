@@ -10,8 +10,11 @@
             child.code,
             child.name,
             child.description,
+            child.name_en,
+            child.description_en,
             parent.code as parent_code,
-            parent.name as parent_name
+            parent.name as parent_name,
+            parent.name_en as parent_name_en
         from error_types child
         inner join error_types parent on parent.id = child.parent_id
         where child.type_level = 2
@@ -31,6 +34,8 @@
             code,
             name,
             description,
+            name_en,
+            description_en,
             sort_order,
             enabled,
             deleted,
@@ -51,6 +56,8 @@
             code,
             name,
             description,
+            name_en,
+            description_en,
             sort_order,
             enabled,
             deleted,
@@ -86,6 +93,8 @@
             code,
             name,
             description,
+            name_en,
+            description_en,
             sort_order,
             enabled,
             deleted,

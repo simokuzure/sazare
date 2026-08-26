@@ -18,6 +18,7 @@ export async function fetchReviewCards(
     dueOnly: String(filters.mode === 'DUE'),
     page: String(filters.page),
     size: String(filters.size),
+    learningMode: filters.learningMode ?? 'ZH_TO_JA',
   })
   const response = await fetch(`/api/review-cards?${searchParams.toString()}`, { signal })
   const result = await readApiResponse<PageData<ReviewCard>>(response)

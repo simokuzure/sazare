@@ -44,4 +44,17 @@ class AiQuestionPromptBuilderTest {
                 .contains("如果明天下雨，我们就在家学习吧。")
                 .contains("偏口语");
     }
+
+    @Test
+    void buildShouldUseEnglishDirectionRules() {
+        AiQuestionGenerationRequest request = new AiQuestionGenerationRequest(
+                1, "N3", 3, List.of(), List.of(), List.of(), null, "EN_TO_JA");
+
+        AiQuestionPrompt prompt = promptBuilder.build(request, List.of(), List.of());
+
+        assertThat(prompt.systemPrompt())
+                .contains("TRANSLATION_EN_TO_JA")
+                .contains("all explanatory output must be English");
+        assertThat(prompt.userPrompt()).contains("English-to-Japanese");
+    }
 }

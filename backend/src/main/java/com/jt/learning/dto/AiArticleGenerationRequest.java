@@ -1,5 +1,8 @@
 package com.jt.learning.dto;
 
+import com.jt.learning.common.ArticleLengthTier;
+import com.jt.learning.common.TranslationDirection;
+
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
@@ -19,7 +22,13 @@ public record AiArticleGenerationRequest(
         String topic,
 
         @Size(max = 500, message = "extraRequirements 最多 500 个字符")
-        String extraRequirements
+        String extraRequirements,
+
+        @Pattern(regexp = TranslationDirection.LEARNING_MODE_PATTERN, message = "learningMode 只能是 ZH_TO_JA 或 EN_TO_JA")
+        String learningMode,
+
+        @Pattern(regexp = ArticleLengthTier.PATTERN, message = "lengthTier 只能是 SHORT、MEDIUM 或 LONG")
+        String lengthTier
 ) {
     public AiArticleGenerationRequest {
         level = level == null || level.isBlank() ? "N3" : level.trim();
@@ -29,5 +38,17 @@ public record AiArticleGenerationRequest(
         extraRequirements = extraRequirements == null || extraRequirements.isBlank()
                 ? null
                 : extraRequirements.trim();
+        learningMode = learningMode == null || learningMode.isBlank() ? "ZH_TO_JA" : learningMode.trim();
+        lengthTier = lengthTier == null || lengthTier.isBlank() ? "MEDIUM" : lengthTier.trim();
+    }
+
+    public AiArticleGenerationRequest(String level, Integer difficulty, String genreTagCode,
+                                      String topic, String extraRequirements) {
+        this(level, difficulty, genreTagCode, topic, extraRequirements, "ZH_TO_JA", "MEDIUM");
+    }
+
+    public AiArticleGenerationRequest(String level, Integer difficulty, String genreTagCode,
+                                      String topic, String extraRequirements, String learningMode) {
+        this(level, difficulty, genreTagCode, topic, extraRequirements, learningMode, "MEDIUM");
     }
 }

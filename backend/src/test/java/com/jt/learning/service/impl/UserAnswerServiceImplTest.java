@@ -792,7 +792,7 @@ class UserAnswerServiceImplTest {
         when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
         when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
         when(errorTypeMapper.selectEnabledLeafByCode("UNNATURAL_EXPRESSION")).thenReturn(naturalExpression);
-        when(userErrorTypeMapper.selectActiveByUserIdAndErrorTypeIdAndName(1L, 9L, "练习自然表达"))
+        when(userErrorTypeMapper.selectActiveByUserIdAndErrorTypeIdAndName(1L, 9L, "ZH_TO_JA", "练习自然表达"))
                 .thenReturn(new UserErrorType());
 
         assertThatThrownBy(() -> userAnswerService.createReviewCard(

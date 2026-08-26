@@ -14,6 +14,8 @@ public class UserAnswerDetailRow {
 
     private Long questionId;
 
+    private String learningMode;
+
     private String questionType;
 
     private String sourceText;

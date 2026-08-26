@@ -12,6 +12,7 @@ public class UserErrorType {
     private Long id;
     private Long userId;
     private Long errorTypeId;
+    private String learningMode;
     private String name;
     private String description;
     private String status;

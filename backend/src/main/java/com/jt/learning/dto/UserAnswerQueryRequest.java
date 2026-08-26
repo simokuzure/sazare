@@ -1,5 +1,7 @@
 package com.jt.learning.dto;
 
+import com.jt.learning.common.TranslationDirection;
+
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
@@ -14,8 +16,8 @@ public record UserAnswerQueryRequest(
         String answerStatus,
 
         @Pattern(
-                regexp = "TRANSLATION_ZH_TO_JA|TRANSLATION_ZH_TO_JA_ARTICLE|JAPANESE_CORRECTION",
-                message = "questionType 只能是 TRANSLATION_ZH_TO_JA、TRANSLATION_ZH_TO_JA_ARTICLE 或 JAPANESE_CORRECTION"
+                regexp = TranslationDirection.QUESTION_TYPE_PATTERN + "|JAPANESE_CORRECTION",
+                message = "questionType 不合法"
         )
         String questionType,
 
@@ -38,7 +40,10 @@ public record UserAnswerQueryRequest(
 
         @Min(value = 1, message = "size 必须在 1 到 100 之间")
         @Max(value = 100, message = "size 必须在 1 到 100 之间")
-        Integer size
+        Integer size,
+
+        @Pattern(regexp = TranslationDirection.LEARNING_MODE_PATTERN, message = "learningMode 只能是 ZH_TO_JA 或 EN_TO_JA")
+        String learningMode
 ) {
     public UserAnswerQueryRequest {
         answerStatus = answerStatus == null || answerStatus.isBlank() ? null : answerStatus.trim();
@@ -46,6 +51,7 @@ public record UserAnswerQueryRequest(
         level = level == null || level.isBlank() ? null : level.trim();
         page = page == null ? 1 : page;
         size = size == null ? 20 : size;
+        learningMode = learningMode == null || learningMode.isBlank() ? "ZH_TO_JA" : learningMode.trim();
     }
 
     public UserAnswerQueryRequest(
@@ -57,7 +63,7 @@ public record UserAnswerQueryRequest(
             Integer page,
             Integer size
     ) {
-        this(answerStatus, null, questionId, level, minTotalScore, maxTotalScore, page, size);
+        this(answerStatus, null, questionId, level, minTotalScore, maxTotalScore, page, size, "ZH_TO_JA");
     }
 
     public String getAnswerStatus() {

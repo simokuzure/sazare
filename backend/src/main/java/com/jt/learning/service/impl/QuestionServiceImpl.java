@@ -1,5 +1,7 @@
 package com.jt.learning.service.impl;
 
+import com.jt.learning.common.ArticleLengthTier;
+import com.jt.learning.common.TranslationDirection;
 import com.jt.learning.dto.AiAnswerErrorAnalysisDTO;
 import com.jt.learning.dto.AiArticleGenerationRequest;
 import com.jt.learning.dto.AiArticleGenerationResponseDTO;
@@ -89,8 +91,6 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class QuestionServiceImpl implements QuestionService {
 
-    private static final String QUESTION_TYPE = "TRANSLATION_ZH_TO_JA";
-    private static final String ARTICLE_QUESTION_TYPE = "TRANSLATION_ZH_TO_JA_ARTICLE";
     private static final String SOURCE_TYPE_AI = "AI";
     private static final String SOURCE_TYPE_MANUAL = "MANUAL";
     private static final String SOURCE_TYPE_REVIEW_DERIVED = "REVIEW_DERIVED";
@@ -170,14 +170,15 @@ public class QuestionServiceImpl implements QuestionService {
     @Override
     @Transactional
     public List<QuestionVO> generateQuestionsByAi(AiQuestionGenerationRequest request) {
+        TranslationDirection direction = TranslationDirection.fromLearningMode(request.learningMode());
         List<Tag> sceneTags = loadCandidateTags(TAG_TYPE_SCENE, request.sceneTagCodes());
         List<Tag> functionTags = loadCandidateTags(TAG_TYPE_FUNCTION, request.functionTagCodes());
         if (sceneTags.isEmpty()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "没有可用场景标签");
         }
 
-        List<AiQuestionTagOptionDTO> sceneTagOptions = toTagOptions(sceneTags);
-        List<AiQuestionTagOptionDTO> functionTagOptions = toTagOptions(functionTags);
+        List<AiQuestionTagOptionDTO> sceneTagOptions = toTagOptions(sceneTags, direction);
+        List<AiQuestionTagOptionDTO> functionTagOptions = toTagOptions(functionTags, direction);
         List<List<Float>> excludedEmbeddings = embedExcludedSourceTexts(request.excludedSourceTexts());
         List<String> promptExcludedSourceTexts = new ArrayList<>(emptyIfNull(request.excludedSourceTexts()));
         List<PreparedGeneratedQuestion> acceptedQuestions = new ArrayList<>();
@@ -204,7 +205,8 @@ public class QuestionServiceImpl implements QuestionService {
                         validatedQuestion.question().sourceText(),
                         validatedQuestion.question().contextText()
                 );
-                if (isDuplicate(embedding, excludedEmbeddings, acceptedQuestions)) {
+                if (isDuplicate(embedding, excludedEmbeddings, acceptedQuestions,
+                        validatedQuestion.question().questionType())) {
                     promptExcludedSourceTexts.add(validatedQuestion.question().sourceText().trim());
                     continue;
                 }
@@ -222,6 +224,7 @@ public class QuestionServiceImpl implements QuestionService {
     @Override
     @Transactional
     public QuestionVO generateArticleByAi(AiArticleGenerationRequest request) {
+        TranslationDirection direction = TranslationDirection.fromLearningMode(request.learningMode());
         Tag genreTag = resolveArticleGenre(request.genreTagCode());
         AiArticleGenerationRequest effectiveRequest = request.genreTagCode() == null
                 ? new AiArticleGenerationRequest(
@@ -229,13 +232,15 @@ public class QuestionServiceImpl implements QuestionService {
                         request.difficulty(),
                         genreTag.getCode(),
                         request.topic(),
-                        request.extraRequirements()
+                        request.extraRequirements(),
+                        request.learningMode(),
+                        request.lengthTier()
                 )
                 : request;
         AiQuestionTagOptionDTO genreOption = new AiQuestionTagOptionDTO(
                 genreTag.getCode(),
-                genreTag.getName(),
-                genreTag.getDescription()
+                direction == TranslationDirection.EN_TO_JA ? genreTag.getNameEn() : genreTag.getName(),
+                direction == TranslationDirection.EN_TO_JA ? genreTag.getDescriptionEn() : genreTag.getDescription()
         );
         AiArticleQuestionPromptBuilder articlePromptBuilder = new AiArticleQuestionPromptBuilder(objectMapper);
         AiArticleRetryContext retryContext = null;
@@ -250,7 +255,7 @@ public class QuestionServiceImpl implements QuestionService {
             List<Float> embedding = questionEmbeddingService.embedArticleBody(article.sourceText());
             List<QuestionEmbeddingMatch> matches = questionEmbeddingService.findSimilarQuestions(
                     embedding,
-                    ARTICLE_QUESTION_TYPE
+                    direction.articleQuestionType()
             );
             if (!matches.isEmpty()) {
                 retryContext = createArticleRetryContext(article.sourceText(), matches);
@@ -298,7 +303,7 @@ public class QuestionServiceImpl implements QuestionService {
 
         LocalDateTime now = LocalDateTime.now();
         Question question = new Question();
-        question.setQuestionType(QUESTION_TYPE);
+        question.setQuestionType(request.questionType());
         question.setSourceText(request.sourceText().trim());
         question.setContextText(request.contextText().trim());
         question.setLevel(request.level().trim());
@@ -351,7 +356,7 @@ public class QuestionServiceImpl implements QuestionService {
             return null;
         }
         QuestionVO question = questions.getFirst();
-        if (!ARTICLE_QUESTION_TYPE.equals(question.questionType())) {
+        if (!TranslationDirection.fromQuestionType(question.questionType()).isArticle(question.questionType())) {
             return question;
         }
         return new QuestionVO(
@@ -426,7 +431,7 @@ public class QuestionServiceImpl implements QuestionService {
         validateSelectedTags(request.questionType(), tags);
         List<AiQuestionAnswerDTO> answers = toAnswerDTOs(request.answers());
         validateAnswers(answers, "题目");
-        if (ARTICLE_QUESTION_TYPE.equals(request.questionType())) {
+        if (TranslationDirection.fromQuestionType(request.questionType()).isArticle(request.questionType())) {
             validateArticleEdit(request.sourceText(), answers);
         }
 
@@ -499,23 +504,25 @@ public class QuestionServiceImpl implements QuestionService {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "本地用户不存在或不可用");
         }
 
+        TranslationDirection direction = TranslationDirection.fromQuestionType(question.getQuestionType());
         List<Tag> tags = tagMapper.selectEnabledTagsByQuestionId(questionId);
-        List<AiQuestionTagOptionDTO> tagOptions = toTagOptions(tags);
-        List<AiErrorTypeOptionDTO> errorTypeOptions = dictionaryCacheService.getEnabledLeafErrorTypes();
+        List<AiQuestionTagOptionDTO> tagOptions = toTagOptions(tags, direction);
+        List<AiErrorTypeOptionDTO> errorTypeOptions = localizeErrorTypes(
+                dictionaryCacheService.getEnabledLeafErrorTypes(), direction);
         if (errorTypeOptions.isEmpty()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "没有可用的二级错误类型");
         }
         Map<String, AiErrorTypeOptionDTO> errorTypesByCode = errorTypeOptions.stream()
                 .collect(Collectors.toMap(AiErrorTypeOptionDTO::code, option -> option));
         String answerText = normalizeText(request.answerText());
-        int maxAnswerLength = ARTICLE_QUESTION_TYPE.equals(question.getQuestionType()) ? 5000 : 2000;
+        int maxAnswerLength = direction.isArticle(question.getQuestionType()) ? 5000 : 2000;
         if (answerText.isBlank()) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "答案不能为空");
         }
         if (answerText.length() > maxAnswerLength) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "答案长度不能超过 " + maxAnswerLength + " 个字符");
         }
-        if (ARTICLE_QUESTION_TYPE.equals(question.getQuestionType())
+        if (direction.isArticle(question.getQuestionType())
                 && !containsJapaneseKana(answerText)) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "文章答案必须包含日语假名");
         }
@@ -538,7 +545,7 @@ public class QuestionServiceImpl implements QuestionService {
                 standardAnswers
         );
         BigDecimal totalScore = calculateTotalScore(review.scores());
-        UserAnswer userAnswer = saveSubmittedAnswer(user.getId(), questionId, answerText);
+        UserAnswer userAnswer = saveSubmittedAnswer(user.getId(), questionId, answerText, direction.learningMode());
         LocalDateTime updatedAt = LocalDateTime.now();
         userAnswerMapper.updateReviewed(
                 userAnswer.getId(),
@@ -561,11 +568,12 @@ public class QuestionServiceImpl implements QuestionService {
         return toAnswerReviewVO(userAnswer, review, errorTypesByCode);
     }
 
-    private UserAnswer saveSubmittedAnswer(Long userId, Long questionId, String answerText) {
+    private UserAnswer saveSubmittedAnswer(Long userId, Long questionId, String answerText, String learningMode) {
         LocalDateTime now = LocalDateTime.now();
         UserAnswer userAnswer = new UserAnswer();
         userAnswer.setUserId(userId);
         userAnswer.setQuestionId(questionId);
+        userAnswer.setLearningMode(learningMode);
         userAnswer.setAnswerText(answerText);
         userAnswer.setAnswerStatus(ANSWER_STATUS_SUBMITTED);
         userAnswer.setDeleted(false);
@@ -622,9 +630,7 @@ public class QuestionServiceImpl implements QuestionService {
             String contextText,
             String grammarPoint
     ) {
-        if (!QUESTION_TYPE.equals(questionType) && !ARTICLE_QUESTION_TYPE.equals(questionType)) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "questionType 不合法");
-        }
+        TranslationDirection.fromQuestionType(questionType);
         validateRequiredText(sourceText, "sourceText 不能为空");
         if (!containsChinese(sourceText)) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "sourceText 必须包含中文");
@@ -654,7 +660,7 @@ public class QuestionServiceImpl implements QuestionService {
     }
 
     private void validateSelectedTags(String questionType, List<Tag> tags) {
-        if (ARTICLE_QUESTION_TYPE.equals(questionType)) {
+        if (TranslationDirection.fromQuestionType(questionType).isArticle(questionType)) {
             long genreTagCount = tags.stream()
                     .filter(tag -> TAG_TYPE_GENRE.equals(tag.getTagType()))
                     .count();
@@ -785,7 +791,7 @@ public class QuestionServiceImpl implements QuestionService {
         validateRequiredText(review.overallComment(), "AI 评分 overallComment 不能为空");
         validateComments(review.comments());
         review = normalizeOptionalReviewContent(review);
-        if (ARTICLE_QUESTION_TYPE.equals(question.getQuestionType())) {
+        if (TranslationDirection.fromQuestionType(question.getQuestionType()).isArticle(question.getQuestionType())) {
             List<String> sourceSegments = splitArticleSegments(question.getSourceText(), "sourceText");
             List<String> referenceSegments = splitArticleSegments(
                     standardAnswers.getFirst().getAnswerText(),
@@ -1070,10 +1076,26 @@ public class QuestionServiceImpl implements QuestionService {
                 .toList();
     }
 
-    private List<AiQuestionTagOptionDTO> toTagOptions(List<Tag> tags) {
+    private List<AiQuestionTagOptionDTO> toTagOptions(List<Tag> tags, TranslationDirection direction) {
         return tags.stream()
-                .map(tag -> new AiQuestionTagOptionDTO(tag.getCode(), tag.getName(), tag.getDescription()))
+                .map(tag -> new AiQuestionTagOptionDTO(
+                        tag.getCode(),
+                        direction.displayText(tag.getName(), tag.getNameEn()),
+                        direction.displayText(tag.getDescription(), tag.getDescriptionEn())))
                 .toList();
+    }
+
+    private List<AiErrorTypeOptionDTO> localizeErrorTypes(
+            List<AiErrorTypeOptionDTO> options,
+            TranslationDirection direction
+    ) {
+        return options.stream().map(option -> new AiErrorTypeOptionDTO(
+                option.id(), option.code(),
+                direction.displayText(option.name(), option.nameEn()),
+                direction.displayText(option.description(), option.descriptionEn()),
+                option.parentCode(),
+                direction.displayText(option.parentName(), option.parentNameEn())
+        )).toList();
     }
 
     private Map<String, Tag> toTagMap(List<Tag> tags) {
@@ -1106,6 +1128,7 @@ public class QuestionServiceImpl implements QuestionService {
             AiArticleGenerationResponseDTO response,
             String expectedSeed
     ) {
+        TranslationDirection direction = TranslationDirection.fromLearningMode(request.learningMode());
         AiArticleBlueprintDTO blueprint = validateArticleBlueprint(
                 response.blueprint(),
                 request.genreTagCode(),
@@ -1115,7 +1138,7 @@ public class QuestionServiceImpl implements QuestionService {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 article 不能为空");
         }
         var article = response.article();
-        if (!ARTICLE_QUESTION_TYPE.equals(article.questionType())) {
+        if (!direction.articleQuestionType().equals(article.questionType())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 questionType 不合法");
         }
         if (!request.level().equals(article.level()) || !request.difficulty().equals(article.difficulty())) {
@@ -1142,8 +1165,12 @@ public class QuestionServiceImpl implements QuestionService {
             if (sentence == null || sentence.index() == null || sentence.index() != index) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章句子索引必须从 0 连续递增");
             }
-            String chinese = requireArticleText(sentence.chineseText(), "AI 文章 chineseText 不能为空");
-            validateAiArticleChineseSentence(chinese, index);
+            String sourceText = requireArticleText(sentence.chineseText(), "AI 文章源句不能为空");
+            if (direction == TranslationDirection.ZH_TO_JA) {
+                validateAiArticleChineseSentence(sourceText, index);
+            } else if (containsChinese(sourceText) || containsJapaneseKana(sourceText)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 英文文章源句不能包含中日文字");
+            }
             String japanese = requireArticleText(sentence.japaneseReference(), "AI 文章 japaneseReference 不能为空");
             if (containsLineBreak(japanese) || !containsJapaneseKana(japanese)) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 japaneseReference 必须是无换行的日语句子");
@@ -1151,17 +1178,18 @@ public class QuestionServiceImpl implements QuestionService {
             if (!uniqueReferences.add(japanese)) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 japaneseReference 不能重复");
             }
-            sourceSegments.add(chinese);
+            sourceSegments.add(sourceText);
             referenceSegments.add(japanese);
         }
 
-        int characterCount = sourceSegments.stream()
-                .flatMapToInt(String::codePoints)
-                .filter(codePoint -> !Character.isWhitespace(codePoint))
-                .map(codePoint -> 1)
-                .sum();
-        if (characterCount < ARTICLE_MIN_LENGTH || characterCount > ARTICLE_MAX_LENGTH) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 中文文章长度必须在 150 到 300 个非空白字符之间");
+        int articleLength = direction.countArticleLength(String.join(" ", sourceSegments));
+        ArticleLengthTier lengthTier = ArticleLengthTier.from(request.lengthTier());
+        int minimumLength = lengthTier.minimum(direction);
+        int maximumLength = lengthTier.maximum(direction);
+        if (articleLength < minimumLength || articleLength > maximumLength) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "AI 文章长度必须在 " + minimumLength + " 到 "
+                            + maximumLength + " " + direction.articleLengthUnit() + "之间");
         }
         return new ValidatedArticle(
                 blueprint,
@@ -1223,7 +1251,7 @@ public class QuestionServiceImpl implements QuestionService {
     private QuestionVO saveArticle(ValidatedArticle article, Tag genreTag, List<Float> embedding) {
         LocalDateTime now = LocalDateTime.now();
         Question question = new Question();
-        question.setQuestionType(ARTICLE_QUESTION_TYPE);
+        question.setQuestionType(article.article().questionType());
         question.setSourceText(article.sourceText());
         question.setContextText(article.article().contextText().trim());
         question.setLevel(article.article().level());
@@ -1383,16 +1411,21 @@ public class QuestionServiceImpl implements QuestionService {
                 request.sceneTagCodes(),
                 request.functionTagCodes(),
                 List.copyOf(excludedSourceTexts),
-                request.extraRequirements()
+                request.extraRequirements(),
+                request.learningMode()
         );
     }
 
     private boolean isDuplicate(
             List<Float> embedding,
             List<List<Float>> excludedEmbeddings,
-            List<PreparedGeneratedQuestion> acceptedQuestions
+            List<PreparedGeneratedQuestion> acceptedQuestions,
+            String questionType
     ) {
-        if (!questionEmbeddingService.findSimilarQuestions(embedding).isEmpty()) {
+        List<QuestionEmbeddingMatch> matches = TranslationDirection.ZH_TO_JA.shortQuestionType().equals(questionType)
+                ? questionEmbeddingService.findSimilarQuestions(embedding)
+                : questionEmbeddingService.findSimilarQuestions(embedding, questionType);
+        if (!matches.isEmpty()) {
             return true;
         }
         if (excludedEmbeddings.stream().anyMatch(excluded -> questionEmbeddingService.isSimilar(embedding, excluded))) {
@@ -1417,12 +1450,19 @@ public class QuestionServiceImpl implements QuestionService {
         if (question == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + "不能为空");
         }
-        if (!QUESTION_TYPE.equals(question.questionType())) {
+        TranslationDirection direction = TranslationDirection.fromLearningMode(request.learningMode());
+        if (!direction.shortQuestionType().equals(question.questionType())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " questionType 不合法");
         }
         validateRequiredText(question.sourceText(), prefix + " sourceText 不能为空");
         if (!containsChinese(question.sourceText())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " sourceText 必须包含中文");
+            if (direction == TranslationDirection.ZH_TO_JA) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " sourceText 必须包含中文");
+            }
+        }
+        if (direction == TranslationDirection.EN_TO_JA
+                && (containsChinese(question.sourceText()) || containsJapaneseKana(question.sourceText()))) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " sourceText 必须是英文");
         }
         validateRequiredText(question.contextText(), prefix + " contextText 不能为空");
         if (!request.level().equals(question.level())) {
@@ -1532,7 +1572,7 @@ public class QuestionServiceImpl implements QuestionService {
         LocalDateTime now = LocalDateTime.now();
 
         Question question = new Question();
-        question.setQuestionType(QUESTION_TYPE);
+        question.setQuestionType(generatedQuestion.questionType());
         question.setSourceText(generatedQuestion.sourceText().trim());
         question.setContextText(generatedQuestion.contextText().trim());
         question.setLevel(generatedQuestion.level());
@@ -1629,6 +1669,8 @@ public class QuestionServiceImpl implements QuestionService {
                 tag.getCode(),
                 tag.getName(),
                 tag.getDescription(),
+                tag.getNameEn(),
+                tag.getDescriptionEn(),
                 tag.getSortOrder()
         );
     }
@@ -1641,6 +1683,8 @@ public class QuestionServiceImpl implements QuestionService {
                 tag.getCode(),
                 tag.getName(),
                 tag.getDescription(),
+                tag.getNameEn(),
+                tag.getDescriptionEn(),
                 tag.getSortOrder()
         );
     }

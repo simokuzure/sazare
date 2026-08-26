@@ -10,6 +10,8 @@ import java.time.LocalDateTime;
 public class UserErrorTypeListItemRow {
 
     private Long id;
+
+    private String learningMode;
     private Long errorTypeId;
     private String errorTypeCode;
     private String errorTypeName;

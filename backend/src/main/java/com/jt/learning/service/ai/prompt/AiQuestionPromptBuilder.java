@@ -1,5 +1,6 @@
 package com.jt.learning.service.ai.prompt;
 
+import com.jt.learning.common.TranslationDirection;
 import com.jt.learning.dto.AiQuestionGenerationRequest;
 import com.jt.learning.dto.AiQuestionTagOptionDTO;
 import com.jt.learning.service.ai.AiQuestionPrompt;
@@ -63,7 +64,11 @@ public class AiQuestionPromptBuilder {
             List<AiQuestionTagOptionDTO> sceneTagOptions,
             List<AiQuestionTagOptionDTO> functionTagOptions
     ) {
-        return new AiQuestionPrompt(SYSTEM_PROMPT, buildUserPrompt(request, sceneTagOptions, functionTagOptions));
+        TranslationDirection direction = TranslationDirection.fromLearningMode(request.learningMode());
+        return new AiQuestionPrompt(
+                direction.adaptPrompt(SYSTEM_PROMPT),
+                direction.adaptPrompt(buildUserPrompt(request, sceneTagOptions, functionTagOptions))
+        );
     }
 
     private String buildUserPrompt(

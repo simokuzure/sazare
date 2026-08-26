@@ -16,6 +16,7 @@
         where card.user_id = #{userId}
           and card.deleted = false
           and card.status = #{status}
+          and user_error_type.learning_mode = #{learningMode}
         <if test="dueOnly">
             and card.due_at &lt;= #{now}
         </if>
@@ -27,7 +28,7 @@
             card.user_error_type_id,
             user_error_type.error_type_id,
             error_type.code as error_type_code,
-            error_type.name as error_type_name,
+            case when user_error_type.learning_mode = 'EN_TO_JA' then error_type.name_en else error_type.name end as error_type_name,
             user_error_type.name as user_error_type_name,
             user_error_type.description as user_error_type_description,
             card.status,
@@ -64,6 +65,7 @@
           and card.deleted = false
           and user_error_type.status = 'ACTIVE'
           and card.status = #{status}
+          and user_error_type.learning_mode = #{learningMode}
         <if test="dueOnly">
             and card.due_at &lt;= #{now}
         </if>

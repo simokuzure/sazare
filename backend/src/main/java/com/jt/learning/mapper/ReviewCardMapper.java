@@ -13,9 +13,11 @@ import java.util.List;
 public interface ReviewCardMapper {
 
     long countCards(@Param("userId") Long userId, @Param("status") String status,
+                    @Param("learningMode") String learningMode,
                     @Param("dueOnly") boolean dueOnly, @Param("now") LocalDateTime now);
 
     List<ReviewCardListRow> selectCardList(@Param("userId") Long userId, @Param("status") String status,
+                                           @Param("learningMode") String learningMode,
                                            @Param("dueOnly") boolean dueOnly, @Param("now") LocalDateTime now,
                                            @Param("limit") int limit, @Param("offset") long offset);
 

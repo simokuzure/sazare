@@ -10,18 +10,12 @@ import ReviewPage from './pages/ReviewPage'
 import TagManagementPage from './pages/TagManagementPage'
 import type { HealthResponse } from './types/api'
 import './App.css'
+import { useLanguage } from './i18n/LanguageContext'
 
 type PageKey = 'practice' | 'answerRecords' | 'statistics' | 'tags' | 'questions' | 'errorTypes' | 'reviews'
 
-const NAV_ITEMS: { key: PageKey; label: string }[] = [
-  { key: 'practice', label: '练习' },
-  { key: 'reviews', label: '复习卡片' },
-  { key: 'answerRecords', label: '答题记录' },
-  { key: 'questions', label: '问题管理' },
-  { key: 'statistics', label: '学习分析' },
-]
-
 function App() {
+  const { english, learningMode, setLearningMode, t } = useLanguage()
   const [activePage, setActivePage] = useState<PageKey>('practice')
   const [health, setHealth] = useState<HealthResponse | null>(null)
 
@@ -36,6 +30,13 @@ function App() {
   }, [])
 
   const backendStatus = health?.data?.status ?? 'UNKNOWN'
+  const navItems: { key: PageKey; label: string }[] = [
+    { key: 'practice', label: t('practice') },
+    { key: 'reviews', label: t('reviewCards') },
+    { key: 'answerRecords', label: t('answerHistory') },
+    { key: 'questions', label: t('questionManagement') },
+    { key: 'statistics', label: t('learningAnalytics') },
+  ]
 
   return (
     <main className="app-shell">
@@ -43,16 +44,20 @@ function App() {
         <div className="app-header-inner">
           <div className="title-group">
             <div className="brand-row">
-              <button type="button" className="brand-link" onClick={() => setActivePage('practice')} aria-label="返回练习首页">
+              <button type="button" className="brand-link" onClick={() => setActivePage('practice')} aria-label={t('backToPractice')}>
                 <span className="brand-mark" aria-hidden="true">訳</span>
-                <h1>日语翻译练习</h1>
+                <h1>{t('appTitle')}</h1>
               </button>
-              <StatusBadge label="后端服务" value={backendStatus} />
+              <StatusBadge label={t('backend')} value={backendStatus} />
+              <div className="language-switch" role="group" aria-label={t('learningMode')}>
+                <button type="button" title="中译日" aria-pressed={!english} className={!english ? 'is-active' : ''} onClick={() => setLearningMode('ZH_TO_JA')}>中→日</button>
+                <button type="button" title="English to Japanese" aria-pressed={english} className={english ? 'is-active' : ''} onClick={() => setLearningMode('EN_TO_JA')}>EN→JA</button>
+              </div>
             </div>
           </div>
 
-          <nav className="top-nav" aria-label="主导航">
-            {NAV_ITEMS.map((item) => (
+          <nav className="top-nav" aria-label={t('mainNavigation')}>
+            {navItems.map((item) => (
               <button
                 key={item.key}
                 type="button"
@@ -69,14 +74,14 @@ function App() {
 
       <section className="workspace">
         <div hidden={activePage !== 'practice'}>
-          <PracticePage />
+          <PracticePage key={learningMode} />
         </div>
-        {activePage === 'answerRecords' ? <AnswerRecordsPage /> : null}
-        {activePage === 'statistics' ? <LearningStatisticsPage /> : null}
-        {activePage === 'tags' ? <TagManagementPage /> : null}
-        {activePage === 'questions' ? <QuestionManagementPage /> : null}
-        {activePage === 'errorTypes' ? <ErrorTypeManagementPage /> : null}
-        {activePage === 'reviews' ? <ReviewPage /> : null}
+        {activePage === 'answerRecords' ? <AnswerRecordsPage key={learningMode} /> : null}
+        {activePage === 'statistics' ? <LearningStatisticsPage key={learningMode} /> : null}
+        {activePage === 'tags' ? <TagManagementPage key={learningMode} /> : null}
+        {activePage === 'questions' ? <QuestionManagementPage key={learningMode} /> : null}
+        {activePage === 'errorTypes' ? <ErrorTypeManagementPage key={learningMode} /> : null}
+        {activePage === 'reviews' ? <ReviewPage key={learningMode} /> : null}
       </section>
     </main>
   )

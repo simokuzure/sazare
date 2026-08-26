@@ -1,5 +1,7 @@
 package com.jt.learning.dto;
 
+import com.jt.learning.common.TranslationDirection;
+
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -28,12 +30,23 @@ public record AiQuestionGenerationRequest(
         List<@NotBlank(message = "excludedSourceTexts 不能包含空值") String> excludedSourceTexts,
 
         @Size(max = 500, message = "extraRequirements 最多 500 个字符")
-        String extraRequirements
+        String extraRequirements,
+
+        @Pattern(regexp = TranslationDirection.LEARNING_MODE_PATTERN, message = "learningMode 只能是 ZH_TO_JA 或 EN_TO_JA")
+        String learningMode
 ) {
     public AiQuestionGenerationRequest {
         questionCount = questionCount == null ? 1 : questionCount;
         level = normalizeLevel(level);
         difficulty = difficulty == null ? 3 : difficulty;
+        learningMode = learningMode == null || learningMode.isBlank() ? "ZH_TO_JA" : learningMode.trim();
+    }
+
+    public AiQuestionGenerationRequest(Integer questionCount, String level, Integer difficulty,
+                                       List<String> sceneTagCodes, List<String> functionTagCodes,
+                                       List<String> excludedSourceTexts, String extraRequirements) {
+        this(questionCount, level, difficulty, sceneTagCodes, functionTagCodes,
+                excludedSourceTexts, extraRequirements, "ZH_TO_JA");
     }
 
     private static String normalizeLevel(String level) {

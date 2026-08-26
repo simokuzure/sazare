@@ -7,6 +7,7 @@
     <sql id="userAnswerListColumns">
         ua.id,
         ua.question_id,
+        ua.learning_mode,
         q.question_type,
         q.source_text,
         q.level,
@@ -26,6 +27,7 @@
     <sql id="userAnswerDetailColumns">
         ua.id,
         ua.question_id,
+        ua.learning_mode,
         q.question_type,
         q.source_text,
         q.context_text,
@@ -49,6 +51,7 @@
         where ua.user_id = #{userId}
           and ua.deleted = false
           and (ua.question_id is null or q.deleted = false)
+          and ua.learning_mode = #{request.learningMode}
         <if test="request.answerStatus != null">
             and ua.answer_status = #{request.answerStatus}
         </if>
@@ -80,6 +83,7 @@
         insert into user_answers (
             user_id,
             question_id,
+            learning_mode,
             answer_text,
             answer_status,
             deleted,
@@ -88,6 +92,7 @@
         ) values (
             #{userId},
             #{questionId},
+            #{learningMode},
             #{answerText},
             #{answerStatus},
             #{deleted},
@@ -101,6 +106,7 @@
         insert into user_answers (
             user_id,
             question_id,
+            learning_mode,
             answer_text,
             answer_status,
             grammar_vocabulary_score,
@@ -116,6 +122,7 @@
         ) values (
             #{userId},
             null,
+            #{learningMode},
             #{answerText},
             'REVIEWED',
             #{grammarVocabularyScore},
@@ -179,6 +186,7 @@
             id,
             user_id,
             question_id,
+            learning_mode,
             answer_text,
             answer_status,
             grammar_vocabulary_score,

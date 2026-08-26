@@ -4,6 +4,7 @@ export type UserErrorTypeStatus = 'ACTIVE' | 'ARCHIVED'
 
 export type UserErrorType = {
   id: number
+  learningMode: 'ZH_TO_JA' | 'EN_TO_JA'
   errorTypeId: number
   errorTypeCode: string
   errorTypeName: string
@@ -15,6 +16,7 @@ export type UserErrorType = {
 }
 
 export type UserErrorTypeFilterState = {
+  learningMode?: 'ZH_TO_JA' | 'EN_TO_JA'
   status: UserErrorTypeStatus
   page: number
   size: number

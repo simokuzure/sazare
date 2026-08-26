@@ -21,5 +21,9 @@ public class QuestionTagRow {
 
     private String description;
 
+    private String nameEn;
+
+    private String descriptionEn;
+
     private Integer sortOrder;
 }

@@ -1,5 +1,6 @@
 package com.jt.learning.service.impl;
 
+import com.jt.learning.common.TranslationDirection;
 import com.jt.learning.dto.AiAnswerErrorAnalysisDTO;
 import com.jt.learning.dto.AiErrorTypeOptionDTO;
 import com.jt.learning.dto.AiQuestionAnswerDTO;
@@ -160,13 +161,15 @@ public class ReviewServiceImpl implements ReviewService {
     public PageVO<ReviewCardListVO> listReviewCards(ReviewCardQueryRequest request) {
         User user = requireLocalUser();
         LocalDateTime now = LocalDateTime.now();
-        long total = reviewCardMapper.countCards(user.getId(), request.status(), request.dueOnly(), now);
+        long total = reviewCardMapper.countCards(
+                user.getId(), request.status(), request.learningMode(), request.dueOnly(), now);
         if (total == 0) {
             return new PageVO<>(List.of(), request.page(), request.size(), 0);
         }
         long offset = (long) (request.page() - 1) * request.size();
         List<ReviewCardListVO> items = reviewCardMapper.selectCardList(
-                        user.getId(), request.status(), request.dueOnly(), now, request.size(), offset)
+                        user.getId(), request.status(), request.learningMode(),
+                        request.dueOnly(), now, request.size(), offset)
                 .stream()
                 .map(this::toCardListVO)
                 .toList();
@@ -238,8 +241,10 @@ public class ReviewServiceImpl implements ReviewService {
         Question question = requireQuestion(cycleQuestion.getQuestionId());
         List<QuestionAnswer> standardAnswers = requireAnswers(question.getId());
         UserErrorType userErrorType = requireUserErrorType(card, user.getId());
+        TranslationDirection direction = TranslationDirection.fromLearningMode(userErrorType.getLearningMode());
         ErrorType errorType = requireErrorType(userErrorType.getErrorTypeId());
-        List<AiErrorTypeOptionDTO> errorTypeOptions = dictionaryCacheService.getEnabledLeafErrorTypes();
+        List<AiErrorTypeOptionDTO> errorTypeOptions = localizeErrorTypes(
+                dictionaryCacheService.getEnabledLeafErrorTypes(), direction);
         Map<String, AiErrorTypeOptionDTO> errorTypesByCode = errorTypeOptions.stream()
                 .collect(Collectors.toMap(AiErrorTypeOptionDTO::code, Function.identity()));
 
@@ -258,7 +263,7 @@ public class ReviewServiceImpl implements ReviewService {
 
         BigDecimal totalScore = calculateTotalScore(review);
         UserAnswer userAnswer = createSubmittedAnswer(
-                user.getId(), question.getId(), request.answerText().trim(), now);
+                user.getId(), question.getId(), userErrorType.getLearningMode(), request.answerText().trim(), now);
         userAnswerMapper.updateReviewed(
                 userAnswer.getId(),
                 review.scores().grammarVocabularyScore(),
@@ -535,8 +540,9 @@ public class ReviewServiceImpl implements ReviewService {
         Map<String, Tag> allowedTagsByCode = java.util.stream.Stream.concat(
                         sceneTags.stream(), functionTags.stream())
                 .collect(Collectors.toMap(Tag::getCode, Function.identity(), (left, right) -> left, LinkedHashMap::new));
-        List<AiQuestionTagOptionDTO> sceneTagOptions = toTagOptions(sceneTags);
-        List<AiQuestionTagOptionDTO> functionTagOptions = toTagOptions(functionTags);
+        TranslationDirection direction = TranslationDirection.fromLearningMode(userErrorType.getLearningMode());
+        List<AiQuestionTagOptionDTO> sceneTagOptions = toTagOptions(sceneTags, direction);
+        List<AiQuestionTagOptionDTO> functionTagOptions = toTagOptions(functionTags, direction);
         AiQuestionPrompt prompt = questionPromptBuilder.build(
                 userErrorType, errorType, questions, answersByQuestionId, sceneTagOptions, functionTagOptions);
         Set<String> sourceTexts = questions.stream().map(Question::getSourceText).collect(Collectors.toSet());
@@ -655,10 +661,24 @@ public class ReviewServiceImpl implements ReviewService {
                 question.getSpoken(), question.getBusiness(), question.getExam(), tags, cycleQuestion.getAttemptCount());
     }
 
-    private List<AiQuestionTagOptionDTO> toTagOptions(List<Tag> tags) {
+    private List<AiQuestionTagOptionDTO> toTagOptions(List<Tag> tags, TranslationDirection direction) {
         return tags.stream()
-                .map(tag -> new AiQuestionTagOptionDTO(tag.getCode(), tag.getName(), tag.getDescription()))
+                .map(tag -> new AiQuestionTagOptionDTO(tag.getCode(),
+                        direction.displayText(tag.getName(), tag.getNameEn()),
+                        direction.displayText(tag.getDescription(), tag.getDescriptionEn())))
                 .toList();
+    }
+
+    private List<AiErrorTypeOptionDTO> localizeErrorTypes(
+            List<AiErrorTypeOptionDTO> options,
+            TranslationDirection direction
+    ) {
+        return options.stream().map(option -> new AiErrorTypeOptionDTO(
+                option.id(), option.code(),
+                direction.displayText(option.name(), option.nameEn()),
+                direction.displayText(option.description(), option.descriptionEn()),
+                option.parentCode(), direction.displayText(option.parentName(), option.parentNameEn())
+        )).toList();
     }
 
     private ReviewCardListVO toCardListVO(ReviewCardListRow row) {
@@ -764,10 +784,17 @@ public class ReviewServiceImpl implements ReviewService {
         return answers;
     }
 
-    private UserAnswer createSubmittedAnswer(Long userId, Long questionId, String answerText, LocalDateTime now) {
+    private UserAnswer createSubmittedAnswer(
+            Long userId,
+            Long questionId,
+            String learningMode,
+            String answerText,
+            LocalDateTime now
+    ) {
         UserAnswer answer = new UserAnswer();
         answer.setUserId(userId);
         answer.setQuestionId(questionId);
+        answer.setLearningMode(learningMode);
         answer.setAnswerText(answerText);
         answer.setAnswerStatus("SUBMITTED");
         answer.setDeleted(false);
@@ -922,7 +949,7 @@ public class ReviewServiceImpl implements ReviewService {
 
     private TagVO toTagVO(Tag tag) {
         return new TagVO(tag.getId(), tag.getTagType(), tag.getParentId(), tag.getCode(), tag.getName(),
-                tag.getDescription(), tag.getSortOrder());
+                tag.getDescription(), tag.getNameEn(), tag.getDescriptionEn(), tag.getSortOrder());
     }
 
     private BusinessException business(String message) {

@@ -11,6 +11,7 @@
             avg(total_score) filter (where answer_status = 'REVIEWED') as average_total_score
         from user_answers
         where user_id = #{userId}
+          and learning_mode = #{learningMode}
           and deleted = false
           and question_id is not null
           and created_at &gt;= #{startAt}
@@ -24,6 +25,7 @@
             avg(total_score) filter (where answer_status = 'REVIEWED') as average_total_score
         from user_answers
         where user_id = #{userId}
+          and learning_mode = #{learningMode}
           and deleted = false
           and question_id is null
           and created_at &gt;= #{startAt}
@@ -37,6 +39,7 @@
             on user_answer.id = answer_error.user_answer_id
            and user_answer.user_id = #{userId}
            and user_answer.deleted = false
+           and user_answer.learning_mode = #{learningMode}
         where answer_error.user_id = #{userId}
           and answer_error.created_at &gt;= #{startAt}
           and answer_error.created_at &lt; #{endAt}
@@ -49,6 +52,7 @@
             avg(total_score) filter (where answer_status = 'REVIEWED') as average_total_score
         from user_answers
         where user_id = #{userId}
+          and learning_mode = #{learningMode}
           and deleted = false
           and question_id is not null
           and created_at &gt;= #{startAt}
@@ -64,6 +68,7 @@
             avg(total_score) filter (where answer_status = 'REVIEWED') as average_total_score
         from user_answers
         where user_id = #{userId}
+          and learning_mode = #{learningMode}
           and deleted = false
           and question_id is null
           and created_at &gt;= #{startAt}
@@ -80,6 +85,7 @@
             avg(information_completeness_score) as information_completeness_score
         from user_answers
         where user_id = #{userId}
+          and learning_mode = #{learningMode}
           and deleted = false
           and question_id is not null
           and answer_status = 'REVIEWED'
@@ -95,6 +101,7 @@
             avg(information_completeness_score) as information_completeness_score
         from user_answers
         where user_id = #{userId}
+          and learning_mode = #{learningMode}
           and deleted = false
           and question_id is null
           and answer_status = 'REVIEWED'
@@ -109,7 +116,7 @@
             user_error_type.status as user_error_type_status,
             error_type.id as error_type_id,
             error_type.code as error_type_code,
-            error_type.name as error_type_name,
+            case when #{learningMode} = 'EN_TO_JA' then error_type.name_en else error_type.name end as error_type_name,
             count(1) as confirmed_count,
             count(*) filter (where answer_error.severity = 'LOW') as low_severity_count,
             count(*) filter (where answer_error.severity = 'MEDIUM') as medium_severity_count,
@@ -122,9 +129,11 @@
             on user_answer.id = answer_error.user_answer_id
            and user_answer.user_id = #{userId}
            and user_answer.deleted = false
+           and user_answer.learning_mode = #{learningMode}
         inner join user_error_types user_error_type
             on user_error_type.id = answer_error.user_error_type_id
            and user_error_type.user_id = #{userId}
+           and user_error_type.learning_mode = #{learningMode}
         inner join error_types error_type
             on error_type.id = answer_error.error_type_id
         left join review_cards review_card
@@ -141,6 +150,7 @@
             error_type.id,
             error_type.code,
             error_type.name,
+            error_type.name_en,
             review_card.status,
             review_card.due_at
         order by confirmed_count desc, last_confirmed_at desc, answer_error.user_error_type_id desc
@@ -149,13 +159,14 @@
 
     <select id="selectCurrentReviewSummary" resultType="com.jt.learning.dto.LearningStatisticsCurrentReviewRow">
         select
-            count(*) filter (where status = 'ACTIVE' and due_at &lt;= #{now}) as due_card_count,
-            count(*) filter (where status = 'ACTIVE') as active_card_count,
-            count(*) filter (where status = 'MASTERED') as mastered_card_count
+            count(*) filter (where review_card.status = 'ACTIVE' and review_card.due_at &lt;= #{now}) as due_card_count,
+            count(*) filter (where review_card.status = 'ACTIVE') as active_card_count,
+            count(*) filter (where review_card.status = 'MASTERED') as mastered_card_count
         from review_cards review_card
         inner join user_error_types user_error_type
             on user_error_type.id = review_card.user_error_type_id
            and user_error_type.status = 'ACTIVE'
+           and user_error_type.learning_mode = #{learningMode}
         where review_card.user_id = #{userId}
           and review_card.deleted = false
     </select>
@@ -163,12 +174,15 @@
     <select id="selectPeriodReviewSummary" resultType="com.jt.learning.dto.LearningStatisticsPeriodReviewRow">
         select
             count(1) as review_attempt_count,
-            count(*) filter (where result = 'PASS') as review_pass_count
-        from review_attempts
-        where user_id = #{userId}
-          and attempt_source = 'REVIEW'
-          and created_at &gt;= #{startAt}
-          and created_at &lt; #{endAt}
+            count(*) filter (where review_attempt.result = 'PASS') as review_pass_count
+        from review_attempts review_attempt
+        inner join review_cards review_card on review_card.id = review_attempt.review_card_id
+        inner join user_error_types user_error_type on user_error_type.id = review_card.user_error_type_id
+        where review_attempt.user_id = #{userId}
+          and user_error_type.learning_mode = #{learningMode}
+          and review_attempt.attempt_source = 'REVIEW'
+          and review_attempt.created_at &gt;= #{startAt}
+          and review_attempt.created_at &lt; #{endAt}
     </select>
 
     <select id="countCompletedReviewCycles" resultType="long">
@@ -177,6 +191,9 @@
         inner join review_cards review_card
             on review_card.id = review_cycle.review_card_id
            and review_card.user_id = #{userId}
+        inner join user_error_types user_error_type
+            on user_error_type.id = review_card.user_error_type_id
+           and user_error_type.learning_mode = #{learningMode}
         where review_cycle.status = 'COMPLETED'
           and review_cycle.completed_at &gt;= #{startAt}
           and review_cycle.completed_at &lt; #{endAt}

@@ -16,6 +16,7 @@ public interface UserErrorTypeMapper {
     UserErrorType selectActiveByUserIdAndErrorTypeIdAndName(
             @Param("userId") Long userId,
             @Param("errorTypeId") Long errorTypeId,
+            @Param("learningMode") String learningMode,
             @Param("name") String name
     );
 
@@ -24,11 +25,13 @@ public interface UserErrorTypeMapper {
     int archiveByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId,
                              @Param("updatedAt") LocalDateTime updatedAt);
 
-    long countUserErrorTypes(@Param("userId") Long userId, @Param("status") String status);
+    long countUserErrorTypes(@Param("userId") Long userId, @Param("status") String status,
+                             @Param("learningMode") String learningMode);
 
     List<UserErrorTypeListItemRow> selectUserErrorTypeList(
             @Param("userId") Long userId,
             @Param("status") String status,
+            @Param("learningMode") String learningMode,
             @Param("limit") int limit,
             @Param("offset") long offset
     );

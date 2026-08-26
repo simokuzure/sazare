@@ -1,5 +1,6 @@
 package com.jt.learning.service.impl;
 
+import com.jt.learning.common.TranslationDirection;
 import com.jt.learning.dto.UserAnswerDetailRow;
 import com.jt.learning.dto.UserAnswerErrorConfirmItemRequest;
 import com.jt.learning.dto.UserAnswerErrorConfirmRequest;
@@ -63,8 +64,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     private static final String USER_ERROR_TYPE_STATUS_ACTIVE = "ACTIVE";
     private static final String CONFIRM_MODE_NEW = "NEW_USER_ERROR_TYPE";
     private static final String CONFIRM_MODE_EXISTING = "EXISTING_USER_ERROR_TYPE";
-    private static final String ARTICLE_QUESTION_TYPE = "TRANSLATION_ZH_TO_JA_ARTICLE";
-    private static final String SHORT_QUESTION_TYPE = "TRANSLATION_ZH_TO_JA";
     private static final String SOURCE_TYPE_REVIEW_DERIVED = "REVIEW_DERIVED";
     private static final String DEFAULT_CORRECTION_REVIEW_LEVEL = "N3";
     private static final int DEFAULT_CORRECTION_REVIEW_DIFFICULTY = 3;
@@ -201,7 +200,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         List<UserAnswerErrorVO> savedErrors = request.errors().stream()
                 .map(item -> saveConfirmedError(user, userAnswer, question, item, now))
                 .toList();
-        if (ARTICLE_QUESTION_TYPE.equals(question.getQuestionType())) {
+        if (TranslationDirection.fromQuestionType(question.getQuestionType()).isArticle(question.getQuestionType())) {
             recordArticleReviewQuestions(user, userAnswer, question, savedErrors, now);
             return savedErrors;
         }
@@ -238,14 +237,18 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         if (userAnswer.getQuestionId() != null && sourceQuestion == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "作答对应题目不存在");
         }
-        String reviewSourceText = resolveCustomReviewSource(sourceQuestion, request);
+        String learningMode = sourceQuestion == null
+                ? TranslationDirection.fromLearningMode(userAnswer.getLearningMode()).learningMode()
+                : TranslationDirection.fromQuestionType(sourceQuestion.getQuestionType()).learningMode();
+        String reviewSourceText = resolveCustomReviewSource(
+                sourceQuestion, learningMode, request);
 
         ErrorType errorType = errorTypeMapper.selectEnabledLeafByCode(CUSTOM_REVIEW_ERROR_TYPE_CODE);
         if (errorType == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "自定义复习卡片分类不可用");
         }
         UserErrorType existing = userErrorTypeMapper.selectActiveByUserIdAndErrorTypeIdAndName(
-                user.getId(), errorType.getId(), name);
+                user.getId(), errorType.getId(), learningMode, name);
         if (existing != null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同名复习卡片已存在，请使用其他复习重点");
         }
@@ -254,6 +257,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         UserErrorType userErrorType = new UserErrorType();
         userErrorType.setUserId(user.getId());
         userErrorType.setErrorTypeId(errorType.getId());
+        userErrorType.setLearningMode(learningMode);
         userErrorType.setName(name);
         userErrorType.setDescription(CUSTOM_REVIEW_TYPE_DESCRIPTION);
         userErrorType.setStatus(USER_ERROR_TYPE_STATUS_ACTIVE);
@@ -277,22 +281,32 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         userAnswerErrorMapper.insertUserAnswerError(reviewItem);
 
         Long reviewQuestionId = createCustomReviewQuestion(
-                sourceQuestion, reviewSourceText, targetExpression, name, now);
+                sourceQuestion, learningMode, reviewSourceText, targetExpression, name, now);
         ReviewCard card = reviewService.recordPracticeError(
                 user.getId(), userAnswer.getId(), reviewQuestionId, userErrorType.getId(), now);
         return new ReviewCardCreatedVO(card.getId(), name, card.getStatus(), card.getDueAt());
     }
 
-    private String resolveCustomReviewSource(Question question, ReviewCardCreateRequest request) {
+    private String resolveCustomReviewSource(
+            Question question,
+            String learningMode,
+            ReviewCardCreateRequest request
+    ) {
         if (question == null) {
             if (request.sourceSegmentIndex() != null) {
                 throw new BusinessException(ErrorCode.PARAM_ERROR, "纯日语纠错不能提交中文原句索引");
             }
             String sourceText = requireText(request.reviewSourceText(), "纯日语纠错必须填写复习题中文");
-            if (sourceText.length() > 1000
-                    || !HAN_PATTERN.matcher(sourceText).find()
+            TranslationDirection direction = TranslationDirection.fromLearningMode(learningMode);
+            boolean invalidLanguage = direction == TranslationDirection.ZH_TO_JA
+                    ? !HAN_PATTERN.matcher(sourceText).find()
+                    : HAN_PATTERN.matcher(sourceText).find();
+            if (sourceText.length() > 1000 || invalidLanguage
                     || JAPANESE_KANA_PATTERN.matcher(sourceText).find()) {
-                throw new BusinessException(ErrorCode.PARAM_ERROR, "复习题中文必须是不超过 1000 字符的中文文本");
+                String message = direction == TranslationDirection.ZH_TO_JA
+                        ? "纯日语纠错的复习题中文文本必须包含中文且不能包含日语假名"
+                        : "复习题英文必须是英文且不能包含中文或日语假名";
+                throw new BusinessException(ErrorCode.PARAM_ERROR, message);
             }
             return sourceText;
         }
@@ -300,7 +314,8 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         if (request.reviewSourceText() != null) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "有题目作答不能提交复习题中文");
         }
-        if (ARTICLE_QUESTION_TYPE.equals(question.getQuestionType())) {
+        TranslationDirection direction = TranslationDirection.fromQuestionType(question.getQuestionType());
+        if (direction.isArticle(question.getQuestionType())) {
             if (request.sourceSegmentIndex() == null) {
                 throw new BusinessException(ErrorCode.PARAM_ERROR, "文章复习卡片必须选择中文原句");
             }
@@ -311,7 +326,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             }
             return segments.get(index);
         }
-        if (!SHORT_QUESTION_TYPE.equals(question.getQuestionType())) {
+        if (!direction.shortQuestionType().equals(question.getQuestionType())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前题型不支持自定义复习卡片");
         }
         if (request.sourceSegmentIndex() != null) {
@@ -322,13 +337,16 @@ public class UserAnswerServiceImpl implements UserAnswerService {
 
     private Long createCustomReviewQuestion(
             Question sourceQuestion,
+            String learningMode,
             String sourceText,
             String targetExpression,
             String reviewFocus,
             LocalDateTime now
     ) {
         Question question = new Question();
-        question.setQuestionType(SHORT_QUESTION_TYPE);
+        question.setQuestionType(sourceQuestion == null
+                ? TranslationDirection.fromLearningMode(learningMode).shortQuestionType()
+                : TranslationDirection.fromQuestionType(sourceQuestion.getQuestionType()).shortQuestionType());
         question.setSourceText(sourceText);
         question.setContextText(customReviewContext(sourceQuestion));
         question.setLevel(sourceQuestion == null || sourceQuestion.getLevel() == null
@@ -376,7 +394,8 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             UserAnswerErrorConfirmItemRequest request,
             LocalDateTime now
     ) {
-        ResolvedUserErrorType resolvedType = resolveUserErrorType(user.getId(), request, now);
+        ResolvedUserErrorType resolvedType = resolveUserErrorType(
+                user.getId(), userAnswer.getLearningMode(), request, now);
         ErrorType errorType = errorTypeMapper.selectEnabledLeafById(resolvedType.errorTypeId());
         if (errorType == null || TRANSLATION_ONLY_ERROR_CODES.contains(errorType.getCode())) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "该错误类型不适用于纯日语纠错");
@@ -417,9 +436,8 @@ public class UserAnswerServiceImpl implements UserAnswerService {
                 "日语纠错错误的 reviewSourceText 不能为空"
         );
         if (reviewSourceText.length() > 1000
-                || !HAN_PATTERN.matcher(reviewSourceText).find()
                 || JAPANESE_KANA_PATTERN.matcher(reviewSourceText).find()) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "reviewSourceText 必须是不超过 1000 字符的中文文本");
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "reviewSourceText 必须是不超过 1000 字符的中英文文本");
         }
     }
 
@@ -439,6 +457,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
                     ignored -> createCorrectionReviewQuestion(
                             savedError.reviewSourceText(),
                             error.suggestion(),
+                            userAnswer.getLearningMode(),
                             user.getId(),
                             error.userErrorTypeId(),
                             now
@@ -456,6 +475,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     private Long createCorrectionReviewQuestion(
             String sourceText,
             String referenceText,
+            String learningMode,
             Long userId,
             Long userErrorTypeId,
             LocalDateTime now
@@ -466,9 +486,12 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         }
 
         Question question = new Question();
-        question.setQuestionType(SHORT_QUESTION_TYPE);
+        TranslationDirection direction = TranslationDirection.fromLearningMode(learningMode);
+        question.setQuestionType(direction.shortQuestionType());
         question.setSourceText(sourceText);
-        question.setContextText("日语纠错错句复习");
+        question.setContextText(direction == TranslationDirection.EN_TO_JA
+                ? "Review of an expression corrected from Japanese writing"
+                : "日语纠错错句复习");
         question.setLevel(DEFAULT_CORRECTION_REVIEW_LEVEL);
         question.setDifficulty(DEFAULT_CORRECTION_REVIEW_DIFFICULTY);
         question.setGrammarPoint(userErrorType.getName());
@@ -498,7 +521,8 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     @Override
     public PageVO<UserErrorTypeVO> listUserErrorTypes(UserErrorTypeQueryRequest request) {
         User user = getLocalDefaultUser();
-        long total = userErrorTypeMapper.countUserErrorTypes(user.getId(), request.status());
+        long total = userErrorTypeMapper.countUserErrorTypes(
+                user.getId(), request.status(), request.learningMode());
         if (total == 0) {
             return new PageVO<>(List.of(), request.page(), request.size(), 0);
         }
@@ -507,6 +531,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         List<UserErrorTypeVO> items = userErrorTypeMapper.selectUserErrorTypeList(
                         user.getId(),
                         request.status(),
+                        request.learningMode(),
                         request.size(),
                         offset
                 )
@@ -523,7 +548,8 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             UserAnswerErrorConfirmItemRequest request,
             LocalDateTime now
     ) {
-        ResolvedUserErrorType resolvedType = resolveUserErrorType(user.getId(), request, now);
+        ResolvedUserErrorType resolvedType = resolveUserErrorType(
+                user.getId(), userAnswer.getLearningMode(), request, now);
         ErrorType errorType = errorTypeMapper.selectEnabledLeafById(resolvedType.errorTypeId());
         validateConfirmedOriginal(question, userAnswer, errorType, request.originalText());
         UserAnswerError error = new UserAnswerError();
@@ -550,7 +576,8 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             String originalText
     ) {
         String original = originalText.trim();
-        if (ARTICLE_QUESTION_TYPE.equals(question.getQuestionType()) && "OMISSION".equals(errorType.getCode())) {
+        if (TranslationDirection.fromQuestionType(question.getQuestionType()).isArticle(question.getQuestionType())
+                && "OMISSION".equals(errorType.getCode())) {
             if (!splitSegments(question.getSourceText()).contains(original)) {
                 throw new BusinessException(ErrorCode.PARAM_ERROR, "漏译错误的 originalText 必须是文章中文原句");
             }
@@ -627,7 +654,8 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "用户错误类型不存在或已归档");
         }
         Question question = new Question();
-        question.setQuestionType(SHORT_QUESTION_TYPE);
+        question.setQuestionType(
+                TranslationDirection.fromQuestionType(articleQuestion.getQuestionType()).shortQuestionType());
         question.setSourceText(sourceText);
         question.setContextText(articleQuestion.getContextText() + "（文章错句复习）");
         question.setLevel(articleQuestion.getLevel());
@@ -700,6 +728,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
 
     private ResolvedUserErrorType resolveUserErrorType(
             Long userId,
+            String learningMode,
             UserAnswerErrorConfirmItemRequest request,
             LocalDateTime now
     ) {
@@ -731,6 +760,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         UserErrorType existing = userErrorTypeMapper.selectActiveByUserIdAndErrorTypeIdAndName(
                 userId,
                 request.errorTypeId(),
+                learningMode,
                 name
         );
         if (existing != null) {
@@ -743,6 +773,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         UserErrorType userErrorType = new UserErrorType();
         userErrorType.setUserId(userId);
         userErrorType.setErrorTypeId(request.errorTypeId());
+        userErrorType.setLearningMode(learningMode);
         userErrorType.setName(name);
         userErrorType.setDescription(description);
         userErrorType.setStatus(USER_ERROR_TYPE_STATUS_ACTIVE);
@@ -775,7 +806,8 @@ public class UserAnswerServiceImpl implements UserAnswerService {
                 request.minTotalScore(),
                 request.maxTotalScore(),
                 request.page(),
-                request.size()
+                request.size(),
+                request.learningMode()
         );
     }
 
@@ -799,6 +831,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         return new UserAnswerListItemVO(
                 row.getId(),
                 row.getQuestionId(),
+                row.getLearningMode(),
                 row.getQuestionType(),
                 row.getSourceText(),
                 row.getLevel(),
@@ -826,6 +859,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         return new UserAnswerDetailVO(
                 row.getId(),
                 row.getQuestionId(),
+                row.getLearningMode(),
                 row.getQuestionType(),
                 row.getSourceText(),
                 row.getContextText(),
@@ -858,6 +892,8 @@ public class UserAnswerServiceImpl implements UserAnswerService {
                 tag.getCode(),
                 tag.getName(),
                 tag.getDescription(),
+                tag.getNameEn(),
+                tag.getDescriptionEn(),
                 tag.getSortOrder()
         );
     }
@@ -890,6 +926,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     private UserErrorTypeVO toUserErrorTypeVO(UserErrorTypeListItemRow row) {
         return new UserErrorTypeVO(
                 row.getId(),
+                row.getLearningMode(),
                 row.getErrorTypeId(),
                 row.getErrorTypeCode(),
                 row.getErrorTypeName(),

@@ -111,4 +111,43 @@ class AiAnswerScoringPromptBuilderTest {
                 .contains("\"expression\": \"日语推荐表达\"")
                 .contains("没有推荐表达时，recommendedExpressions 必须返回 []");
     }
+
+    @Test
+    void buildShouldRequestEnglishFeedbackForEnglishQuestion() {
+        Question question = new Question();
+        question.setQuestionType("TRANSLATION_EN_TO_JA");
+        question.setSourceText("Please tell me where the station is.");
+        question.setContextText("Everyday conversation.");
+        question.setLevel("N4");
+        question.setDifficulty(2);
+        question.setGrammarPoint("Indirect question");
+        question.setSpoken(true);
+        question.setBusiness(false);
+        question.setExam(false);
+
+        QuestionAnswer answer = new QuestionAnswer();
+        answer.setAnswerText("駅がどこにあるか教えてください。");
+        answer.setAnswerType("STANDARD");
+        answer.setPrimaryAnswer(true);
+        answer.setSortOrder(0);
+
+        AiQuestionPrompt prompt = promptBuilder.build(
+                question, List.of(answer), List.of(), List.of(),
+                new AiAnswerScoringRequest("駅はどこか教えてください。"));
+
+        assertThat(prompt.systemPrompt())
+                .contains("all explanatory output must be English")
+                .contains("comments field")
+                .contains("revisionSuggestions[]")
+                .contains("recommendedExpressions[].usage")
+                .contains("must remain Japanese")
+                .contains("TRANSLATION_EN_TO_JA");
+        assertThat(prompt.userPrompt())
+                .contains("\"grammarComment\": \"English grammar explanation\"")
+                .contains("\"revisionSuggestions\": [\"English revision suggestion\"]")
+                .contains("\"usage\": \"English usage context\"")
+                .doesNotContain("使用简洁中文")
+                .doesNotContain("\"grammarComment\": \"中文语法说明\"")
+                .doesNotContain("\"revisionSuggestions\": [\"中文修改建议\"]");
+    }
 }

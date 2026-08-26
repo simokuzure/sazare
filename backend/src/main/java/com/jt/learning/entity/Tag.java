@@ -39,6 +39,10 @@ public class Tag {
      */
     private String description;
 
+    private String nameEn;
+
+    private String descriptionEn;
+
     /**
      * 排序值，数值越小越靠前
      */

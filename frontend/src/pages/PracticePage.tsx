@@ -19,6 +19,7 @@ import type { Tag } from '../types/tag'
 import type { AiQuestionGenerationPayload, Question, RandomQuestionFilter } from '../types/question'
 import type { AnswerReview } from '../types/review'
 import type { UserAnswerErrorConfirmation, UserErrorType } from '../types/userError'
+import { useLanguage } from '../i18n/LanguageContext'
 
 type AnswerSessionState = {
   answerText: string
@@ -45,14 +46,15 @@ const EMPTY_ANSWER_SESSION: AnswerSessionState = {
 type PracticeMode = 'sentence' | 'article' | 'correction'
 
 export default function PracticePage() {
+  const { text } = useLanguage()
   const [activeMode, setActiveMode] = useState<PracticeMode>('sentence')
 
   return (
-    <section className="page-content" aria-label="练习">
+    <section className="page-content" aria-label={text('练习', 'Practice')}>
       <PageHeader
-        title="翻译练习"
-        description="选择练习模式，生成题目并提交作答，AI 会即时评分与纠错。"
-        actions={<div className="practice-tabs" role="tablist" aria-label="翻译练习类型">
+        title={text('翻译练习', 'Translation practice')}
+        description={text('选择练习模式，生成题目并提交作答，AI 会即时评分与纠错。', 'Choose a practice type, generate a question, and receive immediate AI feedback.')}
+        actions={<div className="practice-tabs" role="tablist" aria-label={text('翻译练习类型', 'Practice type')}>
         <button
           id="sentence-practice-tab"
           type="button"
@@ -62,7 +64,7 @@ export default function PracticePage() {
           className={activeMode === 'sentence' ? 'is-active' : ''}
           onClick={() => setActiveMode('sentence')}
         >
-          短句翻译
+          {text('短句翻译', 'Sentences')}
         </button>
         <button
           id="article-practice-tab"
@@ -73,7 +75,7 @@ export default function PracticePage() {
           className={activeMode === 'article' ? 'is-active' : ''}
           onClick={() => setActiveMode('article')}
         >
-          文章翻译
+          {text('文章翻译', 'Articles')}
         </button>
         <button
           id="correction-practice-tab"
@@ -84,7 +86,7 @@ export default function PracticePage() {
           className={activeMode === 'correction' ? 'is-active' : ''}
           onClick={() => setActiveMode('correction')}
         >
-          日语纠错
+          {text('日语纠错', 'Proofread')}
         </button>
       </div>}
       />
@@ -118,6 +120,7 @@ export default function PracticePage() {
 }
 
 function ShortSentencePractice() {
+  const { english, learningMode, shortQuestionType, text } = useLanguage()
   const [practiceTags, setPracticeTags] = useState<Tag[]>([])
   const [practiceTagsLoading, setPracticeTagsLoading] = useState(false)
   const [practiceTagsError, setPracticeTagsError] = useState<string | null>(null)
@@ -193,14 +196,14 @@ function ShortSentencePractice() {
       setAnswerSessions({})
       setPracticeNotice({
         kind: 'info',
-        title: questions.length > 0 ? '题目已生成' : '未生成题目',
-        message: questions.length > 0 ? `已生成 ${questions.length} 道题目。` : '请调整生成条件后重试。',
+        title: questions.length > 0 ? text('题目已生成', 'Questions generated') : text('未生成题目', 'No questions generated'),
+        message: questions.length > 0 ? text(`已生成 ${questions.length} 道题目。`, `Generated ${questions.length} question(s).`) : text('请调整生成条件后重试。', 'Adjust the generation settings and try again.'),
       })
     } catch (fetchError: unknown) {
       setGeneratedQuestions([])
       setSelectedQuestionIndex(0)
       setAnswerSessions({})
-      setPracticeNotice({ kind: 'error', title: '生成失败', message: getErrorMessage(fetchError) })
+      setPracticeNotice({ kind: 'error', title: text('生成失败', 'Generation failed'), message: getErrorMessage(fetchError) })
     } finally {
       setQuestionGenerating(false)
     }
@@ -213,7 +216,7 @@ function ShortSentencePractice() {
       setGeneratedQuestions([])
       setSelectedQuestionIndex(0)
       setAnswerSessions({})
-      setPracticeNotice({ kind: 'info', title: '未找到题目', message: '当前一级场景下没有可用二级场景，请调整筛选条件。' })
+      setPracticeNotice({ kind: 'info', title: text('未找到题目', 'No question found'), message: text('当前一级场景下没有可用二级场景，请调整筛选条件。', 'The selected primary scene has no available secondary scenes. Adjust the filters.') })
       return
     }
 
@@ -226,14 +229,14 @@ function ShortSentencePractice() {
       setAnswerSessions({})
       setPracticeNotice({
         kind: 'info',
-        title: question ? '题目已抽取' : '未找到题目',
-        message: question ? `已随机抽取题目 #${question.id}。` : '当前筛选条件下没有可用题目。',
+        title: question ? text('题目已抽取', 'Question selected') : text('未找到题目', 'No question found'),
+        message: question ? text(`已随机抽取题目 #${question.id}。`, `Randomly selected question #${question.id}.`) : text('当前筛选条件下没有可用题目。', 'No questions match the current filters.'),
       })
     } catch (fetchError: unknown) {
       setGeneratedQuestions([])
       setSelectedQuestionIndex(0)
       setAnswerSessions({})
-      setPracticeNotice({ kind: 'error', title: '抽题失败', message: getErrorMessage(fetchError) })
+      setPracticeNotice({ kind: 'error', title: text('抽题失败', 'Could not select a question'), message: getErrorMessage(fetchError) })
     } finally {
       setQuestionRandomizing(false)
     }
@@ -259,7 +262,7 @@ function ShortSentencePractice() {
 
   async function handleSubmitAnswer() {
     if (!selectedQuestion) {
-      setPracticeNotice({ kind: 'error', title: '请先选择题目', message: '生成题目后再提交作答。' })
+      setPracticeNotice({ kind: 'error', title: text('请先选择题目', 'Select a question first'), message: text('生成题目后再提交作答。', 'Generate a question before submitting an answer.') })
       return
     }
 
@@ -267,7 +270,7 @@ function ShortSentencePractice() {
     if (!submittedAnswer) {
       updateSelectedAnswerSession((session) => ({
         ...session,
-        answerNotice: { kind: 'error', title: '请填写答案', message: '输入日语答案后再提交。' },
+        answerNotice: { kind: 'error', title: text('请填写答案', 'Enter an answer'), message: text('输入日语答案后再提交。', 'Enter your Japanese answer before submitting.') },
       }))
       return
     }
@@ -293,15 +296,15 @@ function ShortSentencePractice() {
         answerReview: review,
         answerNotice: {
           kind: 'info',
-          title: '评分完成',
-          message: review ? `本次总分：${formatScore(review.totalScore)}` : '未获得评分结果。',
+          title: text('评分完成', 'Scoring complete'),
+          message: review ? text(`本次总分：${formatScore(review.totalScore)}`, `Total score: ${formatScore(review.totalScore)}`) : text('未获得评分结果。', 'No score was returned.'),
         },
         errorCandidates: review?.errorAnalysis.length ? review.errorAnalysis.map(toErrorCandidateState) : [],
       }))
     } catch (fetchError: unknown) {
       updateAnswerSession(questionId, (session) => ({
         ...session,
-        answerNotice: { kind: 'error', title: '评分失败', message: getErrorMessage(fetchError) },
+        answerNotice: { kind: 'error', title: text('评分失败', 'Scoring failed'), message: getErrorMessage(fetchError) },
       }))
     } finally {
       updateAnswerSession(questionId, (session) => ({ ...session, answerScoring: false }))
@@ -311,13 +314,13 @@ function ShortSentencePractice() {
   async function loadActiveUserErrorTypes() {
     setUserErrorTypesLoading(true)
     try {
-      const result = await fetchUserErrorTypes({ status: 'ACTIVE', page: 1, size: 100 })
+      const result = await fetchUserErrorTypes({ learningMode, status: 'ACTIVE', page: 1, size: 100 })
       setUserErrorTypes(result.items)
     } catch (fetchError: unknown) {
       setUserErrorTypes([])
       updateSelectedAnswerSession((session) => ({
         ...session,
-        errorConfirmationNotice: { kind: 'error', title: '无法加载已有复习卡片', message: getErrorMessage(fetchError) },
+        errorConfirmationNotice: { kind: 'error', title: text('无法加载已有复习卡片', 'Could not load review cards'), message: getErrorMessage(fetchError) },
       }))
     } finally {
       setUserErrorTypesLoading(false)
@@ -338,7 +341,7 @@ function ShortSentencePractice() {
         if (!candidate.userErrorTypeName.trim() || !candidate.userErrorTypeDescription.trim()) {
           updateSelectedAnswerSession((session) => ({
             ...session,
-            errorConfirmationNotice: { kind: 'error', title: '请补充复习卡片', message: '新建复习卡片需要名称和说明。' },
+            errorConfirmationNotice: { kind: 'error', title: text('请补充复习卡片', 'Complete the review card'), message: text('新建复习卡片需要名称和说明。', 'A new review card requires a name and description.') },
           }))
           return false
         }
@@ -347,7 +350,7 @@ function ShortSentencePractice() {
         if (!candidate.userErrorTypeId) {
           updateSelectedAnswerSession((session) => ({
             ...session,
-            errorConfirmationNotice: { kind: 'error', title: '请选择已有复习卡片', message: '添加记录前请选择对应的复习卡片。' },
+            errorConfirmationNotice: { kind: 'error', title: text('请选择已有复习卡片', 'Select a review card'), message: text('添加记录前请选择对应的复习卡片。', 'Select the review card before adding this item.') },
           }))
           return false
         }
@@ -366,14 +369,14 @@ function ShortSentencePractice() {
         errorCandidates: session.errorCandidates.map((item, index) => (
           confirmedIndexes.has(index) ? { ...item, selected: false, saved: true } : item
         )),
-        errorConfirmationNotice: { kind: 'info', title: '复习卡片已更新', message: `已添加 ${selectedItems.length} 项复习内容。` },
+        errorConfirmationNotice: { kind: 'info', title: text('复习卡片已更新', 'Review cards updated'), message: text(`已添加 ${selectedItems.length} 项复习内容。`, `Added ${selectedItems.length} review item(s).`) },
       }))
       void loadActiveUserErrorTypes()
       return true
     } catch (fetchError: unknown) {
       updateAnswerSession(questionId, (session) => ({
         ...session,
-        errorConfirmationNotice: { kind: 'error', title: '记录失败', message: getErrorMessage(fetchError) },
+        errorConfirmationNotice: { kind: 'error', title: text('记录失败', 'Save failed'), message: getErrorMessage(fetchError) },
       }))
       return false
     } finally {
@@ -419,6 +422,7 @@ function ShortSentencePractice() {
 
   function buildAiQuestionGenerationPayload() {
     const payload: AiQuestionGenerationPayload = {}
+    payload.learningMode = learningMode
     if (questionCount) payload.questionCount = Number(questionCount)
     if (level) payload.level = level
     if (difficulty) payload.difficulty = Number(difficulty)
@@ -430,7 +434,7 @@ function ShortSentencePractice() {
 
   function buildRandomQuestionFilter(): RandomQuestionFilter {
     return {
-      questionType: 'TRANSLATION_ZH_TO_JA',
+      questionType: shortQuestionType,
       level,
       difficulty,
       tagCodes: buildRandomQuestionTagCodes(),
@@ -450,28 +454,28 @@ function ShortSentencePractice() {
   return (
     <div>
       <div className="practice-grid">
-        <section className="surface generator-panel" aria-label="题目生成">
+        <section className="surface generator-panel" aria-label={text('题目生成', 'Question generation')}>
           <form className="form-grid" onSubmit={(event) => event.preventDefault()}>
-            <label><span>题目数量</span><select value={questionCount} onChange={(event) => setQuestionCount(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-            <label><span>JLPT 等级</span><select value={level} onChange={(event) => setLevel(event.target.value)}><option value="">默认 N3</option>{['N5', 'N4', 'N3', 'N2', 'N1'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-            <label><span>难度</span><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-            <label><span>场景一级</span><select value={sceneParentId} disabled={practiceTagsLoading} onChange={(event) => { setSceneParentId(event.target.value); setSceneTagCode('') }}><option value="">{practiceTagsLoading ? '加载中' : '不限场景'}</option>{sceneParentTags.map((tag) => <option key={tag.id} value={tag.id}>{tag.name}</option>)}</select></label>
-            <label><span>场景二级</span><select value={sceneTagCode} disabled={practiceTagsLoading || !sceneParentId} onChange={(event) => setSceneTagCode(event.target.value)}><option value="">{practiceTagsLoading ? '加载中' : sceneParentId ? '不限场景' : '请先选择一级场景'}</option>{selectedSceneChildTags.map((tag) => <option key={tag.id} value={tag.code}>{tag.name}</option>)}</select></label>
-            <label className="wide-field"><span>补充要求</span><input value={extraRequirements} maxLength={500} placeholder="例如：使用敬语、指定场景或语法点" onChange={(event) => setExtraRequirements(event.target.value)} /></label>
-            <button type="button" className="primary-button" disabled={questionLoading} onClick={handleRandomQuestion}>{questionRandomizing ? '抽题中' : '随机题目'}</button>
-            <button type="button" className="primary-button" disabled={questionLoading} onClick={handleGenerateQuestion}>{questionGenerating ? '生成中' : '生成题目'}</button>
+            <label><span>{text('题目数量', 'Questions')}</span><select value={questionCount} onChange={(event) => setQuestionCount(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+            <label><span>{text('JLPT 等级', 'JLPT')}</span><select value={level} onChange={(event) => setLevel(event.target.value)}><option value="">N3</option>{['N5', 'N4', 'N3', 'N2', 'N1'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label><span>{text('难度', 'Difficulty')}</span><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+            <label><span>{text('场景一级', 'Scene')}</span><select value={sceneParentId} disabled={practiceTagsLoading} onChange={(event) => { setSceneParentId(event.target.value); setSceneTagCode('') }}><option value="">{practiceTagsLoading ? text('加载中', 'Loading') : text('不限场景', 'Any')}</option>{sceneParentTags.map((tag) => <option key={tag.id} value={tag.id}>{english ? (tag.nameEn || tag.code || tag.name) : tag.name}</option>)}</select></label>
+            <label><span>{text('场景二级', 'Subscene')}</span><select value={sceneTagCode} disabled={practiceTagsLoading || !sceneParentId} onChange={(event) => setSceneTagCode(event.target.value)}><option value="">{practiceTagsLoading ? text('加载中', 'Loading') : sceneParentId ? text('不限场景', 'Any') : text('请先选择一级场景', 'Select a scene')}</option>{selectedSceneChildTags.map((tag) => <option key={tag.id} value={tag.code}>{english ? (tag.nameEn || tag.code || tag.name) : tag.name}</option>)}</select></label>
+            <label className="wide-field"><span>{text('补充要求', 'Instructions')}</span><input value={extraRequirements} maxLength={500} placeholder={text('例如：使用敬语、指定场景或语法点', 'Optional: honorifics, context, or grammar')} onChange={(event) => setExtraRequirements(event.target.value)} /></label>
+            <button type="button" className="primary-button" disabled={questionLoading} onClick={handleRandomQuestion}>{questionRandomizing ? text('抽题中', 'Loading') : text('随机题目', 'Random')}</button>
+            <button type="button" className="primary-button" disabled={questionLoading} onClick={handleGenerateQuestion}>{questionGenerating ? text('生成中', 'Generating') : text('生成题目', 'Generate')}</button>
           </form>
-          {practiceTagsError ? <div className="error-message">标签加载失败：{practiceTagsError}</div> : null}
+          {practiceTagsError ? <div className="error-message">{text('标签加载失败：', 'Could not load tags: ')}{practiceTagsError}</div> : null}
         </section>
 
-        <section className="surface question-panel" aria-label="题目预览">
-          <div className="section-title"><span className="label">题目预览</span><strong>{selectedQuestion ? `题目 #${selectedQuestion.id}` : '尚未选择题目'}</strong></div>
-          {generatedQuestions.length > 1 ? <div className="question-selector" aria-label="题目选择">{generatedQuestions.map((question, index) => <button key={question.id} type="button" className={selectedQuestionIndex === index ? 'is-selected' : ''} onClick={() => handleSelectQuestion(index)}>{index + 1}</button>)}</div> : null}
+        <section className="surface question-panel" aria-label={text('题目预览', 'Question preview')}>
+          <div className="section-title"><span className="label">{text('题目预览', 'Preview')}</span><strong>{selectedQuestion ? text(`题目 #${selectedQuestion.id}`, `Question #${selectedQuestion.id}`) : text('尚未选择题目', 'No question yet')}</strong></div>
+          {generatedQuestions.length > 1 ? <div className="question-selector" aria-label={text('题目选择', 'Question selection')}>{generatedQuestions.map((question, index) => <button key={question.id} type="button" className={selectedQuestionIndex === index ? 'is-selected' : ''} onClick={() => handleSelectQuestion(index)}>{index + 1}</button>)}</div> : null}
           <dl className="question-details">
-            <div><dt>中文原文</dt><dd>{selectedQuestion?.sourceText ?? '暂无题目'}</dd></div>
-            <div><dt>语境</dt><dd>{selectedQuestion?.contextText ?? '暂无'}</dd></div>
+            <div><dt>{text('中文原文', 'Source')}</dt><dd>{selectedQuestion?.sourceText ?? text('暂无题目', 'No question')}</dd></div>
+            <div><dt>{text('语境', 'Context')}</dt><dd>{selectedQuestion?.contextText ?? text('暂无', 'None')}</dd></div>
             <div>
-              <dt>语法点</dt>
+              <dt>{text('语法点', 'Grammar')}</dt>
               <dd className="grammar-point">
                 <button
                   type="button"
@@ -479,31 +483,31 @@ function ShortSentencePractice() {
                   aria-expanded={grammarPointVisible}
                   onClick={() => setGrammarPointVisible((visible) => !visible)}
                 >
-                  {grammarPointVisible ? '隐藏语法点' : '显示语法点'}
+                  {grammarPointVisible ? text('隐藏语法点', 'Hide grammar') : text('显示语法点', 'Show grammar')}
                 </button>
-                {grammarPointVisible ? <span>{selectedQuestion?.grammarPoint ?? '暂无'}</span> : null}
+                {grammarPointVisible ? <span>{selectedQuestion?.grammarPoint ?? text('暂无', 'None')}</span> : null}
               </dd>
             </div>
-            <div><dt>标签</dt><dd>{selectedQuestion ? <span className="tag-chip-row">{selectedQuestion.tags.map((tag) => <span key={tag.id}>{tag.name}</span>)}</span> : '暂无'}</dd></div>
-            <div><dt>难度</dt><dd>{selectedQuestion ? `${selectedQuestion.level} / ${selectedQuestion.difficulty}` : '暂无'}</dd></div>
+            <div><dt>{text('标签', 'Tags')}</dt><dd>{selectedQuestion ? <span className="tag-chip-row">{selectedQuestion.tags.map((tag) => <span key={tag.id}>{english ? (tag.nameEn || tag.code || tag.name) : tag.name}</span>)}</span> : text('暂无', 'None')}</dd></div>
+            <div><dt>{text('难度', 'Difficulty')}</dt><dd>{selectedQuestion ? `${selectedQuestion.level} / ${selectedQuestion.difficulty}` : text('暂无', 'None')}</dd></div>
           </dl>
         </section>
 
-        <section className="surface answer-panel" aria-label={answerSubmitted ? '评分结果' : '答案输入'}>
-          <div className="section-title"><span className="label">{answerSubmitted ? '评分结果' : '作答'}</span><strong>{answerSubmitted ? '本次作答结果' : '输入日语答案'}</strong></div>
+        <section className="surface answer-panel" aria-label={answerSubmitted ? text('评分结果', 'Score result') : text('答案输入', 'Answer input')}>
+          <div className="section-title"><span className="label">{answerSubmitted ? text('评分结果', 'Result') : text('作答', 'Answer')}</span><strong>{answerSubmitted ? text('本次作答结果', 'Your result') : text('输入日语答案', 'Japanese answer')}</strong></div>
           {!answerSubmitted ? (
             <>
               {answerInputNotice && (answerInputNotice.kind === 'error' || !selectedQuestion) ? <Notice notice={answerInputNotice} /> : null}
-              <textarea value={answerText} maxLength={2000} disabled={!selectedQuestion} placeholder={selectedQuestion ? '请输入日语答案' : '生成题目后即可作答'} onChange={(event) => updateSelectedAnswerSession((session) => ({ ...session, answerText: event.target.value }))} />
-              <div className="action-row"><button type="button" className="primary-button" disabled={!selectedQuestion || answerScoring} onClick={handleSubmitAnswer}>{answerScoring ? '评分中' : '提交答案'}</button><button type="button" disabled={!selectedQuestion && !answerText} onClick={handleClearAnswer}>清空</button></div>
+              <textarea value={answerText} maxLength={2000} disabled={!selectedQuestion} placeholder={selectedQuestion ? text('请输入日语答案', 'Enter your Japanese answer') : text('生成题目后即可作答', 'Generate a question to begin')} onChange={(event) => updateSelectedAnswerSession((session) => ({ ...session, answerText: event.target.value }))} />
+              <div className="action-row answer-input-actions"><button type="button" className="primary-button" disabled={!selectedQuestion || answerScoring} onClick={handleSubmitAnswer}>{answerScoring ? text('评分中', 'Scoring') : text('提交答案', 'Submit')}</button><button type="button" disabled={!selectedQuestion && !answerText} onClick={handleClearAnswer}>{text('清空', 'Clear')}</button></div>
             </>
           ) : (
             <div className="answer-result">
               {answerNotice && (!answerReview || answerNotice.kind === 'error') ? <Notice notice={answerNotice} /> : null}
-              {answerScoring ? <div className="notice"><strong>评分中</strong><p>正在分析本次作答。</p></div> : null}
-              <section className="submitted-answer"><span className="label">你的答案</span><p>{answerText}</p></section>
+              {answerScoring ? <div className="notice"><strong>{text('评分中', 'Scoring')}</strong><p>{text('正在分析本次作答。', 'Analyzing your answer.')}</p></div> : null}
+              <section className="submitted-answer"><span className="label">{text('你的答案', 'Your answer')}</span><p>{answerText}</p></section>
               {answerReview ? <>
-                <div className="score-summary"><span>总分</span><strong>{formatScore(answerReview.totalScore)}</strong></div>
+                <div className="score-summary"><span>{text('总分', 'Total score')}</span><strong>{formatScore(answerReview.totalScore)}</strong></div>
                 {errorConfirmationOpen ? (
                   <ErrorConfirmationModal
                     analyses={answerReview.errorAnalysis}
@@ -522,20 +526,20 @@ function ShortSentencePractice() {
                     onClose={() => updateSelectedAnswerSession((session) => ({ ...session, errorConfirmationOpen: false }))}
                   />
                 ) : null}
-                <details className="review-detail"><summary>详细评分说明</summary><div className="review-result">
-                  <dl className="score-grid"><div><dt>语法与词汇</dt><dd>{answerReview.scores.grammarVocabularyScore}</dd></div><div><dt>自然流畅度</dt><dd>{answerReview.scores.naturalFluencyScore}</dd></div><div><dt>场景适配度</dt><dd>{answerReview.scores.scenarioAdaptationScore}</dd></div><div><dt>信息完整性</dt><dd>{answerReview.scores.informationCompletenessScore}</dd></div></dl>
-                  <section className="review-section"><strong>总评</strong><p>{answerReview.overallComment}</p></section>
-                  <dl className="comment-list"><div><dt>语法</dt><dd>{answerReview.comments.grammarComment}</dd></div><div><dt>词汇</dt><dd>{answerReview.comments.vocabularyComment}</dd></div><div><dt>自然度</dt><dd>{answerReview.comments.naturalnessComment}</dd></div><div><dt>场景</dt><dd>{answerReview.comments.scenarioComment}</dd></div></dl>
-                  <ReviewList title="候选错误" emptyText="本次未发现明确错误。" items={answerReview.errorAnalysis}>{(item) => <div><span>{item.errorTypeName} / {item.severity}</span><strong>{item.original}</strong><p>{item.issue}</p><p>{item.suggestion}</p></div>}</ReviewList>
-                  <ReviewList title="修改建议" emptyText="本次没有额外修改建议。" items={answerReview.revisionSuggestions}>{(item) => <p>{item}</p>}</ReviewList>
-                  <ReviewList title="推荐表达" emptyText="本次没有推荐表达。" items={answerReview.recommendedExpressions}>{(item) => <div><span>{item.formality}</span><strong>{item.expression}</strong><p>{item.usage}</p><p>{item.note}</p></div>}</ReviewList>
+                <details className="review-detail"><summary>{text('详细评分说明', 'Detailed score')}</summary><div className="review-result">
+                  <dl className="score-grid"><div><dt>{text('语法与词汇', 'Grammar & vocabulary')}</dt><dd>{answerReview.scores.grammarVocabularyScore}</dd></div><div><dt>{text('自然流畅度', 'Fluency')}</dt><dd>{answerReview.scores.naturalFluencyScore}</dd></div><div><dt>{text('场景适配度', 'Context fit')}</dt><dd>{answerReview.scores.scenarioAdaptationScore}</dd></div><div><dt>{text('信息完整性', 'Completeness')}</dt><dd>{answerReview.scores.informationCompletenessScore}</dd></div></dl>
+                  <section className="review-section"><strong>{text('总评', 'Overall feedback')}</strong><p>{answerReview.overallComment}</p></section>
+                  <dl className="comment-list"><div><dt>{text('语法', 'Grammar')}</dt><dd>{answerReview.comments.grammarComment}</dd></div><div><dt>{text('词汇', 'Vocabulary')}</dt><dd>{answerReview.comments.vocabularyComment}</dd></div><div><dt>{text('自然度', 'Naturalness')}</dt><dd>{answerReview.comments.naturalnessComment}</dd></div><div><dt>{text('场景', 'Context')}</dt><dd>{answerReview.comments.scenarioComment}</dd></div></dl>
+                  <ReviewList title={text('候选错误', 'Candidate errors')} emptyText={text('本次未发现明确错误。', 'No clear errors were found.')} items={answerReview.errorAnalysis}>{(item) => <div><span>{item.errorTypeName} / {item.severity}</span><strong>{item.original}</strong><p>{item.issue}</p><p>{item.suggestion}</p></div>}</ReviewList>
+                  <ReviewList title={text('修改建议', 'Revision suggestions')} emptyText={text('本次没有额外修改建议。', 'No additional revision suggestions.')} items={answerReview.revisionSuggestions}>{(item) => <p>{item}</p>}</ReviewList>
+                  <ReviewList title={text('推荐表达', 'Recommended expressions')} emptyText={text('本次没有推荐表达。', 'No recommended expressions.')} items={answerReview.recommendedExpressions}>{(item) => <div><span>{item.formality}</span><strong>{item.expression}</strong><p>{item.usage}</p><p>{item.note}</p></div>}</ReviewList>
                 </div></details>
                 <div className="error-record-action">
-                  <span>{answerReview.errorAnalysis.length > 0 ? `${errorCandidates.filter((candidate) => candidate.saved).length} / ${answerReview.errorAnalysis.length} 项已加入复习卡片` : '可手动记录希望继续练习的表达'}</span>
-                  <button type="button" className="primary-button" onClick={handleOpenErrorConfirmation}>添加复习卡片</button>
+                  <span>{answerReview.errorAnalysis.length > 0 ? text(`${errorCandidates.filter((candidate) => candidate.saved).length} / ${answerReview.errorAnalysis.length} 项已加入复习卡片`, `${errorCandidates.filter((candidate) => candidate.saved).length} / ${answerReview.errorAnalysis.length} added to review cards`) : text('可手动记录希望继续练习的表达', 'You can manually save an expression for further practice')}</span>
+                  <button type="button" className="primary-button" onClick={handleOpenErrorConfirmation}>{text('添加复习卡片', 'Add review card')}</button>
                 </div>
               </> : null}
-              <div className="action-row"><button type="button" className="primary-button" disabled={answerScoring || errorConfirming} onClick={handleEditAnswer}>修改答案</button><button type="button" disabled={answerScoring || errorConfirming} onClick={handleClearAnswer}>清空</button></div>
+              <div className="action-row"><button type="button" className="primary-button" disabled={answerScoring || errorConfirming} onClick={handleEditAnswer}>{text('修改答案', 'Edit answer')}</button><button type="button" disabled={answerScoring || errorConfirming} onClick={handleClearAnswer}>{text('清空', 'Clear')}</button></div>
             </div>
           )}
         </section>

@@ -9,5 +9,7 @@ export type Tag = {
   code: string
   name: string
   description: string | null
+  nameEn: string
+  descriptionEn: string | null
   sortOrder: number
 }

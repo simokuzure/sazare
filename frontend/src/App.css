@@ -52,6 +52,26 @@
   gap: 8px;
 }
 
+.language-switch {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.language-switch button {
+  padding: 0.35rem 0.65rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.language-switch button.is-active {
+  color: white;
+  background: var(--brand);
+}
+
 .nav-button,
 button {
   min-height: 36px;
@@ -299,6 +319,7 @@ button:disabled {
   grid-template-columns:
     minmax(92px, 0.7fr)
     minmax(72px, 0.55fr)
+    minmax(136px, 0.95fr)
     minmax(120px, 0.9fr)
     minmax(160px, 1.25fr)
     minmax(200px, 1.5fr)
@@ -697,15 +718,15 @@ textarea:focus {
 
 .grammar-point button {
   flex: 0 0 auto;
-  min-height: 28px;
-  padding: 3px 8px;
+  min-height: 0;
+  padding: 0;
   font-size: 14px;
-  line-height: 20px;
+  line-height: 1.5;
+  text-align: left;
 }
 
 .grammar-point span {
   min-width: 0;
-  padding-top: 4px;
 }
 
 .tag-chip-row {
@@ -727,6 +748,10 @@ textarea:focus {
 .pagination-actions {
   display: flex;
   gap: 8px;
+}
+
+.answer-input-actions {
+  justify-content: flex-end;
 }
 
 .notice,
@@ -1232,16 +1257,16 @@ textarea:focus {
 }
 
 .review-card-table th:nth-child(1),
-.review-card-table td:nth-child(1) { width: 15%; }
+.review-card-table td:nth-child(1) { width: 18%; }
 
 .review-card-table th:nth-child(2),
-.review-card-table td:nth-child(2) { width: 11%; }
+.review-card-table td:nth-child(2) { width: 13%; }
 
 .review-card-table th:nth-child(3),
-.review-card-table td:nth-child(3) { width: 13%; }
+.review-card-table td:nth-child(3) { width: 14%; }
 
 .review-card-table th:nth-child(4),
-.review-card-table td:nth-child(4) { width: 12%; }
+.review-card-table td:nth-child(4) { width: 11%; }
 
 .review-card-table th:nth-child(5),
 .review-card-table td:nth-child(5),
@@ -1249,10 +1274,22 @@ textarea:focus {
 .review-card-table td:nth-child(6) { width: 6%; }
 
 .review-card-table th:nth-child(7),
-.review-card-table td:nth-child(7) { width: 10%; }
+.review-card-table td:nth-child(7) { width: 13%; }
 
 .review-card-table th:nth-child(8),
-.review-card-table td:nth-child(8) { width: 27%; }
+.review-card-table td:nth-child(8) { width: 19%; }
+
+.review-card-table td:nth-child(7) {
+  white-space: nowrap;
+}
+
+.review-card-table .review-card-actions {
+  justify-content: flex-start;
+}
+
+.review-card-table .review-card-actions .compact-button {
+  min-width: 0;
+}
 
 .review-card-table td strong,
 .table-secondary-text {
@@ -1946,7 +1983,7 @@ textarea:focus {
 .question-table td:nth-child(2) { width: 8%; }
 
 .question-table th:nth-child(3),
-.question-table td:nth-child(3) { width: 24%; }
+.question-table td:nth-child(3) { width: 29%; }
 
 .question-table th:nth-child(4),
 .question-table td:nth-child(4) { width: 9%; }
@@ -1958,10 +1995,10 @@ textarea:focus {
 .question-table td:nth-child(6) { width: 7%; }
 
 .question-table th:nth-child(7),
-.question-table td:nth-child(7) { width: 13%; }
+.question-table td:nth-child(7) { width: 14%; }
 
 .question-table th:nth-child(8),
-.question-table td:nth-child(8) { width: 26%; }
+.question-table td:nth-child(8) { width: 20%; }
 
 .answer-record-table th:nth-child(1),
 .answer-record-table td:nth-child(1),
@@ -2065,15 +2102,11 @@ textarea:focus {
 
 .question-tags-cell .tag-chip-row,
 .question-actions-cell .table-actions {
-  flex-wrap: nowrap;
-}
-
-.question-tags-cell .tag-chip-row {
-  overflow: hidden;
+  flex-wrap: wrap;
 }
 
 .question-tags-cell .tag-chip-row span {
-  max-width: 68px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2656,7 +2689,25 @@ tbody tr:last-child td {
 }
 
 .brand-row {
-  gap: 12px;
+  gap: 10px;
+}
+
+.title-group {
+  flex: 0 0 auto;
+}
+
+.language-switch {
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 2px;
+}
+
+.language-switch button {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .brand-link {
@@ -2734,6 +2785,7 @@ tbody tr:last-child td {
 
 .top-nav {
   display: flex;
+  min-width: 0;
   flex-wrap: nowrap;
   justify-content: flex-end;
   gap: 2px;
@@ -2943,6 +2995,22 @@ textarea:focus {
   gap: 12px;
 }
 
+.generator-panel .form-grid label > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.generator-panel .form-grid > button {
+  height: 36px;
+  min-height: 36px;
+  align-self: end;
+  padding-right: 8px;
+  padding-left: 8px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .question-panel,
 .answer-panel {
   height: 100%;
@@ -3105,9 +3173,10 @@ textarea:focus {
 }
 
 .answer-record-table th:nth-child(1),
-.answer-record-table td:nth-child(1),
+.answer-record-table td:nth-child(1) { width: 4%; }
+
 .answer-record-table th:nth-child(2),
-.answer-record-table td:nth-child(2) { width: 4%; }
+.answer-record-table td:nth-child(2) { width: 5%; }
 
 .answer-record-table th:nth-child(3),
 .answer-record-table td:nth-child(3) { width: 7%; }
@@ -3115,7 +3184,7 @@ textarea:focus {
 .answer-record-table th:nth-child(4),
 .answer-record-table td:nth-child(4),
 .answer-record-table th:nth-child(6),
-.answer-record-table td:nth-child(6) { width: 21%; }
+.answer-record-table td:nth-child(6) { width: 20%; }
 
 .answer-record-table th:nth-child(5),
 .answer-record-table td:nth-child(5) { width: 8%; }
@@ -3127,10 +3196,32 @@ textarea:focus {
 .answer-record-table td:nth-child(8) { width: 6%; }
 
 .answer-record-table th:nth-child(9),
-.answer-record-table td:nth-child(9) { width: 14%; }
+.answer-record-table td:nth-child(9) { width: 16%; }
 
 .answer-record-table th:nth-child(10),
-.answer-record-table td:nth-child(10) { width: 8%; }
+.answer-record-table td:nth-child(10) {
+  width: 7%;
+  text-align: center;
+}
+
+.answer-record-table td:nth-child(10) .table-actions {
+  justify-content: center;
+}
+
+.question-table .question-tags-cell .tag-chip-row {
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.question-table .question-tags-cell .tag-chip-row span {
+  min-width: 0;
+  max-width: calc(50% - 3px);
+}
+
+.question-table .question-actions-cell .table-actions {
+  justify-content: flex-start;
+}
 
 .target-list-panel .table-wrap,
 .review-workbench {
@@ -3204,6 +3295,11 @@ tbody tr:hover {
   flex-wrap: nowrap;
   justify-content: flex-end;
   gap: 6px;
+}
+
+.target-page .question-table .table-actions,
+.target-page .review-card-table .review-card-actions {
+  justify-content: flex-start;
 }
 
 .target-page .table-actions button,
@@ -3281,7 +3377,7 @@ tbody tr:hover {
   background: var(--brand);
 }
 
-@media (max-width: 1023.98px) {
+@media (min-width: 861px) and (max-width: 1023.98px) {
   .target-page .table-wrap,
   .target-page .table-scroll {
     overflow-x: auto;
@@ -3334,7 +3430,7 @@ tbody tr:hover {
   }
 
   .target-page .question-table {
-    min-width: 920px;
+    min-width: 1020px;
   }
 
   .target-page .answer-record-table {
@@ -3408,8 +3504,13 @@ tbody tr:hover {
 
   .brand-row {
     align-items: flex-start;
-    justify-content: space-between;
+    justify-content: flex-start;
+    flex-wrap: wrap;
     gap: 8px;
+  }
+
+  .brand-link {
+    flex: 1 0 100%;
   }
 
   .title-group h1 {

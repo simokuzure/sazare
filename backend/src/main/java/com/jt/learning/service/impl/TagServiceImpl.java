@@ -68,6 +68,8 @@ public class TagServiceImpl implements TagService {
                 tag.getCode(),
                 tag.getName(),
                 tag.getDescription(),
+                tag.getNameEn(),
+                tag.getDescriptionEn(),
                 tag.getSortOrder()
         );
     }

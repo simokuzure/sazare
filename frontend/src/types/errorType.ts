@@ -7,6 +7,8 @@ export type ErrorType = {
   code: string
   name: string
   description: string | null
+  nameEn: string
+  descriptionEn: string | null
   sortOrder: number
   enabled: boolean
   createdAt: string

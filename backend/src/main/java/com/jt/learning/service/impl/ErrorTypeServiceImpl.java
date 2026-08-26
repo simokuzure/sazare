@@ -63,6 +63,8 @@ public class ErrorTypeServiceImpl implements ErrorTypeService {
                 errorType.getCode(),
                 errorType.getName(),
                 errorType.getDescription(),
+                errorType.getNameEn(),
+                errorType.getDescriptionEn(),
                 errorType.getSortOrder(),
                 errorType.getEnabled(),
                 errorType.getCreatedAt(),

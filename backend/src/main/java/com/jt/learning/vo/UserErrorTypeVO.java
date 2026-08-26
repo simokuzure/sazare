@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 public record UserErrorTypeVO(
         Long id,
+        String learningMode,
         Long errorTypeId,
         String errorTypeCode,
         String errorTypeName,

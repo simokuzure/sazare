@@ -5,7 +5,10 @@ export async function fetchLearningStatistics(
   filters: LearningStatisticsFilters,
   signal?: AbortSignal,
 ): Promise<LearningStatistics> {
-  const searchParams = new URLSearchParams({ range: filters.range })
+  const searchParams = new URLSearchParams({
+    range: filters.range,
+    learningMode: filters.learningMode ?? 'ZH_TO_JA',
+  })
   if (filters.range === 'CUSTOM') {
     searchParams.set('startDate', filters.startDate ?? '')
     searchParams.set('endDate', filters.endDate ?? '')

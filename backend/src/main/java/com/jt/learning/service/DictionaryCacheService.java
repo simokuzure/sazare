@@ -21,9 +21,9 @@ import java.util.Set;
 public class DictionaryCacheService {
 
     private static final Logger log = LoggerFactory.getLogger(DictionaryCacheService.class);
-    private static final String ERROR_TYPE_CACHE_KEY = "dictionary:error-types:enabled-leaf:v1";
+    private static final String ERROR_TYPE_CACHE_KEY = "dictionary:error-types:enabled-leaf:v2";
     private static final String TAG_CACHE_KEY_PREFIX = "dictionary:tags:";
-    private static final String TAG_CACHE_KEY_SUFFIX = ":enabled:v1";
+    private static final String TAG_CACHE_KEY_SUFFIX = ":enabled:v2";
     private static final Set<String> CACHEABLE_TAG_TYPES = Set.of("SCENE", "FUNCTION", "GENRE");
 
     private final StringRedisTemplate stringRedisTemplate;
@@ -152,6 +152,8 @@ public class DictionaryCacheService {
             String code,
             String name,
             String description,
+            String nameEn,
+            String descriptionEn,
             Integer sortOrder,
             Boolean enabled,
             Boolean deleted
@@ -159,7 +161,8 @@ public class DictionaryCacheService {
         private static CachedTag from(Tag tag) {
             return new CachedTag(
                     tag.getId(), tag.getTagType(), tag.getParentId(), tag.getCode(), tag.getName(),
-                    tag.getDescription(), tag.getSortOrder(), tag.getEnabled(), tag.getDeleted());
+                    tag.getDescription(), tag.getNameEn(), tag.getDescriptionEn(), tag.getSortOrder(),
+                    tag.getEnabled(), tag.getDeleted());
         }
 
         private Tag toTag() {
@@ -170,6 +173,8 @@ public class DictionaryCacheService {
             tag.setCode(code);
             tag.setName(name);
             tag.setDescription(description);
+            tag.setNameEn(nameEn);
+            tag.setDescriptionEn(descriptionEn);
             tag.setSortOrder(sortOrder);
             tag.setEnabled(enabled);
             tag.setDeleted(deleted);

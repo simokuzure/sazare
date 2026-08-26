@@ -1,6 +1,7 @@
 export type LearningStatisticsRange = 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'LAST_90_DAYS' | 'CUSTOM'
 
 export type LearningStatisticsFilters = {
+  learningMode?: 'ZH_TO_JA' | 'EN_TO_JA'
   range: LearningStatisticsRange
   startDate?: string
   endDate?: string

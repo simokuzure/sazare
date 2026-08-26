@@ -17,65 +17,76 @@ public interface LearningStatisticsMapper {
 
     LearningStatisticsOverviewRow selectOverview(
             @Param("userId") Long userId,
+            @Param("learningMode") String learningMode,
             @Param("startAt") LocalDateTime startAt,
             @Param("endAt") LocalDateTime endAt
     );
 
     LearningStatisticsOverviewRow selectCorrectionOverview(
             @Param("userId") Long userId,
+            @Param("learningMode") String learningMode,
             @Param("startAt") LocalDateTime startAt,
             @Param("endAt") LocalDateTime endAt
     );
 
     long countConfirmedErrors(
             @Param("userId") Long userId,
+            @Param("learningMode") String learningMode,
             @Param("startAt") LocalDateTime startAt,
             @Param("endAt") LocalDateTime endAt
     );
 
     List<LearningStatisticsDailyTrendRow> selectDailyTrends(
             @Param("userId") Long userId,
+            @Param("learningMode") String learningMode,
             @Param("startAt") LocalDateTime startAt,
             @Param("endAt") LocalDateTime endAt
     );
 
     List<LearningStatisticsDailyTrendRow> selectCorrectionDailyTrends(
             @Param("userId") Long userId,
+            @Param("learningMode") String learningMode,
             @Param("startAt") LocalDateTime startAt,
             @Param("endAt") LocalDateTime endAt
     );
 
     LearningStatisticsScoreDimensionsRow selectScoreDimensions(
             @Param("userId") Long userId,
+            @Param("learningMode") String learningMode,
             @Param("startAt") LocalDateTime startAt,
             @Param("endAt") LocalDateTime endAt
     );
 
     LearningStatisticsScoreDimensionsRow selectCorrectionScoreDimensions(
             @Param("userId") Long userId,
+            @Param("learningMode") String learningMode,
             @Param("startAt") LocalDateTime startAt,
             @Param("endAt") LocalDateTime endAt
     );
 
     List<LearningStatisticsWeaknessRow> selectTopWeaknesses(
             @Param("userId") Long userId,
+            @Param("learningMode") String learningMode,
             @Param("startAt") LocalDateTime startAt,
             @Param("endAt") LocalDateTime endAt
     );
 
     LearningStatisticsCurrentReviewRow selectCurrentReviewSummary(
             @Param("userId") Long userId,
+            @Param("learningMode") String learningMode,
             @Param("now") LocalDateTime now
     );
 
     LearningStatisticsPeriodReviewRow selectPeriodReviewSummary(
             @Param("userId") Long userId,
+            @Param("learningMode") String learningMode,
             @Param("startAt") LocalDateTime startAt,
             @Param("endAt") LocalDateTime endAt
     );
 
     long countCompletedReviewCycles(
             @Param("userId") Long userId,
+            @Param("learningMode") String learningMode,
             @Param("startAt") LocalDateTime startAt,
             @Param("endAt") LocalDateTime endAt
     );
