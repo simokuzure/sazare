@@ -14,6 +14,12 @@
         )
     </insert>
 
+    <select id="countByQuestionId" resultType="int">
+        select count(1)
+        from question_tags
+        where question_id = #{questionId}
+    </select>
+
     <delete id="deleteQuestionTagsByQuestionId">
         delete from question_tags
         where question_id = #{questionId}

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { getErrorMessage } from '../api/client'
-import { fetchTags as queryTags } from '../api/tagApi'
+import { fetchAllTags } from '../api/tagApi'
 import { deleteQuestion, fetchQuestion, fetchQuestions as queryQuestions, parseCodeList, saveQuestion, toggleQuestionEnabled } from '../api/questionApi'
 import PageHeader from '../components/PageHeader'
+import TagCascadeSelect from '../components/TagCascadeSelect'
 import type { PracticeNotice } from '../types/api'
 import type { Tag } from '../types/tag'
 import type { Question, QuestionFilterState, QuestionFormState, QuestionPayload } from '../types/question'
 import { useLanguage } from '../i18n/LanguageContext'
+import { getTagDisplayName } from '../utils/tag'
 
 type QuestionViewMode = 'list' | 'detail' | 'create' | 'edit'
 
@@ -51,6 +53,10 @@ export default function QuestionManagementPage() {
   const [questionActionId, setQuestionActionId] = useState<number | null>(null)
   const [tagOptions, setTagOptions] = useState<Tag[]>([])
   const [genreTagOptions, setGenreTagOptions] = useState<Tag[]>([])
+  const [tagOptionsLoading, setTagOptionsLoading] = useState(false)
+  const [sceneParentId, setSceneParentId] = useState('')
+  const [functionParentId, setFunctionParentId] = useState('')
+  const [functionTagCode, setFunctionTagCode] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -87,19 +93,23 @@ export default function QuestionManagementPage() {
     const controller = new AbortController()
 
     async function fetchTagOptions() {
+      setTagOptionsLoading(true)
       try {
-        const [result, genreResult] = await Promise.all([
-          queryTags({ enabledOnly: true, page: 1, size: 100 }, controller.signal),
-          queryTags({ tagType: 'GENRE', enabledOnly: true, page: 1, size: 100 }, controller.signal),
+        const [sceneTags, functionTags, genreTags] = await Promise.all([
+          fetchAllTags({ tagType: 'SCENE', enabledOnly: true }, controller.signal),
+          fetchAllTags({ tagType: 'FUNCTION', enabledOnly: true }, controller.signal),
+          fetchAllTags({ tagType: 'GENRE', enabledOnly: true }, controller.signal),
         ])
-        setTagOptions(result.items.filter((tag) => tag.tagType !== 'GENRE'))
-        setGenreTagOptions(genreResult.items)
+        setTagOptions([...sceneTags, ...functionTags])
+        setGenreTagOptions(genreTags)
       } catch (fetchError: unknown) {
         if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
           return
         }
         setTagOptions([])
         setGenreTagOptions([])
+      } finally {
+        setTagOptionsLoading(false)
       }
     }
 
@@ -114,6 +124,11 @@ export default function QuestionManagementPage() {
   const questionFirstItemNo = questionTotal === 0 ? 0 : (questionFilters.page - 1) * questionFilters.size + 1
   const questionLastItemNo = Math.min(questionFilters.page * questionFilters.size, questionTotal)
   const editingArticle = viewMode === 'edit' && editingQuestion?.questionType.endsWith('_ARTICLE')
+  const selectedTagCodes = parseCodeList(questionForm.tagCodes)
+  const selectedSceneTag = tagOptions.find((tag) => tag.tagType === 'SCENE' && selectedTagCodes.includes(tag.code))
+  const selectedFunctionTags = tagOptions.filter(
+    (tag) => tag.tagType === 'FUNCTION' && selectedTagCodes.includes(tag.code),
+  )
 
   function updateQuestionFilters(patch: Partial<QuestionFilterState>) {
     setQuestionFilters((current) => ({
@@ -155,6 +170,9 @@ export default function QuestionManagementPage() {
   function handleStartCreateQuestion() {
     setViewMode('create')
     setQuestionForm(EMPTY_QUESTION_FORM)
+    setSceneParentId('')
+    setFunctionParentId('')
+    setFunctionTagCode('')
     setEditingQuestion(null)
     setQuestionNotice(null)
   }
@@ -162,7 +180,18 @@ export default function QuestionManagementPage() {
   function handleStartEditQuestion(question: Question) {
     setViewMode('edit')
     setEditingQuestion(question)
-    setQuestionForm(toQuestionForm(question))
+    const form = toQuestionForm(question)
+    const secondLevelTags = question.tags.filter((tag) => tag.parentId !== null)
+    const sceneTag = secondLevelTags.find((tag) => tag.tagType === 'SCENE')
+    setQuestionForm({
+      ...form,
+      tagCodes: question.questionType.endsWith('_ARTICLE')
+        ? form.tagCodes
+        : secondLevelTags.map((tag) => tag.code).join(', '),
+    })
+    setSceneParentId(sceneTag?.parentId ? String(sceneTag.parentId) : '')
+    setFunctionParentId('')
+    setFunctionTagCode('')
     setQuestionNotice(null)
   }
 
@@ -176,6 +205,25 @@ export default function QuestionManagementPage() {
       if (!codes.includes(code)) {
         codes.push(code)
       }
+      return { ...current, tagCodes: codes.join(', ') }
+    })
+  }
+
+  function removeQuestionTagCode(code: string) {
+    if (functionTagCode === code) {
+      setFunctionTagCode('')
+    }
+    setQuestionForm((current) => ({
+      ...current,
+      tagCodes: parseCodeList(current.tagCodes).filter((item) => item !== code).join(', '),
+    }))
+  }
+
+  function replaceSceneTagCode(code: string) {
+    setQuestionForm((current) => {
+      const codes = parseCodeList(current.tagCodes)
+        .filter((item) => tagOptions.find((tag) => tag.code === item)?.tagType !== 'SCENE')
+      if (code) codes.unshift(code)
       return { ...current, tagCodes: codes.join(', ') }
     })
   }
@@ -238,6 +286,17 @@ export default function QuestionManagementPage() {
         message: editingArticle
           ? text('中文文章、语境、生词提示、体裁和日文参考稿都必须填写。', 'English article, context, vocabulary hints, genre, and Japanese reference are required.')
           : text('中文原文、语境、语法点、标签 code 和标准答案都必须填写。', 'English source, context, grammar point, tag code, and standard answer are required.'),
+      })
+      return null
+    }
+
+    if (!questionType.endsWith('_ARTICLE') && !tagCodes.some((code) => tagOptions.some(
+      (tag) => tag.code === code && tag.tagType === 'SCENE' && tag.parentId !== null,
+    ))) {
+      setQuestionNotice({
+        kind: 'error',
+        title: text('请选择场景标签', 'Select a scene tag'),
+        message: text('短句题目必须选择一个二级场景标签。', 'A sentence question requires a second-level scene tag.'),
       })
       return null
     }
@@ -436,7 +495,7 @@ export default function QuestionManagementPage() {
                       <th>ID</th>
                       <th>{text('题型', 'Type')}</th>
                       <th>{text('原文', 'Source text')}</th>
-                      <th>{text('等级', 'Level')}</th>
+                      <th>{text('等级/难度', 'Level / difficulty')}</th>
                       <th>{text('来源', 'Source')}</th>
                       <th>{text('状态', 'Status')}</th>
                       <th>{text('标签', 'Tags')}</th>
@@ -449,13 +508,13 @@ export default function QuestionManagementPage() {
                         <td data-label="ID">{question.id}</td>
                         <td data-label={text('题型', 'Type')}><span className="question-type-badge">{formatQuestionType(question.questionType, english)}</span></td>
                         <td className="table-question-answer-cell" data-label={text('原文', 'Source text')} title={question.sourceText}>{question.sourceText}</td>
-                        <td data-label={text('等级', 'Level')}>{question.level} / {question.difficulty}</td>
+                        <td data-label={text('等级/难度', 'Level / difficulty')}>{question.level} / {question.difficulty}</td>
                         <td data-label={text('来源', 'Source')}><span className={question.sourceType === 'AI' ? 'data-badge is-brand' : 'data-badge'}>{formatQuestionSourceType(question.sourceType, english)}</span></td>
                         <td data-label={text('状态', 'Status')}><span className={question.enabled ? 'data-badge is-success' : 'data-badge'}>{question.enabled ? text('启用', 'Enabled') : text('停用', 'Disabled')}</span></td>
                         <td className="question-tags-cell" data-label={text('标签', 'Tags')}>
                           <span className="tag-chip-row">
                             {question.tags.slice(0, 2).map((tag) => (
-                              <span key={tag.id}>{english ? tag.nameEn : tag.name}</span>
+                              <span key={tag.id}>{getTagDisplayName(tag, english)}</span>
                             ))}
                           </span>
                         </td>
@@ -597,7 +656,7 @@ export default function QuestionManagementPage() {
                       <dd>
                         <span className="tag-chip-row">
                           {detailQuestion.tags.map((tag) => (
-                            <span key={tag.id}>{english ? tag.nameEn : tag.name} / {tag.code}</span>
+                            <span key={tag.id}>{getTagDisplayName(tag, english)}</span>
                           ))}
                         </span>
                       </dd>
@@ -739,28 +798,72 @@ export default function QuestionManagementPage() {
                       <span>{text('文章体裁', 'Genre')}</span>
                       <select value={parseCodeList(questionForm.tagCodes)[0] ?? ''} onChange={(event) => updateQuestionForm({ tagCodes: event.target.value })}>
                         <option value="">{text('请选择体裁', 'Select a genre')}</option>
-                        {genreTagOptions.map((tag) => <option key={tag.id} value={tag.code}>{english ? tag.nameEn : tag.name} / {tag.code}</option>)}
+                        {genreTagOptions.map((tag) => <option key={tag.id} value={tag.code}>{getTagDisplayName(tag, english)}</option>)}
                       </select>
                     </label>
                   ) : (
-                    <>
-                      <label className="wide-field">
-                        <span>{text('标签 code', 'Tag codes')}</span>
-                        <input
-                          value={questionForm.tagCodes}
-                          placeholder={text('至少包含 1 个场景标签 code，多个用逗号分隔', 'Include at least one scene tag code; separate multiple codes with commas')}
-                          onChange={(event) => updateQuestionForm({ tagCodes: event.target.value })}
+                    <div className="question-tag-editor wide-field">
+                      <div className="question-tag-cascade-grid">
+                        <TagCascadeSelect
+                          tags={tagOptions.filter((tag) => tag.tagType === 'SCENE')}
+                          english={english}
+                          loading={tagOptionsLoading}
+                          parentId={sceneParentId}
+                          tagCode={selectedSceneTag?.code ?? ''}
+                          parentLabel={text('场景一级', 'Scene')}
+                          childLabel={text('场景二级', 'Subscene')}
+                          parentPlaceholder={text('请选择一级场景', 'Select a scene')}
+                          childPlaceholder={text('请选择二级场景', 'Select a subscene')}
+                          selectParentFirstText={text('请先选择一级场景', 'Select a scene first')}
+                          onParentChange={setSceneParentId}
+                          onTagChange={replaceSceneTagCode}
                         />
-                      </label>
-
-                      <div className="tag-option-row wide-field">
-                        {tagOptions.slice(0, 16).map((tag) => (
-                          <button key={tag.id} type="button" onClick={() => appendQuestionTagCode(tag.code)}>
-                            {english ? tag.nameEn : tag.name}
-                          </button>
-                        ))}
                       </div>
-                    </>
+
+                      {selectedSceneTag ? (
+                        <div className="selected-tag-group">
+                          <span>{text('已选场景标签', 'Selected scene tag')}</span>
+                          <div className="selected-tag-row">
+                            <button type="button" onClick={() => replaceSceneTagCode('')}>
+                              {getTagDisplayName(selectedSceneTag, english)} <span aria-hidden="true">×</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="question-tag-cascade-grid">
+                        <TagCascadeSelect
+                          tags={tagOptions.filter((tag) => tag.tagType === 'FUNCTION')}
+                          english={english}
+                          loading={tagOptionsLoading}
+                          parentId={functionParentId}
+                          tagCode={functionTagCode}
+                          parentLabel={text('功能一级', 'Function')}
+                          childLabel={text('功能二级', 'Subfunction')}
+                          parentPlaceholder={text('请选择一级功能', 'Select a function')}
+                          childPlaceholder={text('请选择二级功能', 'Select a subfunction')}
+                          selectParentFirstText={text('请先选择一级功能', 'Select a function first')}
+                          onParentChange={setFunctionParentId}
+                          onTagChange={(code) => {
+                            if (code) appendQuestionTagCode(code)
+                            setFunctionTagCode('')
+                          }}
+                        />
+                      </div>
+
+                      {selectedFunctionTags.length > 0 ? (
+                        <div className="selected-tag-group">
+                          <span>{text('已选功能标签', 'Selected function tags')}</span>
+                          <div className="selected-tag-row" aria-label={text('已选功能标签', 'Selected function tags')}>
+                            {selectedFunctionTags.map((tag) => (
+                              <button key={tag.id} type="button" onClick={() => removeQuestionTagCode(tag.code)}>
+                                {getTagDisplayName(tag, english)} <span aria-hidden="true">×</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                   )}
 
                   <label className="wide-field">

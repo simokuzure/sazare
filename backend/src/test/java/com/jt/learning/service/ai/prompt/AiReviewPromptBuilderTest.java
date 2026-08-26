@@ -37,7 +37,7 @@ class AiReviewPromptBuilderTest {
                 List.of(new AiQuestionTagOptionDTO("FUNCTION_CONFIRM", "确认", "确认信息")));
 
         assertThat(prompt.systemPrompt())
-                .contains("复习重点", "一道", "1到10个答案")
+                .contains("复习重点", "一道", "1到10个答案", "二级标签")
                 .contains("contextText只能客观说明", "不得包含考查意图", "语法或词汇要求只写入grammarPoint");
         assertThat(prompt.userPrompt()).contains(
                 "请翻译", "電車に間に合いました", "DAILY_TRAVEL", "FUNCTION_CONFIRM", "tagCodes");
@@ -50,8 +50,9 @@ class AiReviewPromptBuilderTest {
                 List.of(new AiQuestionTagOptionDTO("DAILY_TRAVEL", "日常出行", "日常交通出行场景")),
                 List.of(new AiQuestionTagOptionDTO("FUNCTION_CONFIRM", "确认", "确认信息")));
 
-        assertThat(prompt.systemPrompt()).contains("实际语义重新选择", "不得照搬文章体裁标签", "1个场景标签");
-        assertThat(prompt.userPrompt()).contains("请翻译", "DAILY_TRAVEL", "FUNCTION_CONFIRM", "tagCodes");
+        assertThat(prompt.systemPrompt()).contains("实际语义重新选择", "不得继承来源题标签", "不得使用文章体裁标签", "1个二级场景标签");
+        assertThat(prompt.userPrompt()).contains("请翻译", "下面的复习句", "DAILY_TRAVEL", "FUNCTION_CONFIRM", "tagCodes")
+                .doesNotContain("下面的文章复习句");
     }
 
     private UserErrorType userErrorType() {

@@ -14,8 +14,8 @@ public class AiReviewTagPromptBuilder {
 
     private static final String SYSTEM_PROMPT = """
             你是日语复习题标签分类助手。只输出一个合法 JSON 对象，不要输出 Markdown 或额外说明。
-            根据复习句子的实际语义重新选择标签，不得照搬文章体裁标签。
-            tagCodes必须包含且只能包含1个场景标签，可以再包含0到2个功能标签，不能使用候选列表之外的code。
+            根据复习句子的实际语义重新选择标签，不得继承来源题标签，也不得使用文章体裁标签。
+            候选列表只包含二级标签。tagCodes必须包含且只能包含1个二级场景标签，可以再包含0到2个二级功能标签，不能使用候选列表之外的code。
             """;
 
     private final ObjectMapper objectMapper;
@@ -30,7 +30,7 @@ public class AiReviewTagPromptBuilder {
             List<AiQuestionTagOptionDTO> functionTagOptions
     ) {
         String userPrompt = """
-                请为下面的文章复习句重新判断场景与功能标签。
+                请为下面的复习句重新判断场景与功能标签。
 
                 复习句：
                 {"sourceText":%s,"contextText":%s,"grammarPoint":%s}

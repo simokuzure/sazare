@@ -54,6 +54,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -532,7 +533,9 @@ class QuestionServiceImplTest {
     @Test
     void generateQuestionsByAiShouldUseDefaultRequestValues() {
         Tag sceneTag = tag(1L, "SCENE", "DAILY_LIFE_WEATHER", "天气");
-        when(dictionaryCacheService.getEnabledTagsByType("SCENE")).thenReturn(List.of(sceneTag));
+        Tag parentSceneTag = tag(2L, "SCENE", "DAILY_LIFE", "日常生活");
+        parentSceneTag.setParentId(null);
+        when(dictionaryCacheService.getEnabledTagsByType("SCENE")).thenReturn(List.of(parentSceneTag, sceneTag));
         when(dictionaryCacheService.getEnabledTagsByType("FUNCTION")).thenReturn(List.of());
         when(aiQuestionClient.generateQuestions(any(), any(), anyList(), anyList())).thenReturn("""
                 {
@@ -586,6 +589,9 @@ class QuestionServiceImplTest {
         assertThat(questions.getFirst().difficulty()).isEqualTo(3);
         verify(dictionaryCacheService).getEnabledTagsByType("SCENE");
         verify(dictionaryCacheService).getEnabledTagsByType("FUNCTION");
+        verify(aiQuestionClient).generateQuestions(any(), any(),
+                argThat(options -> options.size() == 1 && "DAILY_LIFE_WEATHER".equals(options.getFirst().code())),
+                anyList());
     }
 
     @Test
@@ -1430,6 +1436,9 @@ class QuestionServiceImplTest {
         Tag tag = new Tag();
         tag.setId(id);
         tag.setTagType(tagType);
+        if ("SCENE".equals(tagType) || "FUNCTION".equals(tagType)) {
+            tag.setParentId(1000L + id);
+        }
         tag.setCode(code);
         tag.setName(name);
         tag.setDescription(name + "标签");

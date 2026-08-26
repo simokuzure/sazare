@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { getErrorMessage } from '../api/client'
 import { confirmUserAnswerErrors, fetchUserErrorTypes } from '../api/userErrorApi'
 import { fetchRandomQuestion, generateQuestions, submitQuestionAnswer } from '../api/questionApi'
-import { fetchTags } from '../api/tagApi'
+import { fetchAllTags } from '../api/tagApi'
 import ErrorConfirmationModal from '../components/ErrorConfirmationModal'
 import PageHeader from '../components/PageHeader'
+import TagCascadeSelect from '../components/TagCascadeSelect'
 import {
   type ErrorCandidateState,
   toErrorCandidateState,
@@ -20,6 +21,7 @@ import type { AiQuestionGenerationPayload, Question, RandomQuestionFilter } from
 import type { AnswerReview } from '../types/review'
 import type { UserAnswerErrorConfirmation, UserErrorType } from '../types/userError'
 import { useLanguage } from '../i18n/LanguageContext'
+import { getTagDisplayName } from '../utils/tag'
 
 type AnswerSessionState = {
   answerText: string
@@ -148,7 +150,7 @@ function ShortSentencePractice() {
       setPracticeTagsLoading(true)
       setPracticeTagsError(null)
       try {
-        setPracticeTags(await fetchAllSceneTags(controller.signal))
+        setPracticeTags(await fetchAllTags({ tagType: 'SCENE', enabledOnly: true }, controller.signal))
       } catch (fetchError: unknown) {
         if (fetchError instanceof DOMException && fetchError.name === 'AbortError') return
         setPracticeTags([])
@@ -162,7 +164,6 @@ function ShortSentencePractice() {
     return () => controller.abort()
   }, [])
 
-  const sceneParentTags = useMemo(() => practiceTags.filter((tag) => tag.parentId === null), [practiceTags])
   const sceneChildTags = useMemo(() => practiceTags.filter((tag) => tag.parentId !== null), [practiceTags])
   const selectedSceneChildTags = useMemo(
     () => sceneParentId ? sceneChildTags.filter((tag) => tag.parentId === Number(sceneParentId)) : [],
@@ -459,8 +460,20 @@ function ShortSentencePractice() {
             <label><span>{text('题目数量', 'Questions')}</span><select value={questionCount} onChange={(event) => setQuestionCount(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
             <label><span>{text('JLPT 等级', 'JLPT')}</span><select value={level} onChange={(event) => setLevel(event.target.value)}><option value="">N3</option>{['N5', 'N4', 'N3', 'N2', 'N1'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
             <label><span>{text('难度', 'Difficulty')}</span><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-            <label><span>{text('场景一级', 'Scene')}</span><select value={sceneParentId} disabled={practiceTagsLoading} onChange={(event) => { setSceneParentId(event.target.value); setSceneTagCode('') }}><option value="">{practiceTagsLoading ? text('加载中', 'Loading') : text('不限场景', 'Any')}</option>{sceneParentTags.map((tag) => <option key={tag.id} value={tag.id}>{english ? (tag.nameEn || tag.code || tag.name) : tag.name}</option>)}</select></label>
-            <label><span>{text('场景二级', 'Subscene')}</span><select value={sceneTagCode} disabled={practiceTagsLoading || !sceneParentId} onChange={(event) => setSceneTagCode(event.target.value)}><option value="">{practiceTagsLoading ? text('加载中', 'Loading') : sceneParentId ? text('不限场景', 'Any') : text('请先选择一级场景', 'Select a scene')}</option>{selectedSceneChildTags.map((tag) => <option key={tag.id} value={tag.code}>{english ? (tag.nameEn || tag.code || tag.name) : tag.name}</option>)}</select></label>
+            <TagCascadeSelect
+              tags={practiceTags}
+              english={english}
+              loading={practiceTagsLoading}
+              parentId={sceneParentId}
+              tagCode={sceneTagCode}
+              parentLabel={text('场景一级', 'Scene')}
+              childLabel={text('场景二级', 'Subscene')}
+              parentPlaceholder={practiceTagsLoading ? text('加载中', 'Loading') : text('不限场景', 'Any')}
+              childPlaceholder={practiceTagsLoading ? text('加载中', 'Loading') : text('不限场景', 'Any')}
+              selectParentFirstText={text('请先选择一级场景', 'Select a scene')}
+              onParentChange={setSceneParentId}
+              onTagChange={setSceneTagCode}
+            />
             <label className="wide-field"><span>{text('补充要求', 'Instructions')}</span><input value={extraRequirements} maxLength={500} placeholder={text('例如：使用敬语、指定场景或语法点', 'Optional: honorifics, context, or grammar')} onChange={(event) => setExtraRequirements(event.target.value)} /></label>
             <button type="button" className="primary-button" disabled={questionLoading} onClick={handleRandomQuestion}>{questionRandomizing ? text('抽题中', 'Loading') : text('随机题目', 'Random')}</button>
             <button type="button" className="primary-button" disabled={questionLoading} onClick={handleGenerateQuestion}>{questionGenerating ? text('生成中', 'Generating') : text('生成题目', 'Generate')}</button>
@@ -488,7 +501,7 @@ function ShortSentencePractice() {
                 {grammarPointVisible ? <span>{selectedQuestion?.grammarPoint ?? text('暂无', 'None')}</span> : null}
               </dd>
             </div>
-            <div><dt>{text('标签', 'Tags')}</dt><dd>{selectedQuestion ? <span className="tag-chip-row">{selectedQuestion.tags.map((tag) => <span key={tag.id}>{english ? (tag.nameEn || tag.code || tag.name) : tag.name}</span>)}</span> : text('暂无', 'None')}</dd></div>
+            <div><dt>{text('标签', 'Tags')}</dt><dd>{selectedQuestion ? <span className="tag-chip-row">{selectedQuestion.tags.map((tag) => <span key={tag.id}>{getTagDisplayName(tag, english)}</span>)}</span> : text('暂无', 'None')}</dd></div>
             <div><dt>{text('难度', 'Difficulty')}</dt><dd>{selectedQuestion ? `${selectedQuestion.level} / ${selectedQuestion.difficulty}` : text('暂无', 'None')}</dd></div>
           </dl>
         </section>
@@ -546,23 +559,6 @@ function ShortSentencePractice() {
       </div>
     </div>
   )
-}
-
-async function fetchAllSceneTags(signal: AbortSignal): Promise<Tag[]> {
-  const pageSize = 100
-  const firstPage = await fetchTags({ tagType: 'SCENE', enabledOnly: true, page: 1, size: pageSize }, signal)
-  const totalPages = Math.ceil(firstPage.total / pageSize)
-  if (totalPages <= 1) return firstPage.items
-
-  const remainingPages = await Promise.all(
-    Array.from({ length: totalPages - 1 }, (_, index) => fetchTags({
-      tagType: 'SCENE',
-      enabledOnly: true,
-      page: index + 2,
-      size: pageSize,
-    }, signal)),
-  )
-  return [firstPage, ...remainingPages].flatMap((page) => page.items)
 }
 
 function Notice({ notice }: { notice: PracticeNotice }) {

@@ -26,3 +26,22 @@ export async function fetchTags(params: TagQueryParams, signal?: AbortSignal): P
   const result = await readApiResponse<PageData<Tag>>(response)
   return result.data ?? { items: [], page: params.page, size: params.size, total: 0 }
 }
+
+export async function fetchAllTags(
+  params: Omit<TagQueryParams, 'page' | 'size'>,
+  signal?: AbortSignal,
+): Promise<Tag[]> {
+  const pageSize = 100
+  const firstPage = await fetchTags({ ...params, page: 1, size: pageSize }, signal)
+  const totalPages = Math.ceil(firstPage.total / pageSize)
+  if (totalPages <= 1) return firstPage.items
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) => fetchTags({
+      ...params,
+      page: index + 2,
+      size: pageSize,
+    }, signal)),
+  )
+  return [firstPage, ...remainingPages].flatMap((page) => page.items)
+}

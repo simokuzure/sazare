@@ -17,6 +17,7 @@ import type { AnswerReview } from '../types/review'
 import type { Tag } from '../types/tag'
 import type { UserAnswerErrorConfirmation, UserErrorType } from '../types/userError'
 import { useLanguage } from '../i18n/LanguageContext'
+import { getTagDisplayName } from '../utils/tag'
 
 type ArticleAnswerSession = {
   answerText: string
@@ -285,7 +286,7 @@ export default function ArticlePractice() {
           <label><span>{text('JLPT 等级', 'JLPT')}</span><select value={level} onChange={(event) => setLevel(event.target.value)}><option value="">N3</option>{['N5', 'N4', 'N3', 'N2', 'N1'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
           <label><span>{text('难度', 'Difficulty')}</span><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
           <label><span>{text('文章长度', 'Length')}</span><select value={lengthTier} onChange={(event) => setLengthTier(event.target.value as AiArticleLengthTier)}><option value="SHORT">{text('短篇（60–100 字）', 'Short (45–75 words)')}</option><option value="MEDIUM">{text('中篇（120–180 字）', 'Medium (90–135 words)')}</option><option value="LONG">{text('长篇（200–280 字）', 'Long (150–210 words)')}</option></select></label>
-          <label><span>{text('文章体裁', 'Genre')}</span><select value={genreTagCode} disabled={genreTagsLoading} onChange={(event) => setGenreTagCode(event.target.value)}><option value="">{genreTagsLoading ? text('加载中', 'Loading') : text('不限（随机体裁）', 'Any genre')}</option>{genreTags.map((tag) => <option key={tag.id} value={tag.code}>{english ? (tag.nameEn || tag.code || tag.name) : tag.name}</option>)}</select></label>
+          <label><span>{text('文章体裁', 'Genre')}</span><select value={genreTagCode} disabled={genreTagsLoading} onChange={(event) => setGenreTagCode(event.target.value)}><option value="">{genreTagsLoading ? text('加载中', 'Loading') : text('不限（随机体裁）', 'Any genre')}</option>{genreTags.map((tag) => <option key={tag.id} value={tag.code}>{getTagDisplayName(tag, english)}</option>)}</select></label>
           <label><span>{text('主题', 'Topic')}</span><input value={topic} maxLength={100} placeholder={text('可选，例如：周末旅行', 'Optional, for example: a weekend trip')} onChange={(event) => setTopic(event.target.value)} /></label>
           <label className="wide-field"><span>{text('补充要求', 'Instructions')}</span><input value={extraRequirements} maxLength={500} placeholder={text('例如：书面语、保持敬体、关注篇章衔接', 'For example: formal style, consistent register, or cohesive transitions')} onChange={(event) => setExtraRequirements(event.target.value)} /></label>
           <button type="button" className="primary-button" disabled={questionLoading} onClick={handleRandomArticle}>{questionRandomizing ? text('抽题中', 'Loading') : text('随机文章', 'Random')}</button>
@@ -304,7 +305,7 @@ export default function ArticlePractice() {
         <dl className="question-details article-metadata">
           <div><dt>{text('语境', 'Context')}</dt><dd>{question?.contextText ?? text('暂无', 'None')}</dd></div>
           <div><dt>{text('生词提示', 'Vocabulary hints')}</dt><dd className="grammar-point"><button type="button" disabled={!question} aria-expanded={vocabularyHintsVisible} onClick={() => setVocabularyHintsVisible((visible) => !visible)}>{vocabularyHintsVisible ? text('隐藏提示', 'Hide hints') : text('显示提示', 'Show hints')}</button>{vocabularyHintsVisible ? <span className="pre-wrap-text">{question?.grammarPoint ?? text('暂无', 'None')}</span> : null}</dd></div>
-          <div><dt>{text('体裁', 'Genre')}</dt><dd>{question ? <span className="tag-chip-row">{question.tags.map((tag) => <span key={tag.id}>{english ? (tag.nameEn || tag.code || tag.name) : tag.name}</span>)}</span> : text('暂无', 'None')}</dd></div>
+          <div><dt>{text('体裁', 'Genre')}</dt><dd>{question ? <span className="tag-chip-row">{question.tags.map((tag) => <span key={tag.id}>{getTagDisplayName(tag, english)}</span>)}</span> : text('暂无', 'None')}</dd></div>
           <div><dt>{text('难度', 'Difficulty')}</dt><dd>{question ? `${question.level} / ${question.difficulty}` : text('暂无', 'None')}</dd></div>
         </dl>
       </section>

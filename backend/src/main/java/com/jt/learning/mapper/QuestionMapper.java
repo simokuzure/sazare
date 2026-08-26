@@ -17,6 +17,8 @@ public interface QuestionMapper {
 
     Question selectQuestionById(Long id);
 
+    Question selectQuestionForUpdateById(Long id);
+
     long countQuestions(@Param("request") QuestionQueryRequest request);
 
     List<Long> selectQuestionIds(

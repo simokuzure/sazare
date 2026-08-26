@@ -84,9 +84,12 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+
+import static com.jt.learning.util.TagHierarchyUtils.secondLevelTags;
 
 @Service
 public class QuestionServiceImpl implements QuestionService {
@@ -1049,10 +1052,10 @@ public class QuestionServiceImpl implements QuestionService {
     private List<Tag> loadCandidateTags(String tagType, List<String> requestedCodes) {
         List<String> codes = normalizeCodes(requestedCodes);
         if (codes.isEmpty()) {
-            return dictionaryCacheService.getEnabledTagsByType(tagType);
+            return secondLevelTags(dictionaryCacheService.getEnabledTagsByType(tagType));
         }
 
-        List<Tag> tags = tagMapper.selectEnabledTagsByCodes(tagType, codes);
+        List<Tag> tags = secondLevelTags(tagMapper.selectEnabledTagsByCodes(tagType, codes));
         Set<String> foundCodes = tags.stream()
                 .map(Tag::getCode)
                 .collect(Collectors.toSet());

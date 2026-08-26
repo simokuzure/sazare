@@ -17,6 +17,7 @@ import {
   toNewErrorConfirmation,
 } from '../components/errorConfirmation'
 import ReviewList from '../components/ReviewList'
+import { getTagDisplayName } from '../utils/tag'
 import type { PageData, PracticeNotice } from '../types/api'
 import type {
   ReviewAttemptHistory,
@@ -634,7 +635,7 @@ function QuestionMetadata({ detail }: { detail: ReviewCardDetail }) {
   const question = detail.currentQuestion
   if (!question) return null
   const flags = [question.spoken ? text('口语', 'Spoken') : null, question.business ? text('商务', 'Business') : null, question.exam ? text('考试', 'Exam') : null].filter(Boolean)
-  return <div className="review-question-meta"><span>{question.level}</span><span>{text('难度', 'Difficulty')} {question.difficulty}</span>{flags.map((flag) => <span key={flag}>{flag}</span>)}{question.tags.map((tag) => <span key={tag.id}>{english ? tag.nameEn : tag.name}</span>)}<span>{text(`已作答 ${question.attemptCount} 次`, `${question.attemptCount} attempts`)}</span></div>
+  return <div className="review-question-meta"><span>{question.level}</span><span>{text('难度', 'Difficulty')} {question.difficulty}</span>{flags.map((flag) => <span key={flag}>{flag}</span>)}{question.tags.map((tag) => <span key={tag.id}>{getTagDisplayName(tag, english)}</span>)}<span>{text(`已作答 ${question.attemptCount} 次`, `${question.attemptCount} attempts`)}</span></div>
 }
 
 function ReviewMetrics({ progress }: { progress: ReviewCycleProgress }) {

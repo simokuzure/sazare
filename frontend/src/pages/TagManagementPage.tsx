@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { fetchTags as queryTags } from '../api/tagApi'
 import type { Tag, TagFilter } from '../types/tag'
 import { useLanguage } from '../i18n/LanguageContext'
+import { getTagDisplayName } from '../utils/tag'
 
 export default function TagManagementPage() {
   const { english, text } = useLanguage()
@@ -112,7 +113,7 @@ export default function TagManagementPage() {
                         <td data-label={text('类型', 'Type')}>{formatTagType(tag.tagType, english)}</td>
                         <td data-label={text('父级', 'Parent')}>{tag.parentId ?? '-'}</td>
                         <td className="code-cell table-ellipsis-cell" data-label={text('编码', 'Code')} title={tag.code}>{tag.code}</td>
-                        <td className="table-ellipsis-cell" data-label={text('名称', 'Name')} title={english ? tag.nameEn : tag.name}>{english ? tag.nameEn : tag.name}</td>
+                        <td className="table-ellipsis-cell" data-label={text('名称', 'Name')} title={getTagDisplayName(tag, english)}>{getTagDisplayName(tag, english)}</td>
                         <td className="table-ellipsis-cell" data-label={text('说明', 'Description')} title={(english ? tag.descriptionEn : tag.description) ?? undefined}>{(english ? tag.descriptionEn : tag.description) ?? '-'}</td>
                         <td data-label={text('排序', 'Order')}>{tag.sortOrder}</td>
                       </tr>

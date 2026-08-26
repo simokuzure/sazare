@@ -113,6 +113,15 @@
           and deleted = false
     </select>
 
+    <select id="selectQuestionForUpdateById" resultType="com.jt.learning.entity.Question">
+        select
+            <include refid="questionColumns" />
+        from questions
+        where id = #{id}
+          and deleted = false
+        for update
+    </select>
+
     <select id="countQuestions" resultType="long">
         select count(1)
         from questions q

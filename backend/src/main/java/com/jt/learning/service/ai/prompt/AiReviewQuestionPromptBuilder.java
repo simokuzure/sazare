@@ -27,7 +27,7 @@ public class AiReviewQuestionPromptBuilder {
             answers返回1到10个答案；answerType只能是STANDARD或REFERENCE；必须且只能有一个primaryAnswer=true；
             主答案必须是STANDARD。答案文本不得重复，sortOrder必须是从0开始的不重复非负整数。
             不输出等级、难度或场景标记。tagCodes必须根据新题实际语义重新选择，不能照搬已有题标签。
-            tagCodes必须包含且只能包含1个场景标签，可以再包含0到2个功能标签，不能使用候选列表之外的code。
+            候选列表只包含二级标签。tagCodes必须包含且只能包含1个二级场景标签，可以再包含0到2个二级功能标签，不能使用候选列表之外的code。
             """;
 
     private final ObjectMapper objectMapper;

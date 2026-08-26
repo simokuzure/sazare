@@ -9,7 +9,6 @@ import com.jt.learning.dto.UserAnswerListItemRow;
 import com.jt.learning.dto.UserAnswerQueryRequest;
 import com.jt.learning.dto.UserErrorTypeListItemRow;
 import com.jt.learning.dto.UserErrorTypeQueryRequest;
-import com.jt.learning.dto.AiQuestionTagOptionDTO;
 import com.jt.learning.entity.ErrorType;
 import com.jt.learning.entity.Question;
 import com.jt.learning.entity.QuestionAnswer;
@@ -19,6 +18,7 @@ import com.jt.learning.entity.User;
 import com.jt.learning.entity.UserAnswer;
 import com.jt.learning.entity.UserAnswerError;
 import com.jt.learning.entity.UserErrorType;
+import com.jt.learning.event.ReviewQuestionTagEnrichmentRequestedEvent;
 import com.jt.learning.exception.BusinessException;
 import com.jt.learning.exception.ErrorCode;
 import com.jt.learning.mapper.ErrorTypeMapper;
@@ -31,12 +31,7 @@ import com.jt.learning.mapper.UserAnswerMapper;
 import com.jt.learning.mapper.UserErrorTypeMapper;
 import com.jt.learning.mapper.UserMapper;
 import com.jt.learning.service.UserAnswerService;
-import com.jt.learning.service.DictionaryCacheService;
 import com.jt.learning.service.ReviewService;
-import com.jt.learning.service.ai.AiQuestionPrompt;
-import com.jt.learning.service.ai.AiReviewQuestionClient;
-import com.jt.learning.service.ai.prompt.AiReviewTagPromptBuilder;
-import com.jt.learning.service.ai.validation.ReviewAiResponseValidator;
 import com.jt.learning.vo.AnswerScoresVO;
 import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.QuestionAnswerVO;
@@ -46,6 +41,7 @@ import com.jt.learning.vo.UserAnswerDetailVO;
 import com.jt.learning.vo.UserAnswerErrorVO;
 import com.jt.learning.vo.UserAnswerListItemVO;
 import com.jt.learning.vo.UserErrorTypeVO;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -69,8 +65,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     private static final int DEFAULT_CORRECTION_REVIEW_DIFFICULTY = 3;
     private static final String CUSTOM_REVIEW_ERROR_TYPE_CODE = "UNNATURAL_EXPRESSION";
     private static final String CUSTOM_REVIEW_TYPE_DESCRIPTION = "用户自定义复习重点。";
-    private static final String TAG_TYPE_SCENE = "SCENE";
-    private static final String TAG_TYPE_FUNCTION = "FUNCTION";
     private static final Set<String> TRANSLATION_ONLY_ERROR_CODES = Set.of(
             "OMISSION", "MISTRANSLATION", "ADDITION", "FALSE_FRIEND", "CHINESE_CALQUE"
     );
@@ -80,7 +74,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     private final UserMapper userMapper;
     private final UserAnswerMapper userAnswerMapper;
     private final TagMapper tagMapper;
-    private final DictionaryCacheService dictionaryCacheService;
     private final QuestionAnswerMapper questionAnswerMapper;
     private final QuestionMapper questionMapper;
     private final QuestionTagMapper questionTagMapper;
@@ -88,15 +81,12 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     private final UserErrorTypeMapper userErrorTypeMapper;
     private final UserAnswerErrorMapper userAnswerErrorMapper;
     private final ReviewService reviewService;
-    private final AiReviewTagPromptBuilder reviewTagPromptBuilder;
-    private final AiReviewQuestionClient reviewQuestionClient;
-    private final ReviewAiResponseValidator reviewAiResponseValidator;
+    private final ApplicationEventPublisher eventPublisher;
 
     public UserAnswerServiceImpl(
             UserMapper userMapper,
             UserAnswerMapper userAnswerMapper,
             TagMapper tagMapper,
-            DictionaryCacheService dictionaryCacheService,
             QuestionAnswerMapper questionAnswerMapper,
             QuestionMapper questionMapper,
             QuestionTagMapper questionTagMapper,
@@ -104,14 +94,11 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             UserErrorTypeMapper userErrorTypeMapper,
             UserAnswerErrorMapper userAnswerErrorMapper,
             ReviewService reviewService,
-            AiReviewTagPromptBuilder reviewTagPromptBuilder,
-            AiReviewQuestionClient reviewQuestionClient,
-            ReviewAiResponseValidator reviewAiResponseValidator
+            ApplicationEventPublisher eventPublisher
     ) {
         this.userMapper = userMapper;
         this.userAnswerMapper = userAnswerMapper;
         this.tagMapper = tagMapper;
-        this.dictionaryCacheService = dictionaryCacheService;
         this.questionAnswerMapper = questionAnswerMapper;
         this.questionMapper = questionMapper;
         this.questionTagMapper = questionTagMapper;
@@ -119,9 +106,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         this.userErrorTypeMapper = userErrorTypeMapper;
         this.userAnswerErrorMapper = userAnswerErrorMapper;
         this.reviewService = reviewService;
-        this.reviewTagPromptBuilder = reviewTagPromptBuilder;
-        this.reviewQuestionClient = reviewQuestionClient;
-        this.reviewAiResponseValidator = reviewAiResponseValidator;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -343,6 +328,9 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             String reviewFocus,
             LocalDateTime now
     ) {
+        boolean requiresTagEnrichment = sourceQuestion == null
+                || TranslationDirection.fromQuestionType(sourceQuestion.getQuestionType())
+                .isArticle(sourceQuestion.getQuestionType());
         Question question = new Question();
         question.setQuestionType(sourceQuestion == null
                 ? TranslationDirection.fromLearningMode(learningMode).shortQuestionType()
@@ -363,7 +351,9 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         question.setCreatedAt(now);
         question.setUpdatedAt(now);
         questionMapper.insertQuestion(question);
-        copyEnabledQuestionTags(sourceQuestion, question.getId());
+        if (!requiresTagEnrichment) {
+            copyEnabledQuestionTags(sourceQuestion, question.getId());
+        }
 
         QuestionAnswer answer = new QuestionAnswer();
         answer.setQuestionId(question.getId());
@@ -375,6 +365,9 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         answer.setCreatedAt(now);
         answer.setUpdatedAt(now);
         questionAnswerMapper.insertQuestionAnswer(answer);
+        if (requiresTagEnrichment) {
+            requestTagEnrichment(question.getId());
+        }
         return question.getId();
     }
 
@@ -515,6 +508,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         answer.setCreatedAt(now);
         answer.setUpdatedAt(now);
         questionAnswerMapper.insertQuestionAnswer(answer);
+        requestTagEnrichment(question.getId());
         return question.getId();
     }
 
@@ -670,7 +664,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         question.setCreatedAt(now);
         question.setUpdatedAt(now);
         questionMapper.insertQuestion(question);
-        classifyAndSaveArticleReviewTags(question);
 
         QuestionAnswer answer = new QuestionAnswer();
         answer.setQuestionId(question.getId());
@@ -682,6 +675,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         answer.setCreatedAt(now);
         answer.setUpdatedAt(now);
         questionAnswerMapper.insertQuestionAnswer(answer);
+        requestTagEnrichment(question.getId());
         return question.getId();
     }
 
@@ -694,29 +688,8 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         }
     }
 
-    private void classifyAndSaveArticleReviewTags(Question reviewQuestion) {
-        List<Tag> sceneTags = dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_SCENE);
-        List<Tag> functionTags = dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_FUNCTION);
-        Map<String, Tag> allowedTagsByCode = new LinkedHashMap<>();
-        sceneTags.forEach(tag -> allowedTagsByCode.put(tag.getCode(), tag));
-        functionTags.forEach(tag -> allowedTagsByCode.put(tag.getCode(), tag));
-
-        List<AiQuestionTagOptionDTO> sceneTagOptions = toTagOptions(sceneTags);
-        List<AiQuestionTagOptionDTO> functionTagOptions = toTagOptions(functionTags);
-        AiQuestionPrompt prompt = reviewTagPromptBuilder.build(reviewQuestion, sceneTagOptions, functionTagOptions);
-        List<String> tagCodes = reviewAiResponseValidator.parseTagCodes(
-                reviewQuestionClient.classifyTags(prompt, sceneTagOptions, functionTagOptions),
-                sceneTags.stream().map(Tag::getCode).collect(java.util.stream.Collectors.toSet()),
-                allowedTagsByCode.keySet());
-        for (String tagCode : tagCodes) {
-            questionTagMapper.insertQuestionTag(reviewQuestion.getId(), allowedTagsByCode.get(tagCode.trim()).getId());
-        }
-    }
-
-    private List<AiQuestionTagOptionDTO> toTagOptions(List<Tag> tags) {
-        return tags.stream()
-                .map(tag -> new AiQuestionTagOptionDTO(tag.getCode(), tag.getName(), tag.getDescription()))
-                .toList();
+    private void requestTagEnrichment(Long questionId) {
+        eventPublisher.publishEvent(new ReviewQuestionTagEnrichmentRequestedEvent(questionId));
     }
 
     private List<String> splitSegments(String text) {

@@ -37,7 +37,7 @@ public class AiQuestionPromptBuilder {
             13. difficulty 必须是 1 到 5 的整数。
             14. grammarPoint 用中文或日语简短说明本题重点语法或表达。
             15. spoken、business、exam 必须是布尔值。
-            16. tagCodes 必须只从用户提供的 sceneTagOptions 和 functionTagOptions 中选择 code。
+            16. tagCodes 必须只从用户提供的二级 sceneTagOptions 和二级 functionTagOptions 中选择 code。
             17. 不允许创造新的标签 code、标签名称、题目类型、答案类型或字段名。
             18. tagCodes 至少包含 1 个场景标签 code，建议再包含 1 到 2 个功能标签 code。
             19. answers 必须是数组，至少包含 1 个 STANDARD 标准答案。

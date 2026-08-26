@@ -59,7 +59,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -528,10 +530,16 @@ class ReviewServiceImplTest {
         Tag selectedTag = new Tag();
         selectedTag.setId(5L);
         selectedTag.setTagType("SCENE");
+        selectedTag.setParentId(4L);
         selectedTag.setCode("DAILY_TRAVEL");
         selectedTag.setName("日常出行");
         selectedTag.setDescription("日常交通出行场景");
-        when(dictionaryCacheService.getEnabledTagsByType("SCENE")).thenReturn(List.of(selectedTag));
+        Tag parentTag = new Tag();
+        parentTag.setId(4L);
+        parentTag.setTagType("SCENE");
+        parentTag.setCode("DAILY_LIFE");
+        parentTag.setName("日常生活");
+        when(dictionaryCacheService.getEnabledTagsByType("SCENE")).thenReturn(List.of(parentTag, selectedTag));
         when(dictionaryCacheService.getEnabledTagsByType("FUNCTION")).thenReturn(List.of());
         when(questionClient.generateQuestion(any(), any(), any())).thenReturn("""
                 {"question":{"sourceText":"我准时赶上了公交车。","contextText":"日常出行","grammarPoint":"に間に合う","tagCodes":["DAILY_TRAVEL"],"answers":[{"answerText":"バスに間に合いました。","answerType":"STANDARD","primaryAnswer":true,"sortOrder":0}]}}
@@ -554,6 +562,9 @@ class ReviewServiceImplTest {
         ArgumentCaptor<Question> questionCaptor = ArgumentCaptor.forClass(Question.class);
         verify(questionMapper).insertQuestion(questionCaptor.capture());
         assertThat(questionCaptor.getValue().getSourceType()).isEqualTo("REVIEW_DERIVED");
+        verify(questionClient).generateQuestion(any(),
+                argThat(options -> options.size() == 1 && "DAILY_TRAVEL".equals(options.getFirst().code())),
+                anyList());
         verify(answerMapper).insertQuestionAnswer(any());
         verify(questionTagMapper).insertQuestionTag(101L, 5L);
     }

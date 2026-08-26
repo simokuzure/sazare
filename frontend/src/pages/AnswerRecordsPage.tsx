@@ -4,6 +4,7 @@ import { fetchUserAnswerDetail, fetchUserAnswers } from '../api/userAnswerApi'
 import PageHeader from '../components/PageHeader'
 import type { AnswerStatus, UserAnswerDetail, UserAnswerFilterState, UserAnswerRecord } from '../types/userAnswer'
 import { useLanguage } from '../i18n/LanguageContext'
+import { getTagDisplayName } from '../utils/tag'
 
 type AnswerRecordViewMode = 'list' | 'detail'
 
@@ -340,7 +341,7 @@ export default function AnswerRecordsPage() {
                   <dd>
                     <span className="tag-chip-row">
                       {detail.tags.map((tag) => (
-                        <span key={tag.id}>{english ? tag.nameEn : tag.name} / {tag.code}</span>
+                        <span key={tag.id}>{getTagDisplayName(tag, english)}</span>
                       ))}
                     </span>
                   </dd>

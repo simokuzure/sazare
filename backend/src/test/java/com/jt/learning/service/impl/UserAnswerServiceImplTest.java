@@ -15,6 +15,7 @@ import com.jt.learning.entity.User;
 import com.jt.learning.entity.UserAnswer;
 import com.jt.learning.entity.UserAnswerError;
 import com.jt.learning.entity.UserErrorType;
+import com.jt.learning.event.ReviewQuestionTagEnrichmentRequestedEvent;
 import com.jt.learning.exception.BusinessException;
 import com.jt.learning.exception.ErrorCode;
 import com.jt.learning.mapper.QuestionAnswerMapper;
@@ -27,12 +28,7 @@ import com.jt.learning.mapper.UserAnswerMapper;
 import com.jt.learning.mapper.UserErrorTypeMapper;
 import com.jt.learning.mapper.UserMapper;
 import com.jt.learning.service.ReviewService;
-import com.jt.learning.service.DictionaryCacheService;
 import com.jt.learning.service.UserAnswerService;
-import com.jt.learning.service.ai.AiReviewQuestionClient;
-import com.jt.learning.service.ai.prompt.AiReviewTagPromptBuilder;
-import com.jt.learning.service.ai.validation.AiErrorAnalysisValidator;
-import com.jt.learning.service.ai.validation.ReviewAiResponseValidator;
 import com.jt.learning.vo.PageVO;
 import com.jt.learning.vo.UserAnswerDetailVO;
 import com.jt.learning.vo.UserAnswerErrorVO;
@@ -42,11 +38,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionInterceptor;
-import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -66,7 +62,6 @@ class UserAnswerServiceImplTest {
     private UserMapper userMapper;
     private UserAnswerMapper userAnswerMapper;
     private TagMapper tagMapper;
-    private DictionaryCacheService dictionaryCacheService;
     private QuestionAnswerMapper questionAnswerMapper;
     private QuestionMapper questionMapper;
     private QuestionTagMapper questionTagMapper;
@@ -74,7 +69,7 @@ class UserAnswerServiceImplTest {
     private UserErrorTypeMapper userErrorTypeMapper;
     private UserAnswerErrorMapper userAnswerErrorMapper;
     private ReviewService reviewService;
-    private AiReviewQuestionClient reviewQuestionClient;
+    private ApplicationEventPublisher eventPublisher;
     private UserAnswerServiceImpl userAnswerService;
 
     @BeforeEach
@@ -82,7 +77,6 @@ class UserAnswerServiceImplTest {
         userMapper = mock(UserMapper.class);
         userAnswerMapper = mock(UserAnswerMapper.class);
         tagMapper = mock(TagMapper.class);
-        dictionaryCacheService = mock(DictionaryCacheService.class);
         questionAnswerMapper = mock(QuestionAnswerMapper.class);
         questionMapper = mock(QuestionMapper.class);
         questionTagMapper = mock(QuestionTagMapper.class);
@@ -90,14 +84,12 @@ class UserAnswerServiceImplTest {
         userErrorTypeMapper = mock(UserErrorTypeMapper.class);
         userAnswerErrorMapper = mock(UserAnswerErrorMapper.class);
         reviewService = mock(ReviewService.class);
-        reviewQuestionClient = mock(AiReviewQuestionClient.class);
+        eventPublisher = mock(ApplicationEventPublisher.class);
         when(questionMapper.selectQuestionById(any())).thenReturn(shortQuestion());
-        ObjectMapper objectMapper = new ObjectMapper();
         userAnswerService = new UserAnswerServiceImpl(
                 userMapper,
                 userAnswerMapper,
                 tagMapper,
-                dictionaryCacheService,
                 questionAnswerMapper,
                 questionMapper,
                 questionTagMapper,
@@ -105,9 +97,7 @@ class UserAnswerServiceImplTest {
                 userErrorTypeMapper,
                 userAnswerErrorMapper,
                 reviewService,
-                new AiReviewTagPromptBuilder(objectMapper),
-                reviewQuestionClient,
-                new ReviewAiResponseValidator(objectMapper, new AiErrorAnalysisValidator())
+                eventPublisher
         );
     }
 
@@ -427,12 +417,6 @@ class UserAnswerServiceImplTest {
             question.setId(500L);
             return 1;
         });
-        Tag sceneTag = sceneTag();
-        Tag functionTag = functionTag();
-        when(dictionaryCacheService.getEnabledTagsByType("SCENE")).thenReturn(List.of(sceneTag));
-        when(dictionaryCacheService.getEnabledTagsByType("FUNCTION")).thenReturn(List.of(functionTag));
-        when(reviewQuestionClient.classifyTags(any(), any(), any())).thenReturn(
-                "{\"tagCodes\":[\"BANK\",\"FUNCTION_REQUEST\"]}");
         List<UserAnswerErrorVO> result = userAnswerService.confirmUserAnswerErrors(
                 10L,
                 new UserAnswerErrorConfirmRequest(List.of(new UserAnswerErrorConfirmItemRequest(
@@ -459,8 +443,8 @@ class UserAnswerServiceImplTest {
         verify(questionAnswerMapper).insertQuestionAnswer(answerCaptor.capture());
         assertThat(answerCaptor.getValue().getAnswerText())
                 .isEqualTo("天気はよくありませんでしたが、楽しく過ごしました。");
-        verify(questionTagMapper).insertQuestionTag(500L, sceneTag.getId());
-        verify(questionTagMapper).insertQuestionTag(500L, functionTag.getId());
+        verify(eventPublisher).publishEvent(new ReviewQuestionTagEnrichmentRequestedEvent(500L));
+        verify(questionTagMapper, never()).insertQuestionTag(eq(500L), any());
         verify(reviewService).recordPracticeErrors(eq(1L), eq(10L), eq(List.of(500L)), eq(20L), any());
     }
 
@@ -520,6 +504,7 @@ class UserAnswerServiceImplTest {
         ArgumentCaptor<QuestionAnswer> answerCaptor = ArgumentCaptor.forClass(QuestionAnswer.class);
         verify(questionAnswerMapper).insertQuestionAnswer(answerCaptor.capture());
         assertThat(answerCaptor.getValue().getAnswerText()).isEqualTo("私は昨日、図書館へ行きました。");
+        verify(eventPublisher).publishEvent(new ReviewQuestionTagEnrichmentRequestedEvent(500L));
         verify(reviewService).recordPracticeErrors(eq(1L), eq(10L), eq(List.of(500L)), eq(20L), any());
     }
 
@@ -563,6 +548,7 @@ class UserAnswerServiceImplTest {
         verify(questionAnswerMapper).insertQuestionAnswer(answerCaptor.capture());
         assertThat(answerCaptor.getValue().getAnswerText()).isEqualTo("明日の午後、公園を散歩します。");
         verify(questionTagMapper).insertQuestionTag(500L, sourceTag.getId());
+        verify(eventPublisher, never()).publishEvent(any());
         ArgumentCaptor<UserAnswerError> reviewItemCaptor = ArgumentCaptor.forClass(UserAnswerError.class);
         verify(userAnswerErrorMapper).insertUserAnswerError(reviewItemCaptor.capture());
         UserAnswerError reviewItem = reviewItemCaptor.getValue();
@@ -646,6 +632,8 @@ class UserAnswerServiceImplTest {
         ArgumentCaptor<Question> questionCaptor = ArgumentCaptor.forClass(Question.class);
         verify(questionMapper).insertQuestion(questionCaptor.capture());
         assertThat(questionCaptor.getValue().getSourceText()).isEqualTo("天气不太好，但我们过得很愉快。");
+        verify(eventPublisher).publishEvent(new ReviewQuestionTagEnrichmentRequestedEvent(500L));
+        verify(questionTagMapper, never()).insertQuestionTag(eq(500L), any());
     }
 
     @Test
@@ -681,6 +669,7 @@ class UserAnswerServiceImplTest {
         assertThat(questionCaptor.getValue().getSourceText()).isEqualTo("我昨天去了图书馆。");
         assertThat(questionCaptor.getValue().getLevel()).isEqualTo("N3");
         assertThat(questionCaptor.getValue().getDifficulty()).isEqualTo(3);
+        verify(eventPublisher).publishEvent(new ReviewQuestionTagEnrichmentRequestedEvent(500L));
     }
 
     @Test

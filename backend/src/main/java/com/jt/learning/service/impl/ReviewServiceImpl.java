@@ -76,6 +76,8 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.jt.learning.util.TagHierarchyUtils.secondLevelTags;
+
 @Service
 public class ReviewServiceImpl implements ReviewService {
 
@@ -535,8 +537,8 @@ public class ReviewServiceImpl implements ReviewService {
         List<QuestionAnswer> answers = questionAnswerMapper.selectActiveAnswersByQuestionIds(questionIds);
         Map<Long, List<QuestionAnswer>> answersByQuestionId = answers.stream()
                 .collect(Collectors.groupingBy(QuestionAnswer::getQuestionId, LinkedHashMap::new, Collectors.toList()));
-        List<Tag> sceneTags = dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_SCENE);
-        List<Tag> functionTags = dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_FUNCTION);
+        List<Tag> sceneTags = secondLevelTags(dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_SCENE));
+        List<Tag> functionTags = secondLevelTags(dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_FUNCTION));
         Map<String, Tag> allowedTagsByCode = java.util.stream.Stream.concat(
                         sceneTags.stream(), functionTags.stream())
                 .collect(Collectors.toMap(Tag::getCode, Function.identity(), (left, right) -> left, LinkedHashMap::new));

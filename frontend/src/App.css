@@ -1983,10 +1983,10 @@ textarea:focus {
 .question-table td:nth-child(2) { width: 8%; }
 
 .question-table th:nth-child(3),
-.question-table td:nth-child(3) { width: 29%; }
+.question-table td:nth-child(3) { width: 30%; }
 
 .question-table th:nth-child(4),
-.question-table td:nth-child(4) { width: 9%; }
+.question-table td:nth-child(4) { width: 8%; }
 
 .question-table th:nth-child(5),
 .question-table td:nth-child(5) { width: 8%; }
@@ -2130,6 +2130,38 @@ textarea:focus {
 .tag-option-row button {
   min-height: 32px;
   padding: 5px 9px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.question-tag-editor {
+  display: grid;
+  gap: 14px;
+}
+
+.question-tag-cascade-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.selected-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.selected-tag-group {
+  display: grid;
+  gap: 7px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.selected-tag-row button {
+  min-height: 32px;
+  padding: 5px 10px;
+  border-radius: 999px;
   color: #475569;
   font-size: 13px;
 }
@@ -2482,6 +2514,10 @@ tbody tr:last-child td {
   .error-type-filter-bar,
   .question-filter-bar,
   .question-edit-form {
+    grid-template-columns: 1fr;
+  }
+
+  .question-tag-cascade-grid {
     grid-template-columns: 1fr;
   }
 

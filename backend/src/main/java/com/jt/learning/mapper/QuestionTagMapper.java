@@ -11,5 +11,7 @@ public interface QuestionTagMapper {
             @Param("tagId") Long tagId
     );
 
+    int countByQuestionId(@Param("questionId") Long questionId);
+
     int deleteQuestionTagsByQuestionId(@Param("questionId") Long questionId);
 }
