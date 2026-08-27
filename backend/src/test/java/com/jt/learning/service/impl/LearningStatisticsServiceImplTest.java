@@ -6,7 +6,6 @@ import com.jt.learning.dto.LearningStatisticsOverviewRow;
 import com.jt.learning.dto.LearningStatisticsPeriodReviewRow;
 import com.jt.learning.dto.LearningStatisticsQueryRequest;
 import com.jt.learning.dto.LearningStatisticsScoreDimensionsRow;
-import com.jt.learning.dto.LearningStatisticsWeaknessRow;
 import com.jt.learning.entity.User;
 import com.jt.learning.exception.BusinessException;
 import com.jt.learning.mapper.LearningStatisticsMapper;
@@ -62,9 +61,9 @@ class LearningStatisticsServiceImplTest {
         verify(learningStatisticsMapper).selectOverview(eq(1L), eq("ZH_TO_JA"), startAtCaptor.capture(), endAtCaptor.capture());
         assertThat(startAtCaptor.getValue()).isEqualTo(LocalDateTime.of(2026, 7, 11, 0, 0));
         assertThat(endAtCaptor.getValue()).isEqualTo(LocalDateTime.of(2026, 8, 10, 0, 0));
-        assertThat(result.dailyTrends()).hasSize(30);
-        assertThat(result.dailyTrends().getFirst().averageTotalScore()).isNull();
-        assertThat(result.dailyTrends().getLast().answerCount()).isEqualTo(2);
+        assertThat(result.translation().dailyTrends()).hasSize(30);
+        assertThat(result.translation().dailyTrends().getFirst().averageTotalScore()).isNull();
+        assertThat(result.translation().dailyTrends().getLast().attemptCount()).isEqualTo(2);
     }
 
     @Test
@@ -82,16 +81,14 @@ class LearningStatisticsServiceImplTest {
     }
 
     @Test
-    void shouldCalculateReviewRateAndExposeConfirmedWeaknessOnly() {
+    void shouldCalculateReviewRateAndCurrentCheckInStreak() {
         stubLocalUser();
         stubStatisticsRows();
-        when(learningStatisticsMapper.countConfirmedErrors(eq(1L), eq("ZH_TO_JA"), any(), any())).thenReturn(3L);
-        when(learningStatisticsMapper.selectTopWeaknesses(eq(1L), eq("ZH_TO_JA"), any(), any())).thenReturn(List.of(
-                new LearningStatisticsWeaknessRow(
-                        10L, "交通工具に間に合う", "ACTIVE", 20L, "PARTICLE", "助词错误",
-                        3L, 1L, 1L, 1L, LocalDateTime.of(2026, 8, 8, 12, 0), "ACTIVE",
-                        LocalDateTime.of(2026, 8, 9, 10, 0)
-                )
+        when(learningStatisticsMapper.selectLearningActivityDates(1L)).thenReturn(List.of(
+                LocalDate.of(2026, 8, 9),
+                LocalDate.of(2026, 8, 8),
+                LocalDate.of(2026, 8, 7),
+                LocalDate.of(2026, 8, 5)
         ));
         when(learningStatisticsMapper.selectPeriodReviewSummary(eq(1L), eq("ZH_TO_JA"), any(), any()))
                 .thenReturn(new LearningStatisticsPeriodReviewRow(4L, 3L));
@@ -99,12 +96,42 @@ class LearningStatisticsServiceImplTest {
         LearningStatisticsVO result = service.getLearningStatistics(new LearningStatisticsQueryRequest(
                 "CUSTOM", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 9)));
 
-        assertThat(result.overview().confirmedErrorCount()).isEqualTo(3);
-        assertThat(result.weaknesses()).singleElement().satisfies(item -> {
-            assertThat(item.userErrorTypeName()).isEqualTo("交通工具に間に合う");
-            assertThat(item.reviewState()).isEqualTo("DUE");
-        });
+        assertThat(result.checkInOverview().currentStreakDays()).isEqualTo(3L);
+        assertThat(result.checkInOverview().totalCheckInDays()).isEqualTo(4L);
         assertThat(result.reviewOverview().periodReviewPassRate()).isEqualByComparingTo("75.00");
+    }
+
+    @Test
+    void shouldKeepStreakThroughYesterdayAndDeduplicateDates() {
+        stubLocalUser();
+        stubStatisticsRows();
+        when(learningStatisticsMapper.selectLearningActivityDates(1L)).thenReturn(List.of(
+                LocalDate.of(2026, 8, 8),
+                LocalDate.of(2026, 8, 8),
+                LocalDate.of(2026, 8, 7)
+        ));
+
+        LearningStatisticsVO result = service.getLearningStatistics(
+                new LearningStatisticsQueryRequest(null, null, null));
+
+        assertThat(result.checkInOverview().currentStreakDays()).isEqualTo(2L);
+        assertThat(result.checkInOverview().totalCheckInDays()).isEqualTo(2L);
+    }
+
+    @Test
+    void shouldResetStreakWhenNeitherTodayNorYesterdayHasActivity() {
+        stubLocalUser();
+        stubStatisticsRows();
+        when(learningStatisticsMapper.selectLearningActivityDates(1L)).thenReturn(List.of(
+                LocalDate.of(2026, 8, 7),
+                LocalDate.of(2026, 8, 6)
+        ));
+
+        LearningStatisticsVO result = service.getLearningStatistics(
+                new LearningStatisticsQueryRequest(null, null, null));
+
+        assertThat(result.checkInOverview().currentStreakDays()).isZero();
+        assertThat(result.checkInOverview().totalCheckInDays()).isEqualTo(2L);
     }
 
     private void stubLocalUser() {
@@ -115,17 +142,21 @@ class LearningStatisticsServiceImplTest {
 
     private void stubStatisticsRows() {
         when(learningStatisticsMapper.selectOverview(eq(1L), eq("ZH_TO_JA"), any(), any()))
-                .thenReturn(new LearningStatisticsOverviewRow(4L, 3L, new BigDecimal("82.50")));
-        when(learningStatisticsMapper.countConfirmedErrors(eq(1L), eq("ZH_TO_JA"), any(), any())).thenReturn(0L);
+                .thenReturn(new LearningStatisticsOverviewRow(4L, new BigDecimal("82.50")));
+        when(learningStatisticsMapper.selectCorrectionOverview(eq(1L), eq("ZH_TO_JA"), any(), any()))
+                .thenReturn(new LearningStatisticsOverviewRow(2L, new BigDecimal("78.50")));
         when(learningStatisticsMapper.selectDailyTrends(eq(1L), eq("ZH_TO_JA"), any(), any())).thenReturn(List.of());
+        when(learningStatisticsMapper.selectCorrectionDailyTrends(eq(1L), eq("ZH_TO_JA"), any(), any()))
+                .thenReturn(List.of());
         when(learningStatisticsMapper.selectScoreDimensions(eq(1L), eq("ZH_TO_JA"), any(), any())).thenReturn(
                 new LearningStatisticsScoreDimensionsRow(
                         new BigDecimal("80"), new BigDecimal("81"), new BigDecimal("82"), new BigDecimal("83")));
-        when(learningStatisticsMapper.selectTopWeaknesses(eq(1L), eq("ZH_TO_JA"), any(), any())).thenReturn(List.of());
+        when(learningStatisticsMapper.selectCorrectionScoreDimensions(eq(1L), eq("ZH_TO_JA"), any(), any()))
+                .thenReturn(new LearningStatisticsScoreDimensionsRow(
+                        new BigDecimal("70"), new BigDecimal("71"), new BigDecimal("72"), new BigDecimal("73")));
         when(learningStatisticsMapper.selectCurrentReviewSummary(eq(1L), eq("ZH_TO_JA"), any())).thenReturn(
                 new LearningStatisticsCurrentReviewRow(1L, 2L, 3L));
         when(learningStatisticsMapper.selectPeriodReviewSummary(eq(1L), eq("ZH_TO_JA"), any(), any())).thenReturn(
                 new LearningStatisticsPeriodReviewRow(0L, 0L));
-        when(learningStatisticsMapper.countCompletedReviewCycles(eq(1L), eq("ZH_TO_JA"), any(), any())).thenReturn(1L);
     }
 }

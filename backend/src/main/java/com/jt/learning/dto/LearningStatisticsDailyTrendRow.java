@@ -5,7 +5,7 @@ import java.time.LocalDate;
 
 public record LearningStatisticsDailyTrendRow(
         LocalDate day,
-        Long answerCount,
+        Long attemptCount,
         BigDecimal averageTotalScore
 ) {
 }

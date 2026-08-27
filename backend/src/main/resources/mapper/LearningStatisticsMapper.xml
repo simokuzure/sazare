@@ -6,8 +6,7 @@
 
     <select id="selectOverview" resultType="com.jt.learning.dto.LearningStatisticsOverviewRow">
         select
-            count(1) as answer_count,
-            count(*) filter (where answer_status = 'REVIEWED') as reviewed_answer_count,
+            count(1) as attempt_count,
             avg(total_score) filter (where answer_status = 'REVIEWED') as average_total_score
         from user_answers
         where user_id = #{userId}
@@ -20,8 +19,7 @@
 
     <select id="selectCorrectionOverview" resultType="com.jt.learning.dto.LearningStatisticsOverviewRow">
         select
-            count(1) as answer_count,
-            count(*) filter (where answer_status = 'REVIEWED') as reviewed_answer_count,
+            count(1) as attempt_count,
             avg(total_score) filter (where answer_status = 'REVIEWED') as average_total_score
         from user_answers
         where user_id = #{userId}
@@ -32,23 +30,19 @@
           and created_at &lt; #{endAt}
     </select>
 
-    <select id="countConfirmedErrors" resultType="long">
-        select count(1)
-        from user_answer_errors answer_error
-        inner join user_answers user_answer
-            on user_answer.id = answer_error.user_answer_id
-           and user_answer.user_id = #{userId}
-           and user_answer.deleted = false
-           and user_answer.learning_mode = #{learningMode}
-        where answer_error.user_id = #{userId}
-          and answer_error.created_at &gt;= #{startAt}
-          and answer_error.created_at &lt; #{endAt}
+    <select id="selectLearningActivityDates" resultType="java.time.LocalDate">
+        select distinct created_at::date as activity_date
+        from user_answers
+        where user_id = #{userId}
+          and deleted = false
+          and answer_status = 'REVIEWED'
+        order by activity_date desc
     </select>
 
     <select id="selectDailyTrends" resultType="com.jt.learning.dto.LearningStatisticsDailyTrendRow">
         select
             created_at::date as day,
-            count(1) as answer_count,
+            count(1) as attempt_count,
             avg(total_score) filter (where answer_status = 'REVIEWED') as average_total_score
         from user_answers
         where user_id = #{userId}
@@ -64,7 +58,7 @@
     <select id="selectCorrectionDailyTrends" resultType="com.jt.learning.dto.LearningStatisticsDailyTrendRow">
         select
             created_at::date as day,
-            count(1) as answer_count,
+            count(1) as attempt_count,
             avg(total_score) filter (where answer_status = 'REVIEWED') as average_total_score
         from user_answers
         where user_id = #{userId}
@@ -109,58 +103,13 @@
           and created_at &lt; #{endAt}
     </select>
 
-    <select id="selectTopWeaknesses" resultType="com.jt.learning.dto.LearningStatisticsWeaknessRow">
-        select
-            answer_error.user_error_type_id,
-            user_error_type.name as user_error_type_name,
-            user_error_type.status as user_error_type_status,
-            error_type.id as error_type_id,
-            error_type.code as error_type_code,
-            case when #{learningMode} = 'EN_TO_JA' then error_type.name_en else error_type.name end as error_type_name,
-            count(1) as confirmed_count,
-            count(*) filter (where answer_error.severity = 'LOW') as low_severity_count,
-            count(*) filter (where answer_error.severity = 'MEDIUM') as medium_severity_count,
-            count(*) filter (where answer_error.severity = 'HIGH') as high_severity_count,
-            max(answer_error.created_at) as last_confirmed_at,
-            review_card.status as review_card_status,
-            review_card.due_at as review_card_due_at
-        from user_answer_errors answer_error
-        inner join user_answers user_answer
-            on user_answer.id = answer_error.user_answer_id
-           and user_answer.user_id = #{userId}
-           and user_answer.deleted = false
-           and user_answer.learning_mode = #{learningMode}
-        inner join user_error_types user_error_type
-            on user_error_type.id = answer_error.user_error_type_id
-           and user_error_type.user_id = #{userId}
-           and user_error_type.learning_mode = #{learningMode}
-        inner join error_types error_type
-            on error_type.id = answer_error.error_type_id
-        left join review_cards review_card
-            on review_card.user_error_type_id = user_error_type.id
-           and review_card.user_id = #{userId}
-           and review_card.deleted = false
-        where answer_error.user_id = #{userId}
-          and answer_error.created_at &gt;= #{startAt}
-          and answer_error.created_at &lt; #{endAt}
-        group by
-            answer_error.user_error_type_id,
-            user_error_type.name,
-            user_error_type.status,
-            error_type.id,
-            error_type.code,
-            error_type.name,
-            error_type.name_en,
-            review_card.status,
-            review_card.due_at
-        order by confirmed_count desc, last_confirmed_at desc, answer_error.user_error_type_id desc
-        limit 10
-    </select>
-
     <select id="selectCurrentReviewSummary" resultType="com.jt.learning.dto.LearningStatisticsCurrentReviewRow">
         select
             count(*) filter (where review_card.status = 'ACTIVE' and review_card.due_at &lt;= #{now}) as due_card_count,
-            count(*) filter (where review_card.status = 'ACTIVE') as active_card_count,
+            count(*) filter (
+                where review_card.status = 'ACTIVE'
+                  and (review_card.due_at is null or review_card.due_at &gt; #{now})
+            ) as in_progress_card_count,
             count(*) filter (where review_card.status = 'MASTERED') as mastered_card_count
         from review_cards review_card
         inner join user_error_types user_error_type
@@ -185,17 +134,4 @@
           and review_attempt.created_at &lt; #{endAt}
     </select>
 
-    <select id="countCompletedReviewCycles" resultType="long">
-        select count(1)
-        from review_cycles review_cycle
-        inner join review_cards review_card
-            on review_card.id = review_cycle.review_card_id
-           and review_card.user_id = #{userId}
-        inner join user_error_types user_error_type
-            on user_error_type.id = review_card.user_error_type_id
-           and user_error_type.learning_mode = #{learningMode}
-        where review_cycle.status = 'COMPLETED'
-          and review_cycle.completed_at &gt;= #{startAt}
-          and review_cycle.completed_at &lt; #{endAt}
-    </select>
 </mapper>

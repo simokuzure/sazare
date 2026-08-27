@@ -15,14 +15,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LearningStatisticsMapperSqlTest {
 
     @Test
-    void weaknessSqlShouldReadOnlyPersistedConfirmedErrorsAndExcludeDeletedAnswers() throws Exception {
-        BoundSql boundSql = getBoundSql("selectTopWeaknesses");
+    void activityDateSqlShouldUseReviewedAnswersAcrossAllLearningModes() throws Exception {
+        BoundSql boundSql = getBoundSql("selectLearningActivityDates");
 
         assertThat(boundSql.getSql())
-                .contains("from user_answer_errors answer_error")
-                .contains("user_answer.deleted = false")
-                .contains("order by confirmed_count desc")
-                .doesNotContain("errorAnalysis");
+                .contains("select distinct created_at::date as activity_date")
+                .contains("deleted = false")
+                .contains("answer_status = 'REVIEWED'")
+                .contains("order by activity_date desc")
+                .doesNotContain("learning_mode");
     }
 
     @Test
@@ -42,7 +43,9 @@ class LearningStatisticsMapperSqlTest {
         assertThat(boundSql.getSql())
                 .contains("review_card.status = 'ACTIVE'")
                 .contains("review_card.status = 'MASTERED'")
-                .contains("review_card.due_at <= ?");
+                .contains("review_card.due_at <= ?")
+                .contains("review_card.due_at > ?")
+                .contains("as in_progress_card_count");
     }
 
     private BoundSql getBoundSql(String statementId) throws Exception {

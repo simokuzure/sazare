@@ -6,20 +6,19 @@ import com.jt.learning.dto.LearningStatisticsOverviewRow;
 import com.jt.learning.dto.LearningStatisticsPeriodReviewRow;
 import com.jt.learning.dto.LearningStatisticsQueryRequest;
 import com.jt.learning.dto.LearningStatisticsScoreDimensionsRow;
-import com.jt.learning.dto.LearningStatisticsWeaknessRow;
 import com.jt.learning.entity.User;
 import com.jt.learning.exception.BusinessException;
 import com.jt.learning.exception.ErrorCode;
 import com.jt.learning.mapper.LearningStatisticsMapper;
 import com.jt.learning.mapper.UserMapper;
 import com.jt.learning.service.LearningStatisticsService;
+import com.jt.learning.vo.LearningStatisticsCheckInOverviewVO;
 import com.jt.learning.vo.LearningStatisticsDailyTrendVO;
-import com.jt.learning.vo.LearningStatisticsOverviewVO;
 import com.jt.learning.vo.LearningStatisticsPeriodVO;
+import com.jt.learning.vo.LearningStatisticsPracticeVO;
 import com.jt.learning.vo.LearningStatisticsReviewOverviewVO;
 import com.jt.learning.vo.LearningStatisticsScoreDimensionsVO;
 import com.jt.learning.vo.LearningStatisticsVO;
-import com.jt.learning.vo.LearningStatisticsWeaknessVO;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -27,9 +26,11 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 public class LearningStatisticsServiceImpl implements LearningStatisticsService {
@@ -39,9 +40,6 @@ public class LearningStatisticsServiceImpl implements LearningStatisticsService 
     private static final String RANGE_LAST_30_DAYS = "LAST_30_DAYS";
     private static final String RANGE_LAST_90_DAYS = "LAST_90_DAYS";
     private static final String RANGE_CUSTOM = "CUSTOM";
-    private static final String CARD_ACTIVE = "ACTIVE";
-    private static final String CARD_MASTERED = "MASTERED";
-
     private final UserMapper userMapper;
     private final LearningStatisticsMapper learningStatisticsMapper;
     private final Clock learningStatisticsClock;
@@ -65,34 +63,28 @@ public class LearningStatisticsServiceImpl implements LearningStatisticsService 
                 user.getId(), request.learningMode(), period.startAt(), period.endAt());
         LearningStatisticsOverviewRow correctionOverview = learningStatisticsMapper.selectCorrectionOverview(
                 user.getId(), request.learningMode(), period.startAt(), period.endAt());
-        long confirmedErrorCount = learningStatisticsMapper.countConfirmedErrors(
-                user.getId(), request.learningMode(), period.startAt(), period.endAt());
         LearningStatisticsScoreDimensionsRow scoreDimensions = learningStatisticsMapper.selectScoreDimensions(
                 user.getId(), request.learningMode(), period.startAt(), period.endAt());
+        LearningStatisticsScoreDimensionsRow correctionScoreDimensions =
+                learningStatisticsMapper.selectCorrectionScoreDimensions(
+                        user.getId(), request.learningMode(), period.startAt(), period.endAt());
+        List<LearningStatisticsDailyTrendVO> dailyTrends = fillDailyTrends(
+                period, learningStatisticsMapper.selectDailyTrends(
+                        user.getId(), request.learningMode(), period.startAt(), period.endAt()));
+        List<LearningStatisticsDailyTrendVO> correctionDailyTrends = fillDailyTrends(
+                period, learningStatisticsMapper.selectCorrectionDailyTrends(
+                        user.getId(), request.learningMode(), period.startAt(), period.endAt()));
         LearningStatisticsCurrentReviewRow currentReview = learningStatisticsMapper.selectCurrentReviewSummary(
                 user.getId(), request.learningMode(), LocalDateTime.now(learningStatisticsClock));
         LearningStatisticsPeriodReviewRow periodReview = learningStatisticsMapper.selectPeriodReviewSummary(
                 user.getId(), request.learningMode(), period.startAt(), period.endAt());
-        long completedCycleCount = learningStatisticsMapper.countCompletedReviewCycles(
-                user.getId(), request.learningMode(), period.startAt(), period.endAt());
 
         return new LearningStatisticsVO(
+                toCheckInOverview(learningStatisticsMapper.selectLearningActivityDates(user.getId())),
                 new LearningStatisticsPeriodVO(period.range(), period.startDate(), period.endDate()),
-                toOverview(overview, confirmedErrorCount),
-                fillDailyTrends(period, learningStatisticsMapper.selectDailyTrends(
-                        user.getId(), request.learningMode(), period.startAt(), period.endAt())),
-                toScoreDimensions(scoreDimensions),
-                learningStatisticsMapper.selectTopWeaknesses(
-                                user.getId(), request.learningMode(), period.startAt(), period.endAt())
-                        .stream()
-                        .map(row -> toWeakness(row, LocalDateTime.now(learningStatisticsClock)))
-                        .toList(),
-                toReviewOverview(currentReview, periodReview, completedCycleCount),
-                toOverview(correctionOverview, 0),
-                fillDailyTrends(period, learningStatisticsMapper.selectCorrectionDailyTrends(
-                        user.getId(), request.learningMode(), period.startAt(), period.endAt())),
-                toScoreDimensions(learningStatisticsMapper.selectCorrectionScoreDimensions(
-                        user.getId(), request.learningMode(), period.startAt(), period.endAt()))
+                toPractice(overview, dailyTrends, scoreDimensions),
+                toPractice(correctionOverview, correctionDailyTrends, correctionScoreDimensions),
+                toReviewOverview(currentReview, periodReview)
         );
     }
 
@@ -131,15 +123,46 @@ public class LearningStatisticsServiceImpl implements LearningStatisticsService 
         return user;
     }
 
-    private LearningStatisticsOverviewVO toOverview(LearningStatisticsOverviewRow row, long confirmedErrorCount) {
-        if (row == null) {
-            return new LearningStatisticsOverviewVO(0L, 0L, null, confirmedErrorCount);
+    private LearningStatisticsCheckInOverviewVO toCheckInOverview(List<LocalDate> activityDates) {
+        List<LocalDate> dates = activityDates == null
+                ? List.of()
+                : activityDates.stream()
+                        .filter(Objects::nonNull)
+                        .distinct()
+                        .sorted(Comparator.reverseOrder())
+                        .toList();
+        if (dates.isEmpty()) {
+            return new LearningStatisticsCheckInOverviewVO(0L, 0L);
         }
-        return new LearningStatisticsOverviewVO(
-                zeroIfNull(row.answerCount()),
-                zeroIfNull(row.reviewedAnswerCount()),
-                row.averageTotalScore(),
-                confirmedErrorCount
+
+        LocalDate today = LocalDate.now(learningStatisticsClock);
+        LocalDate latestActivityDate = dates.getFirst();
+        if (latestActivityDate.isBefore(today.minusDays(1))) {
+            return new LearningStatisticsCheckInOverviewVO(0L, (long) dates.size());
+        }
+
+        long currentStreakDays = 0L;
+        LocalDate expectedDate = latestActivityDate;
+        for (LocalDate activityDate : dates) {
+            if (!activityDate.equals(expectedDate)) {
+                break;
+            }
+            currentStreakDays++;
+            expectedDate = expectedDate.minusDays(1);
+        }
+        return new LearningStatisticsCheckInOverviewVO(currentStreakDays, (long) dates.size());
+    }
+
+    private LearningStatisticsPracticeVO toPractice(
+            LearningStatisticsOverviewRow overview,
+            List<LearningStatisticsDailyTrendVO> dailyTrends,
+            LearningStatisticsScoreDimensionsRow scoreDimensions
+    ) {
+        return new LearningStatisticsPracticeVO(
+                overview == null ? 0L : zeroIfNull(overview.attemptCount()),
+                overview == null ? null : overview.averageTotalScore(),
+                dailyTrends,
+                toScoreDimensions(scoreDimensions)
         );
     }
 
@@ -155,9 +178,9 @@ public class LearningStatisticsServiceImpl implements LearningStatisticsService 
                 .map(day -> {
                     LearningStatisticsDailyTrendRow row = rowsByDay.get(day);
                     return new LearningStatisticsDailyTrendVO(
-                            day,
-                            row == null ? 0L : zeroIfNull(row.answerCount()),
-                            row == null ? null : row.averageTotalScore()
+                        day,
+                        row == null ? 0L : zeroIfNull(row.attemptCount()),
+                        row == null ? null : row.averageTotalScore()
                     );
                 })
                 .toList();
@@ -175,40 +198,9 @@ public class LearningStatisticsServiceImpl implements LearningStatisticsService 
         );
     }
 
-    private LearningStatisticsWeaknessVO toWeakness(LearningStatisticsWeaknessRow row, LocalDateTime now) {
-        return new LearningStatisticsWeaknessVO(
-                row.userErrorTypeId(),
-                row.userErrorTypeName(),
-                row.userErrorTypeStatus(),
-                row.errorTypeId(),
-                row.errorTypeCode(),
-                row.errorTypeName(),
-                zeroIfNull(row.confirmedCount()),
-                zeroIfNull(row.lowSeverityCount()),
-                zeroIfNull(row.mediumSeverityCount()),
-                zeroIfNull(row.highSeverityCount()),
-                row.lastConfirmedAt(),
-                resolveReviewState(row.reviewCardStatus(), row.reviewCardDueAt(), now)
-        );
-    }
-
-    private String resolveReviewState(String reviewCardStatus, LocalDateTime dueAt, LocalDateTime now) {
-        if (reviewCardStatus == null) {
-            return "NOT_CREATED";
-        }
-        if (CARD_MASTERED.equals(reviewCardStatus)) {
-            return CARD_MASTERED;
-        }
-        if (CARD_ACTIVE.equals(reviewCardStatus) && dueAt != null && !dueAt.isAfter(now)) {
-            return "DUE";
-        }
-        return CARD_ACTIVE;
-    }
-
     private LearningStatisticsReviewOverviewVO toReviewOverview(
             LearningStatisticsCurrentReviewRow currentReview,
-            LearningStatisticsPeriodReviewRow periodReview,
-            long completedCycleCount
+            LearningStatisticsPeriodReviewRow periodReview
     ) {
         long attemptCount = zeroIfNull(periodReview.reviewAttemptCount());
         long passCount = zeroIfNull(periodReview.reviewPassCount());
@@ -219,12 +211,10 @@ public class LearningStatisticsServiceImpl implements LearningStatisticsService 
                         .divide(BigDecimal.valueOf(attemptCount), 2, RoundingMode.HALF_UP);
         return new LearningStatisticsReviewOverviewVO(
                 zeroIfNull(currentReview.dueCardCount()),
-                zeroIfNull(currentReview.activeCardCount()),
+                zeroIfNull(currentReview.inProgressCardCount()),
                 zeroIfNull(currentReview.masteredCardCount()),
                 attemptCount,
-                passCount,
-                passRate,
-                completedCycleCount
+                passRate
         );
     }
 

@@ -7,21 +7,12 @@ export type LearningStatisticsFilters = {
   endDate?: string
 }
 
-export type LearningStatistics = {
-  period: {
-    range: LearningStatisticsRange
-    startDate: string
-    endDate: string
-  }
-  overview: {
-    answerCount: number
-    reviewedAnswerCount: number
-    averageTotalScore: number | null
-    confirmedErrorCount: number
-  }
+export type LearningStatisticsPractice = {
+  attemptCount: number
+  averageTotalScore: number | null
   dailyTrends: Array<{
     date: string
-    answerCount: number
+    attemptCount: number
     averageTotalScore: number | null
   }>
   scoreDimensions: {
@@ -30,44 +21,25 @@ export type LearningStatistics = {
     scenarioAdaptationScore: number | null
     informationCompletenessScore: number | null
   }
-  weaknesses: Array<{
-    userErrorTypeId: number
-    userErrorTypeName: string
-    userErrorTypeStatus: 'ACTIVE' | 'ARCHIVED'
-    errorTypeId: number
-    errorTypeCode: string
-    errorTypeName: string
-    confirmedCount: number
-    lowSeverityCount: number
-    mediumSeverityCount: number
-    highSeverityCount: number
-    lastConfirmedAt: string
-    reviewState: 'NOT_CREATED' | 'DUE' | 'ACTIVE' | 'MASTERED'
-  }>
+}
+
+export type LearningStatistics = {
+  checkInOverview: {
+    currentStreakDays: number
+    totalCheckInDays: number
+  }
+  period: {
+    range: LearningStatisticsRange
+    startDate: string
+    endDate: string
+  }
+  translation: LearningStatisticsPractice
+  correction: LearningStatisticsPractice
   reviewOverview: {
     dueCardCount: number
-    activeCardCount: number
+    inProgressCardCount: number
     masteredCardCount: number
     periodReviewAttemptCount: number
-    periodReviewPassCount: number
     periodReviewPassRate: number | null
-    periodCompletedCycleCount: number
-  }
-  correctionOverview: {
-    answerCount: number
-    reviewedAnswerCount: number
-    averageTotalScore: number | null
-    confirmedErrorCount: number
-  }
-  correctionDailyTrends: Array<{
-    date: string
-    answerCount: number
-    averageTotalScore: number | null
-  }>
-  correctionScoreDimensions: {
-    grammarVocabularyScore: number | null
-    naturalFluencyScore: number | null
-    scenarioAdaptationScore: number | null
-    informationCompletenessScore: number | null
   }
 }

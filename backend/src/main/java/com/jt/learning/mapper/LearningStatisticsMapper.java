@@ -5,10 +5,10 @@ import com.jt.learning.dto.LearningStatisticsDailyTrendRow;
 import com.jt.learning.dto.LearningStatisticsOverviewRow;
 import com.jt.learning.dto.LearningStatisticsPeriodReviewRow;
 import com.jt.learning.dto.LearningStatisticsScoreDimensionsRow;
-import com.jt.learning.dto.LearningStatisticsWeaknessRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -29,12 +29,7 @@ public interface LearningStatisticsMapper {
             @Param("endAt") LocalDateTime endAt
     );
 
-    long countConfirmedErrors(
-            @Param("userId") Long userId,
-            @Param("learningMode") String learningMode,
-            @Param("startAt") LocalDateTime startAt,
-            @Param("endAt") LocalDateTime endAt
-    );
+    List<LocalDate> selectLearningActivityDates(@Param("userId") Long userId);
 
     List<LearningStatisticsDailyTrendRow> selectDailyTrends(
             @Param("userId") Long userId,
@@ -64,13 +59,6 @@ public interface LearningStatisticsMapper {
             @Param("endAt") LocalDateTime endAt
     );
 
-    List<LearningStatisticsWeaknessRow> selectTopWeaknesses(
-            @Param("userId") Long userId,
-            @Param("learningMode") String learningMode,
-            @Param("startAt") LocalDateTime startAt,
-            @Param("endAt") LocalDateTime endAt
-    );
-
     LearningStatisticsCurrentReviewRow selectCurrentReviewSummary(
             @Param("userId") Long userId,
             @Param("learningMode") String learningMode,
@@ -78,13 +66,6 @@ public interface LearningStatisticsMapper {
     );
 
     LearningStatisticsPeriodReviewRow selectPeriodReviewSummary(
-            @Param("userId") Long userId,
-            @Param("learningMode") String learningMode,
-            @Param("startAt") LocalDateTime startAt,
-            @Param("endAt") LocalDateTime endAt
-    );
-
-    long countCompletedReviewCycles(
             @Param("userId") Long userId,
             @Param("learningMode") String learningMode,
             @Param("startAt") LocalDateTime startAt,

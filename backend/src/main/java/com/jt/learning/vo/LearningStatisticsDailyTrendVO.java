@@ -5,7 +5,7 @@ import java.time.LocalDate;
 
 public record LearningStatisticsDailyTrendVO(
         LocalDate date,
-        Long answerCount,
+        Long attemptCount,
         BigDecimal averageTotalScore
 ) {
 }
