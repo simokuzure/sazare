@@ -713,9 +713,6 @@ export default function QuestionManagementPage() {
                       placeholder={editingArticle ? text('按一句一段输入中文文章，句间保留一个空行', 'Enter one English sentence per paragraph, separated by a blank line') : text('输入中文句子', 'Enter an English sentence')}
                       onChange={(event) => updateQuestionForm({ sourceText: event.target.value })}
                     />
-                    {editingArticle ? <small className="field-hint">{english
-                      ? `${splitArticleSegments(questionForm.sourceText).length} segments; ${questionForm.sourceText.trim().split(/\s+/).filter(Boolean).length} / 120–220 words.`
-                      : `当前 ${splitArticleSegments(questionForm.sourceText).length} 段；中文总长 ${questionForm.sourceText.replace(/\s/g, '').length} / 150–300。`}</small> : null}
                   </label>
 
                   <label className="wide-field">
@@ -874,7 +871,6 @@ export default function QuestionManagementPage() {
                       placeholder={editingArticle ? text('按一句一段输入日文参考稿，并与中文段落顺序一致', 'Enter one Japanese sentence per paragraph in the same order as the English article') : text('输入主标准答案', 'Enter the primary standard answer')}
                       onChange={(event) => updateQuestionForm({ standardAnswer: event.target.value })}
                     />
-                    {editingArticle ? <small className="field-hint">{text(`当前 ${splitArticleSegments(questionForm.standardAnswer).length} 段。`, `${splitArticleSegments(questionForm.standardAnswer).length} segments.`)}</small> : null}
                   </label>
 
                   {!editingArticle ? <label className="wide-field">

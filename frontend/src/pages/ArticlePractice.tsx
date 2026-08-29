@@ -47,7 +47,7 @@ export default function ArticlePractice() {
   const [genreTags, setGenreTags] = useState<Tag[]>([])
   const [genreTagsLoading, setGenreTagsLoading] = useState(false)
   const [genreTagsError, setGenreTagsError] = useState<string | null>(null)
-  const [level, setLevel] = useState('')
+  const [level, setLevel] = useState('N3')
   const [difficulty, setDifficulty] = useState('3')
   const [lengthTier, setLengthTier] = useState<AiArticleLengthTier>('MEDIUM')
   const [genreTagCode, setGenreTagCode] = useState('')
@@ -284,12 +284,12 @@ export default function ArticlePractice() {
     <div className="practice-grid article-practice-grid">
       <section className="surface generator-panel" aria-label={text('文章题目生成', 'Article generation')}>
         <form className="form-grid article-generator-form" onSubmit={(event) => event.preventDefault()}>
-          <label><span>{text('JLPT 等级', 'JLPT')}</span><select value={level} onChange={(event) => setLevel(event.target.value)}><option value="">N3</option>{['N5', 'N4', 'N3', 'N2', 'N1'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+          <label><span>{text('JLPT 等级', 'JLPT')}</span><select value={level} onChange={(event) => setLevel(event.target.value)}>{['N5', 'N4', 'N3', 'N2', 'N1'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
           <label><span>{text('难度', 'Difficulty')}</span><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
           <label><span>{text('文章长度', 'Length')}</span><select value={lengthTier} onChange={(event) => setLengthTier(event.target.value as AiArticleLengthTier)}><option value="SHORT">{text('短篇（60–100 字）', 'Short (45–75 words)')}</option><option value="MEDIUM">{text('中篇（120–180 字）', 'Medium (90–135 words)')}</option><option value="LONG">{text('长篇（200–280 字）', 'Long (150–210 words)')}</option></select></label>
           <label><span>{text('文章体裁', 'Genre')}</span><select value={genreTagCode} disabled={genreTagsLoading} onChange={(event) => setGenreTagCode(event.target.value)}><option value="">{genreTagsLoading ? text('加载中', 'Loading') : text('不限（随机体裁）', 'Any genre')}</option>{genreTags.map((tag) => <option key={tag.id} value={tag.code}>{getTagDisplayName(tag, english)}</option>)}</select></label>
           <label><span>{text('主题', 'Topic')}</span><input value={topic} maxLength={100} placeholder={text('可选，例如：周末旅行', 'Optional, for example: a weekend trip')} onChange={(event) => setTopic(event.target.value)} /></label>
-          <label className="wide-field"><span>{text('补充要求', 'Instructions')}</span><input value={extraRequirements} maxLength={500} placeholder={text('例如：书面语、保持敬体、关注篇章衔接', 'For example: formal style, consistent register, or cohesive transitions')} onChange={(event) => setExtraRequirements(event.target.value)} /></label>
+          <label className="wide-field"><span>{text('补充要求', 'Instructions')}</span><input value={extraRequirements} maxLength={500} placeholder={text('书面语、保持敬体、关注篇章衔接', 'Formal style, consistent register, or cohesive transitions')} onChange={(event) => setExtraRequirements(event.target.value)} /></label>
           <button type="button" className="primary-button" disabled={questionLoading} onClick={handleRandomArticle}>{questionRandomizing ? text('抽题中', 'Loading') : text('随机文章', 'Random')}</button>
           <button type="button" className="primary-button" disabled={questionLoading} onClick={handleGenerateArticle}>{questionGenerating ? text('生成中', 'Generating') : text('生成文章', 'Generate')}</button>
         </form>
@@ -319,7 +319,7 @@ export default function ArticlePractice() {
           <>
             {answerInputNotice && (answerInputNotice.kind === 'error' || !question) ? <Notice notice={answerInputNotice} /> : null}
             <textarea aria-label={text('完整日语译文', 'Complete Japanese translation')} className="article-answer-input" value={session.answerText} maxLength={5000} disabled={!question} placeholder={question ? text('请输入完整日语译文；可以合并、拆分或调整句序', 'Enter the complete Japanese translation; you may merge, split, or reorder sentences.') : text('生成或随机抽取文章后即可作答', 'Generate or select an article to begin.')} onChange={(event) => setSession((current) => ({ ...current, answerText: event.target.value }))} />
-            <div className="answer-input-footer"><span>{session.answerText.length} / 5000</span><div className="action-row"><button type="button" className="primary-button" disabled={!question || session.answerScoring} onClick={handleSubmitAnswer}>{session.answerScoring ? text('评分中', 'Scoring') : text('提交答案', 'Submit answer')}</button><button type="button" disabled={!question && !session.answerText} onClick={() => { setSession(EMPTY_ARTICLE_SESSION); setPracticeNotice(null) }}>{text('清空', 'Clear')}</button></div></div>
+            <div className="answer-input-footer"><div className="action-row"><button type="button" className="primary-button" disabled={!question || session.answerScoring} onClick={handleSubmitAnswer}>{session.answerScoring ? text('评分中', 'Scoring') : text('提交答案', 'Submit answer')}</button><button type="button" disabled={!question && !session.answerText} onClick={() => { setSession(EMPTY_ARTICLE_SESSION); setPracticeNotice(null) }}>{text('清空', 'Clear')}</button></div></div>
           </>
         ) : (
           <div className="answer-result">

@@ -397,13 +397,6 @@ button:disabled {
     minmax(96px, 0.72fr) !important;
 }
 
-.field-hint {
-  margin: 0;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.55;
-}
-
 .article-segment-list {
   display: grid;
   gap: 10px;
@@ -434,19 +427,14 @@ button:disabled {
 }
 
 .article-answer-panel textarea.article-answer-input {
-  min-height: 120px;
+  min-height: 171px;
 }
 
 .answer-input-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
-}
-
-.answer-input-footer > span {
-  color: #64748b;
-  font-size: 12px;
 }
 
 .pre-wrap-text,
@@ -728,7 +716,7 @@ textarea:focus {
 }
 
 .answer-panel textarea {
-  min-height: 120px;
+  min-height: 166px;
 }
 
 .question-selector {
@@ -1710,13 +1698,6 @@ textarea:focus {
   background: #f8fafc;
   color: #475569;
   padding: 4px 7px;
-  font-size: 12px;
-}
-
-.answer-length {
-  align-self: center;
-  margin-left: auto;
-  color: #64748b;
   font-size: 12px;
 }
 
@@ -3336,8 +3317,6 @@ input[type="radio"] {
 }
 
 .question-details dt,
-.field-hint,
-.answer-input-footer > span,
 .pagination-bar,
 .page-size-field,
 .table-secondary-text {
@@ -4238,8 +4217,6 @@ tbody tr:hover {
   }
 
   .article-practice-grid .generator-panel .form-grid > button {
-    min-height: 38px;
-    height: 38px;
     padding-inline: 5px;
     font-size: 12px;
   }
@@ -5070,17 +5047,12 @@ tbody tr:hover {
 .review-answer-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
 }
 
 .review-answer-footer .action-row {
   gap: 10px;
-}
-
-.review-answer-footer .answer-length {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
 }
 
 .review-answer-helper {
@@ -5482,6 +5454,12 @@ tbody tr:hover {
 .practice-grid .generator-panel {
   border-top: 1px solid var(--border);
   padding: 14px 18px;
+}
+
+@media (min-width: 861px) {
+  .practice-grid .generator-panel {
+    height: 107px;
+  }
 }
 
 .generator-panel .form-grid,
@@ -6015,10 +5993,6 @@ tbody tr:hover {
 
 .score-value.is-good {
   --score-value-color: var(--score-good);
-}
-
-.score-value.is-warning {
-  --score-value-color: var(--score-warning);
 }
 
 .score-value.is-danger {

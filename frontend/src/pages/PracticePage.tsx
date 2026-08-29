@@ -151,7 +151,7 @@ function ShortSentencePractice() {
   const [practiceTagsLoading, setPracticeTagsLoading] = useState(false)
   const [practiceTagsError, setPracticeTagsError] = useState<string | null>(null)
   const [questionCount, setQuestionCount] = useState('1')
-  const [level, setLevel] = useState('')
+  const [level, setLevel] = useState('N3')
   const [difficulty, setDifficulty] = useState('3')
   const [sceneParentId, setSceneParentId] = useState('')
   const [sceneTagCode, setSceneTagCode] = useState('')
@@ -482,7 +482,7 @@ function ShortSentencePractice() {
         <section className="surface generator-panel" aria-label={text('题目生成', 'Question generation')}>
           <form className="form-grid" onSubmit={(event) => event.preventDefault()}>
             <label><span>{text('题目数量', 'Questions')}</span><select value={questionCount} onChange={(event) => setQuestionCount(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-            <label><span>{text('JLPT 等级', 'JLPT')}</span><select value={level} onChange={(event) => setLevel(event.target.value)}><option value="">N3</option>{['N5', 'N4', 'N3', 'N2', 'N1'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label><span>{text('JLPT 等级', 'JLPT')}</span><select value={level} onChange={(event) => setLevel(event.target.value)}>{['N5', 'N4', 'N3', 'N2', 'N1'].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
             <label><span>{text('难度', 'Difficulty')}</span><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
             <TagCascadeSelect
               tags={practiceTags}
@@ -498,7 +498,7 @@ function ShortSentencePractice() {
               onParentChange={setSceneParentId}
               onTagChange={setSceneTagCode}
             />
-            <label className="wide-field"><span>{text('补充要求', 'Instructions')}</span><input value={extraRequirements} maxLength={500} placeholder={text('例如：使用敬语、指定场景或语法点', 'Optional: honorifics, context, or grammar')} onChange={(event) => setExtraRequirements(event.target.value)} /></label>
+            <label className="wide-field"><span>{text('补充要求', 'Instructions')}</span><input value={extraRequirements} maxLength={500} placeholder={text('使用敬语、指定场景或语法点', 'Honorifics, context, or grammar')} onChange={(event) => setExtraRequirements(event.target.value)} /></label>
             <button type="button" className="primary-button" disabled={questionLoading} onClick={handleRandomQuestion}>{questionRandomizing ? text('抽题中', 'Loading') : text('随机题目', 'Random')}</button>
             <button type="button" className="primary-button" disabled={questionLoading} onClick={handleGenerateQuestion}>{questionGenerating ? text('生成中', 'Generating') : text('生成题目', 'Generate')}</button>
           </form>

@@ -191,7 +191,6 @@ export default function JapaneseCorrectionPractice() {
               onChange={(event) => setSession((current) => ({ ...current, text: event.target.value, notice: null }))}
             />
             <div className="answer-input-footer">
-              <span>{session.text.length} / 5000</span>
               <div className="action-row">
                 <button type="button" className="primary-button" disabled={session.correcting} onClick={handleCorrect}>
                   {session.correcting ? text('纠错中', 'Checking') : text('开始纠错', 'Check text')}
