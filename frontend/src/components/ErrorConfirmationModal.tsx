@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createReviewCard } from '../api/userErrorApi'
 import { getErrorMessage } from '../api/client'
 import type { PracticeNotice } from '../types/api'
@@ -29,6 +29,7 @@ export default function ErrorConfirmationModal({ analyses, candidates, userError
   onClose: () => void
 }) {
   const { text } = useLanguage()
+  const dialogRef = useRef<HTMLElement>(null)
   const [customEditing, setCustomEditing] = useState(analyses.length === 0)
   const [customSaving, setCustomSaving] = useState(false)
   const [savingAll, setSavingAll] = useState(false)
@@ -47,6 +48,47 @@ export default function ErrorConfirmationModal({ analyses, candidates, userError
   )]
   const busy = confirming || customSaving || savingAll
   const pendingCount = selectedCount + (customEditing ? 1 : 0)
+  const busyRef = useRef(busy)
+  const onCloseRef = useRef(onClose)
+  busyRef.current = busy
+  onCloseRef.current = onClose
+
+  useEffect(() => {
+    const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const dialog = dialogRef.current
+    const focusableSelector = 'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [href], [tabindex]:not([tabindex="-1"])'
+
+    dialog?.querySelector<HTMLElement>(focusableSelector)?.focus()
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (!dialog) return
+      if (event.key === 'Escape' && !busyRef.current) {
+        event.preventDefault()
+        onCloseRef.current()
+        return
+      }
+      if (event.key !== 'Tab') return
+
+      const focusableElements = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
+      if (focusableElements.length === 0) return
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements[focusableElements.length - 1]
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault()
+        lastElement.focus()
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault()
+        firstElement.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      previousActiveElement?.focus()
+    }
+  }, [])
 
   function resetCustomForm() {
     setCustomName('')
@@ -115,15 +157,15 @@ export default function ErrorConfirmationModal({ analyses, candidates, userError
   }
 
   return <div className="modal-backdrop" role="presentation">
-    <section className="error-confirmation error-confirmation-modal" role="dialog" aria-modal="true" aria-label={text('添加复习卡片', 'Add review cards')}>
+    <section ref={dialogRef} className="error-confirmation error-confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="review-card-dialog-title">
       <header className="modal-header">
-        <div className="section-title"><span className="label">{text('复习卡片', 'Review cards')}</span><strong>{analyses.length === 0 ? text('添加复习卡片', 'Add a review card') : text('选择或添加复习内容', 'Select or add review items')}</strong></div>
+        <div className="section-title"><span className="label">{text('复习卡片', 'Review cards')}</span><strong id="review-card-dialog-title">{analyses.length === 0 ? text('添加复习卡片', 'Add a review card') : text('选择或添加复习内容', 'Select or add review items')}</strong></div>
         <button type="button" className="modal-close" aria-label={text('关闭', 'Close')} disabled={busy} onClick={onClose}>×</button>
       </header>
       <div className="error-confirmation-body">
         {analyses.length > 0 ? <>
           <div className="error-confirmation-intro"><span className="candidate-count">{text(`已选 ${selectedCount} 项`, `${selectedCount} selected`)}</span><p className="error-confirmation-hint">{text('AI 分析仅作候选；确认后才会加入复习卡片。', 'AI suggestions are not saved until you confirm them.')}</p></div>
-          {notice ? <div className={notice.kind === 'error' ? 'notice is-error' : 'notice'}><strong>{notice.title}</strong><p>{notice.message}</p></div> : null}
+          {notice ? <div className={notice.kind === 'error' ? 'notice is-error' : 'notice'} role={notice.kind === 'error' ? 'alert' : 'status'}><strong>{notice.title}</strong><p>{notice.message}</p></div> : null}
           {analyses.map((analysis, index) => {
             const candidate = candidates[index]
             if (!candidate) return null
@@ -139,7 +181,7 @@ export default function ErrorConfirmationModal({ analyses, candidates, userError
         </> : <p className="candidate-empty-message">{text('本次未发现明确错误。', 'No clear errors were found.')}</p>}
 
         <section className="custom-review-card-section">
-          {customNotice ? <div className={customNotice.kind === 'error' ? 'notice is-error' : 'notice'}><strong>{customNotice.title}</strong><p>{customNotice.message}</p></div> : null}
+          {customNotice ? <div className={customNotice.kind === 'error' ? 'notice is-error' : 'notice'} role={customNotice.kind === 'error' ? 'alert' : 'status'}><strong>{customNotice.title}</strong><p>{customNotice.message}</p></div> : null}
           {!customEditing ? <button type="button" className="primary-button" disabled={busy} onClick={() => { setCustomEditing(true); setCustomNotice(null) }}>{analyses.length > 0 ? text('添加自定义复习卡片', 'Add custom review card') : text('添加复习卡片', 'Add review card')}</button> : <div className="custom-review-card-form">
             <div className="section-title"><span className="label">{text('自定义', 'Custom')}</span><strong>{text('添加自定义复习卡片', 'Add custom review card')}</strong></div>
             <label><span>{text('复习重点', 'Review focus')}</span><input value={customName} maxLength={128} disabled={busy} onChange={(event) => setCustomName(event.target.value)} /></label>

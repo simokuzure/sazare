@@ -16,6 +16,7 @@ import {
 } from 'recharts'
 import { fetchLearningStatistics } from '../api/learningStatisticsApi'
 import { getErrorMessage } from '../api/client'
+import PageHeader from '../components/PageHeader'
 import type {
   LearningStatistics,
   LearningStatisticsFilters,
@@ -23,6 +24,7 @@ import type {
   LearningStatisticsRange,
 } from '../types/learningStatistics'
 import { useLanguage } from '../i18n/LanguageContext'
+import { scoreToneClassName } from '../utils/score'
 
 const RANGE_OPTIONS: Array<{ value: LearningStatisticsRange; label: string }> = [
   { value: 'LAST_7_DAYS', label: '近 7 天' },
@@ -31,7 +33,7 @@ const RANGE_OPTIONS: Array<{ value: LearningStatisticsRange; label: string }> = 
   { value: 'CUSTOM', label: '自定义' },
 ]
 
-const REVIEW_COLORS = ['#dc2626', '#2563eb', '#16a34a']
+const REVIEW_COLORS = ['var(--warning)', 'var(--brand)', 'var(--success)']
 type PracticeType = 'TRANSLATION' | 'CORRECTION'
 
 export default function LearningStatisticsPage() {
@@ -89,9 +91,9 @@ export default function LearningStatisticsPage() {
   const reviewStates = useMemo(() => {
     if (!statistics) return []
     return [
-      { name: text('待复习', 'Due'), value: statistics.reviewOverview.dueCardCount },
-      { name: text('进行中', 'Active'), value: statistics.reviewOverview.inProgressCardCount },
-      { name: text('已掌握', 'Mastered'), value: statistics.reviewOverview.masteredCardCount },
+      { name: text('待复习', 'Due'), value: statistics.reviewOverview.dueCardCount, color: REVIEW_COLORS[0] },
+      { name: text('进行中', 'Active'), value: statistics.reviewOverview.inProgressCardCount, color: REVIEW_COLORS[1] },
+      { name: text('已掌握', 'Mastered'), value: statistics.reviewOverview.masteredCardCount, color: REVIEW_COLORS[2] },
     ].filter((item) => item.value > 0)
   }, [statistics, text])
 
@@ -113,37 +115,40 @@ export default function LearningStatisticsPage() {
   }
 
   return (
-    <section className="page-content learning-statistics-page" aria-label={text('学习分析', 'Learning analytics')}>
-      <section className="surface learning-statistics-toolbar">
-        <div className="section-title">
-          <span className="label">{text('学习记录分析', 'Learning progress')}</span>
-          <strong>{text('学习概览', 'Progress overview')}</strong>
-        </div>
-        <div className="statistics-filter-controls">
-          <div className="statistics-range-buttons" role="group" aria-label={text('统计范围', 'Statistics range')}>
-            {RANGE_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={filters.range === option.value ? 'is-active' : undefined}
-                onClick={() => selectRange(option.value)}
-              >
-                {text(option.label, option.value === 'LAST_7_DAYS' ? 'Last 7 days' : option.value === 'LAST_30_DAYS' ? 'Last 30 days' : option.value === 'LAST_90_DAYS' ? 'Last 90 days' : 'Custom')}
-              </button>
-            ))}
+    <section
+      className="page-content learning-statistics-page"
+      aria-label={text('学习分析', 'Learning analytics')}
+      aria-busy={loading}
+    >
+      <PageHeader
+        title={text('学习分析', 'Learning analytics')}
+        description={text('按时间范围查看练习表现、评分维度与复习进度。', 'Review practice performance, score dimensions, and review progress by date range.')}
+        actions={<div className="statistics-range-buttons" role="group" aria-label={text('统计范围', 'Statistics range')}>
+          {RANGE_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={filters.range === option.value ? 'is-active' : undefined}
+              aria-pressed={filters.range === option.value}
+              onClick={() => selectRange(option.value)}
+            >
+              {text(option.label, option.value === 'LAST_7_DAYS' ? 'Last 7 days' : option.value === 'LAST_30_DAYS' ? 'Last 30 days' : option.value === 'LAST_90_DAYS' ? 'Last 90 days' : 'Custom')}
+            </button>
+          ))}
+        </div>}
+      />
+      {filters.range === 'CUSTOM' ? (
+        <section className="statistics-custom-range-panel" aria-label={text('自定义统计范围', 'Custom statistics range')}>
+          <div className="statistics-custom-range">
+            <label><span>{text('开始日期', 'Start date')}</span><input type="date" value={customStartDate} onChange={(event) => setCustomStartDate(event.target.value)} /></label>
+            <label><span>{text('结束日期', 'End date')}</span><input type="date" value={customEndDate} onChange={(event) => setCustomEndDate(event.target.value)} /></label>
+            <button type="button" onClick={applyCustomRange} disabled={!customStartDate || !customEndDate}>{text('应用', 'Apply')}</button>
           </div>
-          {filters.range === 'CUSTOM' ? (
-            <div className="statistics-custom-range">
-              <label><span>{text('开始日期', 'Start date')}</span><input type="date" value={customStartDate} onChange={(event) => setCustomStartDate(event.target.value)} /></label>
-              <label><span>{text('结束日期', 'End date')}</span><input type="date" value={customEndDate} onChange={(event) => setCustomEndDate(event.target.value)} /></label>
-              <button type="button" onClick={applyCustomRange} disabled={!customStartDate || !customEndDate}>{text('应用', 'Apply')}</button>
-            </div>
-          ) : null}
-        </div>
-      </section>
+        </section>
+      ) : null}
 
-      {loading && !statistics ? <section className="surface"><p className="loading-text">{text('正在加载学习统计...', 'Loading learning statistics...')}</p></section> : null}
-      {error ? <section className="surface"><div className="notice is-error"><strong>{text('学习统计加载失败', 'Could not load learning statistics')}</strong><p>{error}</p><button type="button" onClick={() => setReloadToken((value) => value + 1)}>{text('重新加载', 'Reload')}</button></div></section> : null}
+      {loading && !statistics ? <StatisticsSkeleton /> : null}
+      {error ? <section className="surface state-surface"><div className="notice is-error" role="alert"><strong>{text('学习统计加载失败', 'Could not load learning statistics')}</strong><p>{error}</p><button type="button" onClick={() => setReloadToken((value) => value + 1)}>{text('重新加载', 'Reload')}</button></div></section> : null}
 
       {statistics ? <StatisticsContent
         statistics={statistics}
@@ -153,6 +158,31 @@ export default function LearningStatisticsPage() {
         reviewStates={reviewStates}
         onPracticeTypeChange={setPracticeType}
       /> : null}
+    </section>
+  )
+}
+
+function StatisticsSkeleton() {
+  const { text } = useLanguage()
+  return (
+    <section className="statistics-skeleton" role="status" aria-live="polite">
+      <span className="sr-only">{text('正在加载学习统计...', 'Loading learning statistics...')}</span>
+      <div className="surface statistics-kpi-strip" aria-hidden="true">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div className="statistics-metric-item statistics-skeleton-metric" key={index}>
+            <span className="statistics-skeleton-block is-label" />
+            <span className="statistics-skeleton-block is-value" />
+            <span className="statistics-skeleton-block is-detail" />
+          </div>
+        ))}
+      </div>
+      <div className="statistics-dashboard-grid" aria-hidden="true">
+        <div className="surface statistics-skeleton-panel is-trend"><div className="statistics-skeleton-panel-heading"><span className="statistics-skeleton-block is-panel-title" /><span className="statistics-skeleton-block is-control" /></div><span className="statistics-skeleton-block is-chart" /></div>
+        <div className="statistics-side-stack">
+          <div className="surface statistics-skeleton-panel"><span className="statistics-skeleton-block is-panel-title" /><span className="statistics-skeleton-block is-chart" /></div>
+          <div className="surface statistics-skeleton-panel"><span className="statistics-skeleton-block is-panel-title" /><span className="statistics-skeleton-block is-chart" /></div>
+        </div>
+      </div>
     </section>
   )
 }
@@ -169,120 +199,154 @@ function StatisticsContent({
   practiceType: PracticeType
   practice: LearningStatisticsPractice
   scoreDimensions: Array<{ name: string; score: number | null }>
-  reviewStates: Array<{ name: string; value: number }>
+  reviewStates: Array<{ name: string; value: number; color: string }>
   onPracticeTypeChange: (value: PracticeType) => void
 }) {
   const { text } = useLanguage()
   const isTranslation = practiceType === 'TRANSLATION'
+  const hasDailyTrends = practice.dailyTrends.some((item) => item.attemptCount > 0 || item.averageTotalScore != null)
+  const hasScoreDimensions = scoreDimensions.some((item) => item.score != null)
   return <>
-    <section className="statistics-overview-grid statistics-check-in-grid" aria-label={text('学习打卡', 'Learning check-ins')}>
-      <MetricCard
+    <section className="surface statistics-kpi-strip" aria-label={text('学习与练习概览指标', 'Learning and practice overview metrics')}>
+      <MetricItem
         label={text('连续打卡', 'Current streak')}
         value={text(`${statistics.checkInOverview.currentStreakDays} 天`, `${statistics.checkInOverview.currentStreakDays} days`)}
         detail={text('今天尚未学习时保留截至昨天的连续天数', 'Keeps yesterday’s streak until today ends')}
       />
-      <MetricCard
+      <MetricItem
         label={text('累计打卡', 'Total check-ins')}
         value={text(`${statistics.checkInOverview.totalCheckInDays} 天`, `${statistics.checkInOverview.totalCheckInDays} days`)}
         detail={text('全部学习模式，按东京自然日去重', 'All learning modes, deduplicated by Tokyo date')}
       />
+      <MetricItem
+        label={isTranslation ? text('翻译次数', 'Translation attempts') : text('纠错次数', 'Correction attempts')}
+        value={String(practice.attemptCount)}
+        detail={`${statistics.period.startDate} – ${statistics.period.endDate}`}
+      />
+      <MetricItem
+        label={isTranslation ? text('翻译平均总分', 'Average translation score') : text('纠错平均总分', 'Average correction score')}
+        value={formatScore(practice.averageTotalScore)}
+        detail={isTranslation ? text('短句与文章翻译', 'Sentence and article translations') : text('仅统计纯日语纠错记录', 'Japanese correction records only')}
+        score={practice.averageTotalScore}
+      />
     </section>
 
     <section className="statistics-dashboard-section" aria-labelledby="practice-statistics-title">
-      <header className="statistics-section-header">
-        <div className="section-title">
-          <span className="label">{text('练习数据', 'Practice data')}</span>
-          <strong id="practice-statistics-title">{text('练习表现', 'Practice performance')}</strong>
-        </div>
-        <div className="statistics-segmented-control" role="group" aria-label={text('练习类型', 'Practice type')}>
-          <button type="button" className={isTranslation ? 'is-active' : undefined} aria-pressed={isTranslation} onClick={() => onPracticeTypeChange('TRANSLATION')}>{text('翻译', 'Translation')}</button>
-          <button type="button" className={!isTranslation ? 'is-active' : undefined} aria-pressed={!isTranslation} onClick={() => onPracticeTypeChange('CORRECTION')}>{text('日语纠错', 'Japanese correction')}</button>
-        </div>
-      </header>
-
-      <section className="statistics-overview-grid statistics-practice-metrics" aria-label={text('练习概览指标', 'Practice overview metrics')}>
-        <MetricCard
-          label={isTranslation ? text('翻译次数', 'Translation attempts') : text('纠错次数', 'Correction attempts')}
-          value={String(practice.attemptCount)}
-          detail={`${statistics.period.startDate} – ${statistics.period.endDate}`}
-        />
-        <MetricCard
-          label={isTranslation ? text('翻译平均总分', 'Average translation score') : text('纠错平均总分', 'Average correction score')}
-          value={formatScore(practice.averageTotalScore)}
-          detail={isTranslation ? text('短句与文章翻译', 'Sentence and article translations') : text('仅统计纯日语纠错记录', 'Japanese correction records only')}
-        />
-      </section>
-
-      <section className="statistics-chart-grid">
+      <section className="statistics-dashboard-grid">
         <ChartSurface
+          className="statistics-trend-panel"
+          titleId="practice-statistics-title"
           title={isTranslation ? text('翻译练习趋势', 'Translation trend') : text('日语纠错趋势', 'Japanese correction trend')}
           description={text('每日练习次数与平均总分', 'Daily attempts and average score')}
+          actions={<div className="statistics-segmented-control" role="group" aria-label={text('练习类型', 'Practice type')}>
+            <button type="button" className={isTranslation ? 'is-active' : undefined} aria-pressed={isTranslation} onClick={() => onPracticeTypeChange('TRANSLATION')}>{text('翻译', 'Translation')}</button>
+            <button type="button" className={!isTranslation ? 'is-active' : undefined} aria-pressed={!isTranslation} onClick={() => onPracticeTypeChange('CORRECTION')}>{text('日语纠错', 'Japanese correction')}</button>
+          </div>}
         >
-          <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart data={practice.dailyTrends} margin={{ top: 8, right: 20, left: -8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" tickFormatter={formatShortDate} minTickGap={24} />
-              <YAxis yAxisId="count" allowDecimals={false} />
-              <YAxis yAxisId="score" orientation="right" domain={[0, 100]} />
-              <Tooltip labelFormatter={formatDateLabel} />
-              <Legend />
-              <Bar yAxisId="count" dataKey="attemptCount" name={text('练习次数', 'Attempts')} fill={isTranslation ? '#2563eb' : '#0f766e'} radius={[3, 3, 0, 0]} />
-              <Line yAxisId="score" type="monotone" dataKey="averageTotalScore" name={text('平均总分', 'Average score')} stroke={isTranslation ? '#16a34a' : '#d97706'} strokeWidth={2} connectNulls dot={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
+          {hasDailyTrends ? <div className="statistics-chart statistics-trend-chart"><ResponsiveContainer width="100%" height="100%">
+              <ComposedChart accessibilityLayer data={practice.dailyTrends} margin={{ top: 8, right: 12, left: -10, bottom: 0 }}>
+                <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="date" tickFormatter={formatShortDate} minTickGap={24} tickLine={false} axisLine={false} />
+                <YAxis yAxisId="count" allowDecimals={false} tickLine={false} axisLine={false} />
+                <YAxis yAxisId="score" orientation="right" domain={[0, 100]} tickLine={false} axisLine={false} />
+                <Tooltip
+                  labelFormatter={formatDateLabel}
+                  formatter={(value, name) => String(name) === text('平均总分', 'Average score') ? <ScoreTooltipValue value={value} /> : value}
+                />
+                <Legend />
+                <Bar yAxisId="count" dataKey="attemptCount" name={text('练习次数', 'Attempts')} fill={isTranslation ? 'var(--brand)' : 'var(--success)'} radius={[3, 3, 0, 0]} />
+                <Line yAxisId="score" type="monotone" dataKey="averageTotalScore" name={text('平均总分', 'Average score')} stroke="var(--warning)" strokeWidth={2.5} connectNulls dot={{ r: 3, fill: 'var(--card)', strokeWidth: 2 }} activeDot={{ r: 5 }} />
+              </ComposedChart>
+            </ResponsiveContainer></div> : <EmptyChart text={text('所选期间暂无练习数据。', 'No practice data for this period.')} />}
+          <ScreenReaderDataTable
+            caption={isTranslation ? text('翻译练习趋势数据', 'Translation trend data') : text('日语纠错趋势数据', 'Japanese correction trend data')}
+            headers={[text('日期', 'Date'), text('练习次数', 'Attempts'), text('平均总分', 'Average score')]}
+            rows={practice.dailyTrends.map((item) => [item.date, String(item.attemptCount), formatScore(item.averageTotalScore)])}
+          />
         </ChartSurface>
 
-        <ChartSurface
-          title={isTranslation ? text('翻译四项能力', 'Translation skill dimensions') : text('纠错四项能力', 'Correction skill dimensions')}
-          description={text('已评测练习的各项平均分', 'Average scores across evaluated attempts')}
-        >
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={scoreDimensions} margin={{ top: 8, right: 12, left: -14, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis domain={[0, 100]} />
-              <Tooltip formatter={(value) => value == null ? '-' : Number(value).toFixed(2)} />
-              <Bar dataKey="score" name={text('平均分', 'Average score')} fill={isTranslation ? '#7c3aed' : '#0f766e'} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartSurface>
+        <div className="statistics-side-stack">
+          <ChartSurface
+            className="statistics-skill-panel"
+            title={isTranslation ? text('翻译四项能力', 'Translation skill dimensions') : text('纠错四项能力', 'Correction skill dimensions')}
+            description={text('已评测练习的各项平均分', 'Average scores across evaluated attempts')}
+          >
+            {hasScoreDimensions ? <div className="statistics-chart statistics-skill-chart"><ResponsiveContainer width="100%" height="100%">
+                <BarChart accessibilityLayer layout="vertical" data={scoreDimensions} margin={{ top: 0, right: 26, left: 4, bottom: 0 }}>
+                  <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" domain={[0, 100]} tickLine={false} axisLine={false} />
+                  <YAxis type="category" dataKey="name" width={92} tickLine={false} axisLine={false} />
+                  <Tooltip formatter={(value) => <ScoreTooltipValue value={value} />} />
+                  <Bar dataKey="score" name={text('平均分', 'Average score')} fill={isTranslation ? 'var(--brand)' : 'var(--success)'} radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer></div> : <EmptyChart text={text('所选期间暂无评分维度数据。', 'No score dimension data for this period.')} />}
+            <ScreenReaderDataTable
+              caption={isTranslation ? text('翻译四项能力数据', 'Translation skill dimension data') : text('纠错四项能力数据', 'Correction skill dimension data')}
+              headers={[text('能力维度', 'Skill dimension'), text('平均分', 'Average score')]}
+              rows={scoreDimensions.map((item) => [item.name, formatScore(item.score)])}
+            />
+          </ChartSurface>
+
+          <ChartSurface
+            className="statistics-review-panel"
+            title={text('复习表现', 'Review performance')}
+            description={text('卡片状态为实时数据，复习表现按所选期间统计', 'Card status is real time; review performance follows the selected period')}
+          >
+            <div className="statistics-review-compact">
+              {reviewStates.length > 0 ? <div className="review-state-chart">
+                <div className="review-state-pie"><ResponsiveContainer width="100%" height="100%">
+                  <PieChart accessibilityLayer>
+                    <Tooltip />
+                    <Pie data={reviewStates} dataKey="value" nameKey="name" innerRadius={24} outerRadius={38} paddingAngle={2}>
+                      {reviewStates.map((item) => <Cell key={item.name} fill={item.color} />)}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer></div>
+                <div className="review-state-legend" aria-label={text('复习卡片状态图例', 'Review card status legend')}>
+                  {reviewStates.map((item) => <span key={item.name}><i aria-hidden="true" style={{ backgroundColor: item.color }} />{item.name}</span>)}
+                </div>
+              </div> : <EmptyChart text={text('当前暂无复习卡片。', 'No review cards yet.')} />}
+              <dl className="review-period-summary">
+                <div><dt>{text('期间复习', 'Reviews in period')}</dt><dd>{text(`${statistics.reviewOverview.periodReviewAttemptCount} 次`, String(statistics.reviewOverview.periodReviewAttemptCount))}</dd></div>
+                <div><dt>{text('期间通过率', 'Pass rate')}</dt><dd>{formatScore(statistics.reviewOverview.periodReviewPassRate, '%')}</dd></div>
+              </dl>
+            </div>
+            <ScreenReaderDataTable
+              caption={text('复习卡片状态数据', 'Review card status data')}
+              headers={[text('卡片状态', 'Card status'), text('数量', 'Count')]}
+              rows={reviewStates.map((item) => [item.name, String(item.value)])}
+            />
+          </ChartSurface>
+        </div>
       </section>
-    </section>
-
-    <section className="surface statistics-review-surface" aria-labelledby="review-statistics-title">
-      <div className="section-title">
-        <span className="label">{text('卡片状态为当前实时状态，复习表现按所选期间统计', 'Card status is real time; review performance follows the selected period')}</span>
-        <strong id="review-statistics-title">{text('复习表现', 'Review performance')}</strong>
-      </div>
-      <div className="statistics-review-layout">
-        {reviewStates.length > 0 ? <div className="review-state-chart"><ResponsiveContainer width="100%" height={220}>
-          <PieChart>
-            <Tooltip />
-            <Pie data={reviewStates} dataKey="value" nameKey="name" innerRadius={54} outerRadius={86} paddingAngle={2}>
-              {reviewStates.map((item, index) => <Cell key={item.name} fill={REVIEW_COLORS[index]} />)}
-            </Pie>
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer></div> : <EmptyChart text={text('当前暂无复习卡片。', 'No review cards yet.')} />}
-        <dl className="review-period-summary">
-          <div><dt>{text('期间复习', 'Reviews in period')}</dt><dd>{text(`${statistics.reviewOverview.periodReviewAttemptCount} 次`, String(statistics.reviewOverview.periodReviewAttemptCount))}</dd></div>
-          <div><dt>{text('期间通过率', 'Pass rate')}</dt><dd>{formatScore(statistics.reviewOverview.periodReviewPassRate, '%')}</dd></div>
-        </dl>
-      </div>
     </section>
   </>
 }
 
-function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return <section className="surface statistics-metric-card"><span>{label}</span><strong>{value}</strong><small>{detail}</small></section>
+function MetricItem({ label, value, detail, score }: { label: string; value: string; detail: string; score?: number | null }) {
+  return <div className="statistics-metric-item"><span>{label}</span><strong className={score === undefined ? undefined : scoreToneClassName(score)}>{value}</strong><small>{detail}</small></div>
 }
 
-function ChartSurface({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
-  return <section className="surface statistics-chart-surface"><div className="section-title"><span className="label">{description}</span><strong>{title}</strong></div>{children}</section>
+function ScoreTooltipValue({ value }: { value: unknown }) {
+  const score = toFiniteNumber(value)
+  return <span className={scoreToneClassName(score)}>{formatScore(score)}</span>
+}
+
+function toFiniteNumber(value: unknown) {
+  const score = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN
+  return Number.isFinite(score) ? score : null
+}
+
+function ChartSurface({ className, titleId, title, description, actions, children }: { className?: string; titleId?: string; title: string; description: string; actions?: React.ReactNode; children: React.ReactNode }) {
+  return <section className={`surface statistics-chart-surface${className ? ` ${className}` : ''}`} aria-label={`${title}。${description}`}><div className="statistics-chart-heading"><div className="section-title"><span className="label">{description}</span><strong id={titleId}>{title}</strong></div>{actions}</div>{children}</section>
 }
 
 function EmptyChart({ text }: { text: string }) {
-  return <p className="empty-state statistics-empty-chart">{text}</p>
+  return <p className="empty-state statistics-empty-chart" role="status">{text}</p>
+}
+
+function ScreenReaderDataTable({ caption, headers, rows }: { caption: string; headers: string[]; rows: string[][] }) {
+  return <div className="sr-only"><table><caption>{caption}</caption><thead><tr>{headers.map((header) => <th key={header} scope="col">{header}</th>)}</tr></thead><tbody>{rows.map((row, rowIndex) => <tr key={`${caption}-${rowIndex}`}>{row.map((cell, cellIndex) => cellIndex === 0 ? <th key={cellIndex} scope="row">{cell}</th> : <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div>
 }
 
 function formatScore(value: number | null, suffix = '') {

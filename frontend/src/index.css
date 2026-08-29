@@ -1,28 +1,38 @@
 :root {
   font-family:
-    Inter, "Noto Sans SC", "Noto Sans JP", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Inter, "Noto Sans SC", "Noto Sans JP", "Yu Gothic UI", "Microsoft YaHei UI", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
   color-scheme: light;
-  --background: #f7f8fa;
-  --foreground: #252a36;
-  --card: #ffffff;
-  --primary: #252a36;
+  --background: #f3f2ee;
+  --foreground: #1b252d;
+  --card: #fffefa;
+  --primary: #244e72;
   --primary-foreground: #ffffff;
-  --secondary: #f2f4f7;
-  --muted: #f2f4f7;
-  --muted-foreground: #667085;
-  --brand: #426dc5;
-  --brand-soft: #edf3ff;
-  --success: #2f855a;
-  --success-soft: #edf8f2;
-  --warning: #9a6700;
-  --warning-soft: #fff7e0;
-  --danger: #c43d3d;
-  --danger-soft: #fff0f0;
-  --border: #e4e7ec;
-  --input: #d8dde6;
-  --ring: rgba(66, 109, 197, 0.18);
-  --radius: 10px;
+  --secondary: #eceae4;
+  --muted: #eceae4;
+  --muted-foreground: #5e6972;
+  --brand: #315f88;
+  --brand-strong: #244e72;
+  --brand-soft: #e9f0f5;
+  --success: #2f6f55;
+  --success-soft: #e8f2ec;
+  --warning: #8a5a16;
+  --warning-soft: #f7eedc;
+  --danger: #a33e3e;
+  --danger-soft: #f8e9e7;
+  --score-perfect: #c48700;
+  --score-excellent: #2f6f55;
+  --score-good: #4f7757;
+  --score-warning: #b75a00;
+  --score-danger: #c83245;
+  --score-muted: #5e6972;
+  --border: #d9d6ce;
+  --border-strong: #c5c1b7;
+  --input: #c9c5bb;
+  --ring: rgba(49, 95, 136, 0.22);
+  --radius: 8px;
+  --shadow-sm: 0 1px 2px rgba(27, 37, 45, 0.05);
+  --shadow-md: 0 12px 32px rgba(27, 37, 45, 0.08);
   background: var(--background);
   color: var(--foreground);
   font-synthesis: none;
@@ -38,8 +48,10 @@
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
   background: var(--background);
+  line-height: 1.55;
 }
 
 button,
@@ -47,4 +59,16 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+button,
+select,
+input,
+textarea {
+  touch-action: manipulation;
+}
+
+::selection {
+  background: #cdddea;
+  color: var(--foreground);
 }

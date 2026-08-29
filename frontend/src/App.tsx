@@ -39,7 +39,10 @@ function App() {
   ]
 
   return (
-    <main className="app-shell">
+    <div className="app-shell">
+      <a className="skip-link" href="#main-workspace">
+        {english ? 'Skip to main content' : '跳到主要内容'}
+      </a>
       <header className="app-header">
         <div className="app-header-inner">
           <div className="title-group">
@@ -72,7 +75,7 @@ function App() {
         </div>
       </header>
 
-      <section className="workspace">
+      <main id="main-workspace" className="workspace" tabIndex={-1}>
         <div hidden={activePage !== 'practice'}>
           <PracticePage key={learningMode} />
         </div>
@@ -82,8 +85,8 @@ function App() {
         {activePage === 'questions' ? <QuestionManagementPage key={learningMode} /> : null}
         {activePage === 'errorTypes' ? <ErrorTypeManagementPage key={learningMode} /> : null}
         {activePage === 'reviews' ? <ReviewPage key={learningMode} /> : null}
-      </section>
-    </main>
+      </main>
+    </div>
   )
 }
 

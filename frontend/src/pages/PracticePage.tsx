@@ -21,6 +21,7 @@ import type { AiQuestionGenerationPayload, Question, RandomQuestionFilter } from
 import type { AnswerReview } from '../types/review'
 import type { UserAnswerErrorConfirmation, UserErrorType } from '../types/userError'
 import { useLanguage } from '../i18n/LanguageContext'
+import { scoreToneClassName } from '../utils/score'
 import { getTagDisplayName } from '../utils/tag'
 
 type AnswerSessionState = {
@@ -47,9 +48,26 @@ const EMPTY_ANSWER_SESSION: AnswerSessionState = {
 
 type PracticeMode = 'sentence' | 'article' | 'correction'
 
+const PRACTICE_MODES: PracticeMode[] = ['sentence', 'article', 'correction']
+
 export default function PracticePage() {
   const { text } = useLanguage()
   const [activeMode, setActiveMode] = useState<PracticeMode>('sentence')
+
+  function handleTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, currentMode: PracticeMode) {
+    const currentIndex = PRACTICE_MODES.indexOf(currentMode)
+    let nextIndex = currentIndex
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % PRACTICE_MODES.length
+    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + PRACTICE_MODES.length) % PRACTICE_MODES.length
+    else if (event.key === 'Home') nextIndex = 0
+    else if (event.key === 'End') nextIndex = PRACTICE_MODES.length - 1
+    else return
+
+    event.preventDefault()
+    const nextMode = PRACTICE_MODES[nextIndex]
+    setActiveMode(nextMode)
+    requestAnimationFrame(() => document.getElementById(`${nextMode}-practice-tab`)?.focus())
+  }
 
   return (
     <section className="page-content" aria-label={text('练习', 'Practice')}>
@@ -64,6 +82,8 @@ export default function PracticePage() {
           aria-selected={activeMode === 'sentence'}
           aria-controls="sentence-practice-panel"
           className={activeMode === 'sentence' ? 'is-active' : ''}
+          tabIndex={activeMode === 'sentence' ? 0 : -1}
+          onKeyDown={(event) => handleTabKeyDown(event, 'sentence')}
           onClick={() => setActiveMode('sentence')}
         >
           {text('短句翻译', 'Sentences')}
@@ -75,6 +95,8 @@ export default function PracticePage() {
           aria-selected={activeMode === 'article'}
           aria-controls="article-practice-panel"
           className={activeMode === 'article' ? 'is-active' : ''}
+          tabIndex={activeMode === 'article' ? 0 : -1}
+          onKeyDown={(event) => handleTabKeyDown(event, 'article')}
           onClick={() => setActiveMode('article')}
         >
           {text('文章翻译', 'Articles')}
@@ -86,6 +108,8 @@ export default function PracticePage() {
           aria-selected={activeMode === 'correction'}
           aria-controls="correction-practice-panel"
           className={activeMode === 'correction' ? 'is-active' : ''}
+          tabIndex={activeMode === 'correction' ? 0 : -1}
+          onKeyDown={(event) => handleTabKeyDown(event, 'correction')}
           onClick={() => setActiveMode('correction')}
         >
           {text('日语纠错', 'Proofread')}
@@ -478,7 +502,7 @@ function ShortSentencePractice() {
             <button type="button" className="primary-button" disabled={questionLoading} onClick={handleRandomQuestion}>{questionRandomizing ? text('抽题中', 'Loading') : text('随机题目', 'Random')}</button>
             <button type="button" className="primary-button" disabled={questionLoading} onClick={handleGenerateQuestion}>{questionGenerating ? text('生成中', 'Generating') : text('生成题目', 'Generate')}</button>
           </form>
-          {practiceTagsError ? <div className="error-message">{text('标签加载失败：', 'Could not load tags: ')}{practiceTagsError}</div> : null}
+          {practiceTagsError ? <div className="error-message" role="alert">{text('标签加载失败：', 'Could not load tags: ')}{practiceTagsError}</div> : null}
         </section>
 
         <section className="surface question-panel" aria-label={text('题目预览', 'Question preview')}>
@@ -511,16 +535,16 @@ function ShortSentencePractice() {
           {!answerSubmitted ? (
             <>
               {answerInputNotice && (answerInputNotice.kind === 'error' || !selectedQuestion) ? <Notice notice={answerInputNotice} /> : null}
-              <textarea value={answerText} maxLength={2000} disabled={!selectedQuestion} placeholder={selectedQuestion ? text('请输入日语答案', 'Enter your Japanese answer') : text('生成题目后即可作答', 'Generate a question to begin')} onChange={(event) => updateSelectedAnswerSession((session) => ({ ...session, answerText: event.target.value }))} />
+              <textarea aria-label={text('日语答案', 'Japanese answer')} value={answerText} maxLength={2000} disabled={!selectedQuestion} placeholder={selectedQuestion ? text('请输入日语答案', 'Enter your Japanese answer') : text('生成题目后即可作答', 'Generate a question to begin')} onChange={(event) => updateSelectedAnswerSession((session) => ({ ...session, answerText: event.target.value }))} />
               <div className="action-row answer-input-actions"><button type="button" className="primary-button" disabled={!selectedQuestion || answerScoring} onClick={handleSubmitAnswer}>{answerScoring ? text('评分中', 'Scoring') : text('提交答案', 'Submit')}</button><button type="button" disabled={!selectedQuestion && !answerText} onClick={handleClearAnswer}>{text('清空', 'Clear')}</button></div>
             </>
           ) : (
             <div className="answer-result">
               {answerNotice && (!answerReview || answerNotice.kind === 'error') ? <Notice notice={answerNotice} /> : null}
-              {answerScoring ? <div className="notice"><strong>{text('评分中', 'Scoring')}</strong><p>{text('正在分析本次作答。', 'Analyzing your answer.')}</p></div> : null}
+              {answerScoring ? <div className="notice" role="status" aria-live="polite"><strong>{text('评分中', 'Scoring')}</strong><p>{text('正在分析本次作答。', 'Analyzing your answer.')}</p></div> : null}
               <section className="submitted-answer"><span className="label">{text('你的答案', 'Your answer')}</span><p>{answerText}</p></section>
               {answerReview ? <>
-                <div className="score-summary"><span>{text('总分', 'Total score')}</span><strong>{formatScore(answerReview.totalScore)}</strong></div>
+                <div className="score-summary"><span>{text('总分', 'Total score')}</span><strong className={scoreToneClassName(answerReview.totalScore)}>{formatScore(answerReview.totalScore)}</strong></div>
                 {errorConfirmationOpen ? (
                   <ErrorConfirmationModal
                     analyses={answerReview.errorAnalysis}
@@ -540,7 +564,7 @@ function ShortSentencePractice() {
                   />
                 ) : null}
                 <details className="review-detail"><summary>{text('详细评分说明', 'Detailed score')}</summary><div className="review-result">
-                  <dl className="score-grid"><div><dt>{text('语法与词汇', 'Grammar & vocabulary')}</dt><dd>{answerReview.scores.grammarVocabularyScore}</dd></div><div><dt>{text('自然流畅度', 'Fluency')}</dt><dd>{answerReview.scores.naturalFluencyScore}</dd></div><div><dt>{text('场景适配度', 'Context fit')}</dt><dd>{answerReview.scores.scenarioAdaptationScore}</dd></div><div><dt>{text('信息完整性', 'Completeness')}</dt><dd>{answerReview.scores.informationCompletenessScore}</dd></div></dl>
+                  <dl className="score-grid"><div><dt>{text('语法与词汇', 'Grammar & vocabulary')}</dt><dd className={scoreToneClassName(answerReview.scores.grammarVocabularyScore)}>{answerReview.scores.grammarVocabularyScore}</dd></div><div><dt>{text('自然流畅度', 'Fluency')}</dt><dd className={scoreToneClassName(answerReview.scores.naturalFluencyScore)}>{answerReview.scores.naturalFluencyScore}</dd></div><div><dt>{text('场景适配度', 'Context fit')}</dt><dd className={scoreToneClassName(answerReview.scores.scenarioAdaptationScore)}>{answerReview.scores.scenarioAdaptationScore}</dd></div><div><dt>{text('信息完整性', 'Completeness')}</dt><dd className={scoreToneClassName(answerReview.scores.informationCompletenessScore)}>{answerReview.scores.informationCompletenessScore}</dd></div></dl>
                   <section className="review-section"><strong>{text('总评', 'Overall feedback')}</strong><p>{answerReview.overallComment}</p></section>
                   <dl className="comment-list"><div><dt>{text('语法', 'Grammar')}</dt><dd>{answerReview.comments.grammarComment}</dd></div><div><dt>{text('词汇', 'Vocabulary')}</dt><dd>{answerReview.comments.vocabularyComment}</dd></div><div><dt>{text('自然度', 'Naturalness')}</dt><dd>{answerReview.comments.naturalnessComment}</dd></div><div><dt>{text('场景', 'Context')}</dt><dd>{answerReview.comments.scenarioComment}</dd></div></dl>
                   <ReviewList title={text('候选错误', 'Candidate errors')} emptyText={text('本次未发现明确错误。', 'No clear errors were found.')} items={answerReview.errorAnalysis}>{(item) => <div><span>{item.errorTypeName} / {item.severity}</span><strong>{item.original}</strong><p>{item.issue}</p><p>{item.suggestion}</p></div>}</ReviewList>
@@ -562,7 +586,7 @@ function ShortSentencePractice() {
 }
 
 function Notice({ notice }: { notice: PracticeNotice }) {
-  return <div className={notice.kind === 'error' ? 'notice is-error' : 'notice'}><strong>{notice.title}</strong><p>{notice.message}</p></div>
+  return <div className={notice.kind === 'error' ? 'notice is-error' : 'notice'} role={notice.kind === 'error' ? 'alert' : 'status'}><strong>{notice.title}</strong><p>{notice.message}</p></div>
 }
 
 function formatScore(score: number) {

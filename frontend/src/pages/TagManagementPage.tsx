@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchTags as queryTags } from '../api/tagApi'
+import PageHeader from '../components/PageHeader'
 import type { Tag, TagFilter } from '../types/tag'
 import { useLanguage } from '../i18n/LanguageContext'
 import { getTagDisplayName } from '../utils/tag'
@@ -15,6 +16,7 @@ export default function TagManagementPage() {
   const [size, setSize] = useState(20)
   const [tagLoading, setTagLoading] = useState(false)
   const [tagError, setTagError] = useState<string | null>(null)
+  const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -45,7 +47,7 @@ export default function TagManagementPage() {
     return () => {
       controller.abort()
     }
-  }, [tagType, parentId, enabledOnly, page, size, text])
+  }, [tagType, parentId, enabledOnly, page, size, reloadToken, text])
 
   useEffect(() => {
     setPage(1)
@@ -56,8 +58,12 @@ export default function TagManagementPage() {
   const lastItemNo = Math.min(page * size, total)
 
   return (
-          <section className="page-content" aria-label="tag management page">
-            <section className="surface tag-panel" aria-label="tag query">
+          <section className="page-content target-page" aria-label="tag management page">
+            <PageHeader
+              title={text('标签管理', 'Tag management')}
+              description={text('查看场景、功能与体裁标签，可按类型、父级和启用状态筛选。', 'Browse scene, function, and genre tags by type, parent, or enabled state.')}
+            />
+            <section className="surface tag-panel target-list-panel" aria-label="tag query" aria-busy={tagLoading}>
               <form className="filter-bar" onSubmit={(event) => event.preventDefault()}>
                 <label>
                   <span>{text('标签类型', 'Tag type')}</span>
@@ -91,10 +97,11 @@ export default function TagManagementPage() {
 
               </form>
 
-              {tagError ? <div className="error-message">{tagError}</div> : null}
+              {tagError ? <div className="error-message" role="alert"><strong>{text('标签加载失败', 'Could not load tags')}</strong><span>{tagError}</span><button type="button" onClick={() => setReloadToken((value) => value + 1)}>{text('重试', 'Retry')}</button></div> : null}
 
               <div className="table-wrap">
                 <table className="responsive-list-table tag-table">
+                  <caption className="sr-only">{text('标签列表', 'Tag list')}</caption>
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -121,7 +128,7 @@ export default function TagManagementPage() {
                   </tbody>
                 </table>
 
-                {!tagLoading && tags.length === 0 ? <p className="empty-state">{text('暂无标签数据', 'No tags')}</p> : null}
+                {!tagLoading && tags.length === 0 ? <p className="empty-state" role="status">{text('暂无符合当前条件的标签，请调整筛选条件后重试。', 'No tags match the current filters. Adjust the filters and try again.')}</p> : null}
               </div>
 
               <div className="pagination-bar">

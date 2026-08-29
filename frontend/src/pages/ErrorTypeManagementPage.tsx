@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getErrorMessage } from '../api/client'
 import { fetchErrorTypes as queryErrorTypes } from '../api/errorTypeApi'
+import PageHeader from '../components/PageHeader'
 import type { ErrorType, ErrorTypeEnabledFilter, ErrorTypeFilterState, ErrorTypeLevelFilter } from '../types/errorType'
 import { useLanguage } from '../i18n/LanguageContext'
 
@@ -67,8 +68,12 @@ export default function ErrorTypeManagementPage() {
   }
 
   return (
-    <section className="page-content" aria-label="error type management page">
-      <section className="surface error-type-management-panel" aria-label="error type query">
+    <section className="page-content target-page" aria-label="error type management page">
+      <PageHeader
+        title={text('错误类型管理', 'Error type management')}
+        description={text('查看错误分类层级、启用状态与说明。', 'Browse error taxonomy levels, status, and descriptions.')}
+      />
+      <section className="surface error-type-management-panel target-list-panel" aria-label="error type query" aria-busy={loading}>
         <form className="error-type-filter-bar" onSubmit={(event) => event.preventDefault()}>
           <label>
             <span>{text('类型层级', 'Type level')}</span>
@@ -107,14 +112,16 @@ export default function ErrorTypeManagementPage() {
         </form>
 
         {error ? (
-          <div className="notice is-error">
+          <div className="notice is-error" role="alert">
             <strong>{text('错误类型加载失败', 'Could not load error types')}</strong>
             <p>{error}</p>
+            <button type="button" onClick={refreshErrorTypes}>{text('重试', 'Retry')}</button>
           </div>
         ) : null}
 
         <div className="table-wrap">
           <table className="responsive-list-table error-type-table">
+            <caption className="sr-only">{text('错误类型列表', 'Error type list')}</caption>
             <thead>
               <tr>
                 <th>ID</th>
@@ -145,7 +152,7 @@ export default function ErrorTypeManagementPage() {
             </tbody>
           </table>
 
-          {!loading && errorTypes.length === 0 ? <p className="empty-state">{text('暂无错误类型数据', 'No error types')}</p> : null}
+          {!loading && errorTypes.length === 0 ? <p className="empty-state" role="status">{text('暂无符合当前条件的错误类型，请调整筛选条件后重试。', 'No error types match the current filters. Adjust the filters and try again.')}</p> : null}
         </div>
 
         <div className="pagination-bar">

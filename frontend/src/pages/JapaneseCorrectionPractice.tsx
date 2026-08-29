@@ -14,6 +14,7 @@ import type { PracticeNotice } from '../types/api'
 import type { JapaneseCorrectionReview } from '../types/review'
 import type { UserAnswerErrorConfirmation, UserErrorType } from '../types/userError'
 import { useLanguage } from '../i18n/LanguageContext'
+import { scoreToneClassName } from '../utils/score'
 
 type CorrectionSession = {
   text: string
@@ -182,6 +183,7 @@ export default function JapaneseCorrectionPractice() {
           <>
             {session.notice ? <Notice notice={session.notice} /> : null}
             <textarea
+              aria-label={text('需要检查的日语文本', 'Japanese text to check')}
               className="article-answer-input"
               value={session.text}
               maxLength={5000}
@@ -201,7 +203,7 @@ export default function JapaneseCorrectionPractice() {
         ) : (
           <div className="answer-result">
             {session.notice && (!session.review || session.notice.kind === 'error') ? <Notice notice={session.notice} /> : null}
-            {session.correcting ? <div className="notice"><strong>{text('纠错中', 'Checking')}</strong><p>{text('正在检查日语文本并生成修订稿。', 'Checking the Japanese text and preparing a revision.')}</p></div> : null}
+            {session.correcting ? <div className="notice" role="status" aria-live="polite"><strong>{text('纠错中', 'Checking')}</strong><p>{text('正在检查日语文本并生成修订稿。', 'Checking the Japanese text and preparing a revision.')}</p></div> : null}
             <section className="submitted-answer pre-wrap-text"><span className="label">{text('你的日语原文', 'Your Japanese text')}</span><p>{session.text}</p></section>
             {session.review ? <CorrectionResult
               review={session.review}
@@ -253,7 +255,7 @@ function CorrectionResult(props: CorrectionResultProps) {
   const { review, candidates } = props
   return (
     <>
-      <div className="score-summary"><span>{text('总分', 'Total score')}</span><strong>{formatScore(review.totalScore)}</strong></div>
+      <div className="score-summary"><span>{text('总分', 'Total score')}</span><strong className={scoreToneClassName(review.totalScore)}>{formatScore(review.totalScore)}</strong></div>
       <section className="review-section article-overall-comment"><strong>{text('总体评价', 'Overall feedback')}</strong><p>{review.overallComment}</p></section>
       <section className="article-revised-answer pre-wrap-text"><strong>{text('完整纠正文稿', 'Complete revision')}</strong><p>{review.revisedText}</p></section>
 
@@ -261,10 +263,10 @@ function CorrectionResult(props: CorrectionResultProps) {
         <summary>{text('详细评分与错误', 'Detailed scores and errors')}</summary>
         <div className="review-result">
           <dl className="score-grid">
-            <div><dt>{text('语法与词汇准确性', 'Grammar & vocabulary accuracy')}</dt><dd>{review.scores.grammarVocabularyScore}</dd></div>
-            <div><dt>{text('自然度与篇章连贯', 'Fluency & coherence')}</dt><dd>{review.scores.naturalFluencyScore}</dd></div>
-            <div><dt>{text('语体与风格一致性', 'Register & style consistency')}</dt><dd>{review.scores.scenarioAdaptationScore}</dd></div>
-            <div><dt>{text('表记与输入完整性', 'Writing & input completeness')}</dt><dd>{review.scores.informationCompletenessScore}</dd></div>
+            <div><dt>{text('语法与词汇准确性', 'Grammar & vocabulary accuracy')}</dt><dd className={scoreToneClassName(review.scores.grammarVocabularyScore)}>{review.scores.grammarVocabularyScore}</dd></div>
+            <div><dt>{text('自然度与篇章连贯', 'Fluency & coherence')}</dt><dd className={scoreToneClassName(review.scores.naturalFluencyScore)}>{review.scores.naturalFluencyScore}</dd></div>
+            <div><dt>{text('语体与风格一致性', 'Register & style consistency')}</dt><dd className={scoreToneClassName(review.scores.scenarioAdaptationScore)}>{review.scores.scenarioAdaptationScore}</dd></div>
+            <div><dt>{text('表记与输入完整性', 'Writing & input completeness')}</dt><dd className={scoreToneClassName(review.scores.informationCompletenessScore)}>{review.scores.informationCompletenessScore}</dd></div>
           </dl>
           <dl className="comment-list">
             <div><dt>{text('语法与词汇', 'Grammar & vocabulary')}</dt><dd>{review.comments.grammarVocabularyComment}</dd></div>
@@ -302,7 +304,7 @@ function CorrectionResult(props: CorrectionResultProps) {
 }
 
 function Notice({ notice }: { notice: PracticeNotice }) {
-  return <div className={notice.kind === 'error' ? 'notice is-error' : 'notice'}><strong>{notice.title}</strong><p>{notice.message}</p></div>
+  return <div className={notice.kind === 'error' ? 'notice is-error' : 'notice'} role={notice.kind === 'error' ? 'alert' : 'status'}><strong>{notice.title}</strong><p>{notice.message}</p></div>
 }
 
 function formatScore(score: number) {

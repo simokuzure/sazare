@@ -426,14 +426,14 @@ export default function QuestionManagementPage() {
               />
             ) : null}
             {questionNotice ? (
-              <div className={questionNotice.kind === 'error' ? 'notice is-error' : 'notice'}>
+              <div className={questionNotice.kind === 'error' ? 'notice is-error' : 'notice'} role={questionNotice.kind === 'error' ? 'alert' : 'status'}>
                 <strong>{questionNotice.title}</strong>
                 <p>{questionNotice.message}</p>
               </div>
             ) : null}
 
             {viewMode === 'list' ? (
-              <section className="surface question-management-panel target-list-panel" aria-label="question query">
+                <section className="surface question-management-panel target-list-panel" aria-label="question query" aria-busy={questionLoading}>
               <form className="question-filter-bar" onSubmit={(event) => event.preventDefault()}>
                 <label>
                   <span>{text('题型', 'Question type')}</span>
@@ -487,9 +487,10 @@ export default function QuestionManagementPage() {
 
               </form>
 
-              {questionError ? <div className="error-message">{questionError}</div> : null}
+              {questionError ? <div className="error-message" role="alert"><strong>{text('题目加载失败', 'Could not load questions')}</strong><span>{questionError}</span><button type="button" onClick={refreshQuestions}>{text('重试', 'Retry')}</button></div> : null}
               <div className="table-wrap">
                 <table className="responsive-list-table question-table">
+                  <caption className="sr-only">{text('题目列表', 'Question list')}</caption>
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -552,7 +553,7 @@ export default function QuestionManagementPage() {
                   </tbody>
                 </table>
 
-                {!questionLoading && questions.length === 0 ? <p className="empty-state">{text('暂无题目数据', 'No questions')}</p> : null}
+                {!questionLoading && questions.length === 0 ? <p className="empty-state" role="status">{text('暂无符合当前条件的题目，请调整筛选条件后重试。', 'No questions match the current filters. Adjust the filters and try again.')}</p> : null}
               </div>
 
               <div className="pagination-bar">
@@ -678,7 +679,7 @@ export default function QuestionManagementPage() {
                     </div>
                   </dl>
                 ) : (
-                  <p className="empty-state">{text('从列表中选择题目查看详情。', 'Select a question from the list to view its details.')}</p>
+                  <p className="empty-state" role="status">{text('从列表中选择题目，即可在此查看完整内容。', 'Select a question from the list to view its full details here.')}</p>
                 )}
               </section>
             ) : null}

@@ -17,6 +17,7 @@ import type { AnswerReview } from '../types/review'
 import type { Tag } from '../types/tag'
 import type { UserAnswerErrorConfirmation, UserErrorType } from '../types/userError'
 import { useLanguage } from '../i18n/LanguageContext'
+import { scoreToneClassName } from '../utils/score'
 import { getTagDisplayName } from '../utils/tag'
 
 type ArticleAnswerSession = {
@@ -292,7 +293,7 @@ export default function ArticlePractice() {
           <button type="button" className="primary-button" disabled={questionLoading} onClick={handleRandomArticle}>{questionRandomizing ? text('抽题中', 'Loading') : text('随机文章', 'Random')}</button>
           <button type="button" className="primary-button" disabled={questionLoading} onClick={handleGenerateArticle}>{questionGenerating ? text('生成中', 'Generating') : text('生成文章', 'Generate')}</button>
         </form>
-        {genreTagsError ? <div className="error-message">{text('体裁标签加载失败：', 'Could not load genre tags: ')}{genreTagsError}</div> : null}
+        {genreTagsError ? <div className="error-message" role="alert">{text('体裁标签加载失败：', 'Could not load genre tags: ')}{genreTagsError}</div> : null}
       </section>
 
       <section className="surface question-panel article-question-panel" aria-label={text('文章题目预览', 'Article preview')}>
@@ -301,8 +302,10 @@ export default function ArticlePractice() {
           <ol className="article-segment-list">
             {sourceSegments.map((segment, index) => <li key={`${index}-${segment}`}>{segment}</li>)}
           </ol>
-        ) : <p className="empty-state">{text('暂无文章', 'No article')}</p>}
-        <dl className="question-details article-metadata">
+        ) : null}
+        {!question ? <span className="sr-only" role="status">{text('尚未选择文章', 'No article selected')}</span> : null}
+        <dl className={`question-details${question ? ' article-metadata' : ''}`}>
+          {!question ? <div><dt>{text('文章原文', 'Source')}</dt><dd>{text('暂无文章', 'No article')}</dd></div> : null}
           <div><dt>{text('语境', 'Context')}</dt><dd>{question?.contextText ?? text('暂无', 'None')}</dd></div>
           <div><dt>{text('生词提示', 'Vocabulary hints')}</dt><dd className="grammar-point"><button type="button" disabled={!question} aria-expanded={vocabularyHintsVisible} onClick={() => setVocabularyHintsVisible((visible) => !visible)}>{vocabularyHintsVisible ? text('隐藏提示', 'Hide hints') : text('显示提示', 'Show hints')}</button>{vocabularyHintsVisible ? <span className="pre-wrap-text">{question?.grammarPoint ?? text('暂无', 'None')}</span> : null}</dd></div>
           <div><dt>{text('体裁', 'Genre')}</dt><dd>{question ? <span className="tag-chip-row">{question.tags.map((tag) => <span key={tag.id}>{getTagDisplayName(tag, english)}</span>)}</span> : text('暂无', 'None')}</dd></div>
@@ -315,13 +318,13 @@ export default function ArticlePractice() {
         {!session.answerSubmitted ? (
           <>
             {answerInputNotice && (answerInputNotice.kind === 'error' || !question) ? <Notice notice={answerInputNotice} /> : null}
-            <textarea className="article-answer-input" value={session.answerText} maxLength={5000} disabled={!question} placeholder={question ? text('请输入完整日语译文；可以合并、拆分或调整句序', 'Enter the complete Japanese translation; you may merge, split, or reorder sentences.') : text('生成或随机抽取文章后即可作答', 'Generate or select an article to begin.')} onChange={(event) => setSession((current) => ({ ...current, answerText: event.target.value }))} />
+            <textarea aria-label={text('完整日语译文', 'Complete Japanese translation')} className="article-answer-input" value={session.answerText} maxLength={5000} disabled={!question} placeholder={question ? text('请输入完整日语译文；可以合并、拆分或调整句序', 'Enter the complete Japanese translation; you may merge, split, or reorder sentences.') : text('生成或随机抽取文章后即可作答', 'Generate or select an article to begin.')} onChange={(event) => setSession((current) => ({ ...current, answerText: event.target.value }))} />
             <div className="answer-input-footer"><span>{session.answerText.length} / 5000</span><div className="action-row"><button type="button" className="primary-button" disabled={!question || session.answerScoring} onClick={handleSubmitAnswer}>{session.answerScoring ? text('评分中', 'Scoring') : text('提交答案', 'Submit answer')}</button><button type="button" disabled={!question && !session.answerText} onClick={() => { setSession(EMPTY_ARTICLE_SESSION); setPracticeNotice(null) }}>{text('清空', 'Clear')}</button></div></div>
           </>
         ) : (
           <div className="answer-result">
             {session.answerNotice && (!session.answerReview || session.answerNotice.kind === 'error') ? <Notice notice={session.answerNotice} /> : null}
-            {session.answerScoring ? <div className="notice"><strong>{text('评分中', 'Scoring')}</strong><p>{text('正在按中文原句分析完整译文。', 'Analyzing the complete translation against the English source.')}</p></div> : null}
+            {session.answerScoring ? <div className="notice" role="status" aria-live="polite"><strong>{text('评分中', 'Scoring')}</strong><p>{text('正在按中文原句分析完整译文。', 'Analyzing the complete translation against the English source.')}</p></div> : null}
             <section className="submitted-answer pre-wrap-text"><span className="label">{text('你的完整译文', 'Your complete translation')}</span><p>{session.answerText}</p></section>
             {session.answerReview ? <ArticleReviewResult
               review={session.answerReview}
@@ -367,7 +370,7 @@ function ArticleReviewResult(props: ArticleReviewResultProps) {
   const { review, candidates } = props
   return (
     <>
-      <div className="score-summary"><span>{text('总分', 'Total score')}</span><strong>{formatScore(review.totalScore)}</strong></div>
+      <div className="score-summary"><span>{text('总分', 'Total score')}</span><strong className={scoreToneClassName(review.totalScore)}>{formatScore(review.totalScore)}</strong></div>
       <section className="review-section article-overall-comment"><strong>{text('全文总评', 'Overall feedback')}</strong><p>{review.overallComment}</p></section>
       <section className="article-revised-answer pre-wrap-text"><strong>{text('完整修订译文', 'Complete revision')}</strong><p>{review.revisedAnswer || text('本次未返回完整修订译文。', 'No complete revision was returned.')}</p></section>
 
@@ -391,7 +394,7 @@ function ArticleReviewResult(props: ArticleReviewResultProps) {
       <details className="review-detail">
         <summary>{text('详细评分与错误', 'Detailed scores and errors')}</summary>
         <div className="review-result">
-          <dl className="score-grid"><div><dt>{text('语法与用词', 'Grammar & word choice')}</dt><dd>{review.scores.grammarVocabularyScore}</dd></div><div><dt>{text('自然度与篇章连贯', 'Fluency & coherence')}</dt><dd>{review.scores.naturalFluencyScore}</dd></div><div><dt>{text('体裁与语域', 'Genre & register')}</dt><dd>{review.scores.scenarioAdaptationScore}</dd></div><div><dt>{text('忠实度与完整性', 'Fidelity & completeness')}</dt><dd>{review.scores.informationCompletenessScore}</dd></div></dl>
+          <dl className="score-grid"><div><dt>{text('语法与用词', 'Grammar & word choice')}</dt><dd className={scoreToneClassName(review.scores.grammarVocabularyScore)}>{review.scores.grammarVocabularyScore}</dd></div><div><dt>{text('自然度与篇章连贯', 'Fluency & coherence')}</dt><dd className={scoreToneClassName(review.scores.naturalFluencyScore)}>{review.scores.naturalFluencyScore}</dd></div><div><dt>{text('体裁与语域', 'Genre & register')}</dt><dd className={scoreToneClassName(review.scores.scenarioAdaptationScore)}>{review.scores.scenarioAdaptationScore}</dd></div><div><dt>{text('忠实度与完整性', 'Fidelity & completeness')}</dt><dd className={scoreToneClassName(review.scores.informationCompletenessScore)}>{review.scores.informationCompletenessScore}</dd></div></dl>
           <dl className="comment-list"><div><dt>{text('语法', 'Grammar')}</dt><dd>{review.comments.grammarComment}</dd></div><div><dt>{text('词汇', 'Vocabulary')}</dt><dd>{review.comments.vocabularyComment}</dd></div><div><dt>{text('自然度与篇章', 'Fluency & coherence')}</dt><dd>{review.comments.naturalnessComment}</dd></div><div><dt>{text('体裁与语域', 'Genre & register')}</dt><dd>{review.comments.scenarioComment}</dd></div></dl>
           <ReviewList title={text('候选错误', 'Candidate errors')} emptyText={text('本次未发现明确错误。', 'No clear errors were found.')} items={review.errorAnalysis}>{(item) => <div><span>{item.errorTypeName} / {item.severity}</span><strong>{item.original}</strong><p>{item.issue}</p><p>{item.suggestion}</p></div>}</ReviewList>
           <ReviewList title={text('修改建议', 'Revision suggestions')} emptyText={text('本次没有额外修改建议。', 'No additional revision suggestions.')} items={review.revisionSuggestions}>{(item) => <p>{item}</p>}</ReviewList>
@@ -427,7 +430,7 @@ function splitArticleSegments(text: string) {
 }
 
 function Notice({ notice }: { notice: PracticeNotice }) {
-  return <div className={notice.kind === 'error' ? 'notice is-error' : 'notice'}><strong>{notice.title}</strong><p>{notice.message}</p></div>
+  return <div className={notice.kind === 'error' ? 'notice is-error' : 'notice'} role={notice.kind === 'error' ? 'alert' : 'status'}><strong>{notice.title}</strong><p>{notice.message}</p></div>
 }
 
 function formatScore(score: number) {
