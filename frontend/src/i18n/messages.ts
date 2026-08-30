@@ -1,7 +1,7 @@
 const zh = {
-  appTitle: '日语翻译练习',
-  backend: '后端服务',
-  learningMode: '学习模式',
+  appTitle: 'さざれ',
+  appTagline: '言葉の海へ、今日もひとつ小石を',
+  learningMode: '练习语言方向',
   mainNavigation: '主导航',
   practice: '练习',
   reviewCards: '复习卡片',
@@ -14,9 +14,9 @@ const zh = {
 type MessageKey = keyof typeof zh
 
 const en = {
-  appTitle: 'Japanese Translation Practice',
-  backend: 'Backend',
-  learningMode: 'Learning mode',
+  appTitle: 'さざれ',
+  appTagline: '言葉の海へ、今日もひとつ小石を',
+  learningMode: 'Practice language direction',
   mainNavigation: 'Main navigation',
   practice: 'Practice',
   reviewCards: 'Review',

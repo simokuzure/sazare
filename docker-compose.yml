@@ -1,7 +1,7 @@
 services:
   postgres:
     image: pgvector/pgvector:0.8.6-pg16-bookworm
-    container_name: jt-postgres
+    container_name: sazare-postgres
     environment:
       POSTGRES_DB: jt_learning
       POSTGRES_USER: jt_user
@@ -18,7 +18,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: jt-redis
+    container_name: sazare-redis
     ports:
       - "6379:6379"
     volumes:

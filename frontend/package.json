@@ -1,7 +1,12 @@
 {
-  "name": "jt-learning-frontend",
+  "name": "sazare-frontend",
   "private": true,
   "version": "0.0.0",
+  "homepage": "https://github.com/simokuzure/sazare",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/simokuzure/sazare.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

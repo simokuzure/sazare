@@ -5,7 +5,7 @@ server:
 
 spring:
   application:
-    name: jt-learning
+    name: sazare
   datasource:
     url: jdbc:postgresql://localhost:5432/jt_learning
     username: jt_user

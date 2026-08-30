@@ -1,4 +1,4 @@
-import type { ApiResponse, HealthResponse } from '../types/api'
+import type { ApiResponse } from '../types/api'
 import { LEARNING_MODE_STORAGE_KEY } from '../i18n/translationDirections'
 
 export async function readApiResponse<T>(response: Response): Promise<ApiResponse<T>> {
@@ -24,12 +24,4 @@ export function getErrorMessage(error: unknown) {
     return 'The request could not be completed. Please try again.'
   }
   return error instanceof Error ? error.message : '请求失败'
-}
-
-export async function fetchHealth() {
-  const response = await fetch('/api/health')
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`)
-  }
-  return response.json() as Promise<HealthResponse>
 }

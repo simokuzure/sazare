@@ -19,7 +19,7 @@ type LanguageContextValue = {
 const LanguageContext = createContext<LanguageContextValue | null>(null)
 
 function initialMode(): LearningMode {
-  return window.localStorage.getItem(LEARNING_MODE_STORAGE_KEY) === 'EN_TO_JA' ? 'EN_TO_JA' : 'ZH_TO_JA'
+  return window.localStorage.getItem(LEARNING_MODE_STORAGE_KEY) === 'ZH_TO_JA' ? 'ZH_TO_JA' : 'EN_TO_JA'
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {

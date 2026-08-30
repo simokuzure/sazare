@@ -12,7 +12,6 @@ public class HealthController {
 
     @GetMapping("/health")
     public ApiResponse<HealthVO> health() {
-        return ApiResponse.success(new HealthVO("UP", "jt-learning", OffsetDateTime.now()));
+        return ApiResponse.success(new HealthVO("UP", "sazare", OffsetDateTime.now()));
     }
 }
-
