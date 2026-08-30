@@ -7,9 +7,9 @@ spring:
   application:
     name: sazare
   datasource:
-    url: jdbc:postgresql://localhost:5432/jt_learning
-    username: jt_user
-    password: jt_password
+    url: jdbc:postgresql://localhost:5432/sazare
+    username: sazare_user
+    password: sazare_password
     driver-class-name: org.postgresql.Driver
   data:
     redis:

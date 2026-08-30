@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.jt.learning.mapper.ReviewCycleQuestionMapper">
+<mapper namespace="com.sazare.mapper.ReviewCycleQuestionMapper">
 
     <sql id="cycleQuestionColumns">
         id, review_cycle_id, question_id, question_role, review_status, attempt_count,
@@ -28,19 +28,19 @@
         on conflict (review_cycle_id, question_id) do nothing
     </insert>
 
-    <select id="selectByIdAndCycleId" resultType="com.jt.learning.entity.ReviewCycleQuestion">
+    <select id="selectByIdAndCycleId" resultType="com.sazare.entity.ReviewCycleQuestion">
         select <include refid="cycleQuestionColumns" />
         from review_cycle_questions
         where id = #{id} and review_cycle_id = #{reviewCycleId}
     </select>
 
-    <select id="selectByCycleIdAndQuestionId" resultType="com.jt.learning.entity.ReviewCycleQuestion">
+    <select id="selectByCycleIdAndQuestionId" resultType="com.sazare.entity.ReviewCycleQuestion">
         select <include refid="cycleQuestionColumns" />
         from review_cycle_questions
         where review_cycle_id = #{reviewCycleId} and question_id = #{questionId}
     </select>
 
-    <select id="selectLatestRetry" resultType="com.jt.learning.entity.ReviewCycleQuestion">
+    <select id="selectLatestRetry" resultType="com.sazare.entity.ReviewCycleQuestion">
         select <include refid="cycleQuestionColumns" />
         from review_cycle_questions
         where review_cycle_id = #{reviewCycleId} and review_status = 'RETRY'
@@ -48,7 +48,7 @@
         limit 1
     </select>
 
-    <select id="selectRandomPendingOriginal" resultType="com.jt.learning.entity.ReviewCycleQuestion">
+    <select id="selectRandomPendingOriginal" resultType="com.sazare.entity.ReviewCycleQuestion">
         select <include refid="cycleQuestionColumns" />
         from review_cycle_questions
         where review_cycle_id = #{reviewCycleId}
@@ -58,7 +58,7 @@
         limit 1
     </select>
 
-    <select id="selectActiveDerived" resultType="com.jt.learning.entity.ReviewCycleQuestion">
+    <select id="selectActiveDerived" resultType="com.sazare.entity.ReviewCycleQuestion">
         select <include refid="cycleQuestionColumns" />
         from review_cycle_questions
         where review_cycle_id = #{reviewCycleId}
@@ -69,7 +69,7 @@
         limit 1
     </select>
 
-    <select id="selectLatestFailedOriginal" resultType="com.jt.learning.entity.ReviewCycleQuestion">
+    <select id="selectLatestFailedOriginal" resultType="com.sazare.entity.ReviewCycleQuestion">
         select
             question.id,
             question.review_cycle_id,
@@ -93,14 +93,14 @@
         limit 1
     </select>
 
-    <select id="selectAllByCycleId" resultType="com.jt.learning.entity.ReviewCycleQuestion">
+    <select id="selectAllByCycleId" resultType="com.sazare.entity.ReviewCycleQuestion">
         select <include refid="cycleQuestionColumns" />
         from review_cycle_questions
         where review_cycle_id = #{reviewCycleId}
         order by sort_order, id
     </select>
 
-    <select id="selectProgress" resultType="com.jt.learning.dto.ReviewCycleProgressRow">
+    <select id="selectProgress" resultType="com.sazare.dto.ReviewCycleProgressRow">
         select
             count(*) filter (where question_role = 'ORIGINAL')::integer as original_question_count,
             count(*) filter (where question_role = 'ORIGINAL' and review_status = 'PASSED')::integer as original_passed_count,

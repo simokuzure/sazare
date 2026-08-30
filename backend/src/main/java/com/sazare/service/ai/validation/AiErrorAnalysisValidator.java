@@ -1,0 +1,193 @@
+package com.sazare.service.ai.validation;
+
+import com.sazare.dto.AiAnswerErrorAnalysisDTO;
+import com.sazare.dto.AiErrorTypeOptionDTO;
+import com.sazare.exception.BusinessException;
+import com.sazare.exception.ErrorCode;
+import org.springframework.stereotype.Component;
+
+import java.util.LinkedHashSet;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+@Component
+public class AiErrorAnalysisValidator {
+
+    private static final Set<String> VALID_SEVERITIES = Set.of("LOW", "MEDIUM", "HIGH");
+
+    public List<AiAnswerErrorAnalysisDTO> sanitize(
+            List<AiAnswerErrorAnalysisDTO> errorAnalysis,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode,
+            String answerText
+    ) {
+        if (errorAnalysis == null) {
+            return List.of();
+        }
+        Set<String> errorKeys = new LinkedHashSet<>();
+        List<AiAnswerErrorAnalysisDTO> validErrors = new ArrayList<>();
+        for (AiAnswerErrorAnalysisDTO error : errorAnalysis) {
+            if (isValid(error, errorTypesByCode, answerText, List.of(), List.of(), false, errorKeys)) {
+                validErrors.add(error);
+            }
+        }
+        return List.copyOf(validErrors);
+    }
+
+    public List<AiAnswerErrorAnalysisDTO> sanitizeArticle(
+            List<AiAnswerErrorAnalysisDTO> errorAnalysis,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode,
+            String answerText,
+            List<String> sourceSegments,
+            List<String> referenceSegments
+    ) {
+        if (errorAnalysis == null) {
+            return List.of();
+        }
+        Set<String> errorKeys = new LinkedHashSet<>();
+        List<AiAnswerErrorAnalysisDTO> validErrors = new ArrayList<>();
+        for (AiAnswerErrorAnalysisDTO error : errorAnalysis) {
+            if (isValid(error, errorTypesByCode, answerText,
+                    sourceSegments, referenceSegments, true, errorKeys)) {
+                validErrors.add(error);
+            }
+        }
+        return List.copyOf(validErrors);
+    }
+
+    public void validate(
+            List<AiAnswerErrorAnalysisDTO> errorAnalysis,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode,
+            String answerText
+    ) {
+        if (errorAnalysis == null) {
+            throw invalid("errorAnalysis 不能为空");
+        }
+        Set<String> errorKeys = new LinkedHashSet<>();
+        for (AiAnswerErrorAnalysisDTO error : errorAnalysis) {
+            if (error == null) {
+                throw invalid("errorAnalysis 项不能为空");
+            }
+            if (!errorTypesByCode.containsKey(error.errorTypeCode())) {
+                throw invalid("errorAnalysis.errorTypeCode 不合法");
+            }
+            requireText(error.original(), "errorAnalysis.original 不能为空");
+            String original = error.original().trim();
+            if (!answerText.contains(original)) {
+                throw invalid("errorAnalysis.original 不属于用户答案");
+            }
+            requireText(error.issue(), "errorAnalysis.issue 不能为空");
+            requireText(error.suggestion(), "errorAnalysis.suggestion 不能为空");
+            if (!VALID_SEVERITIES.contains(error.severity())) {
+                throw invalid("errorAnalysis.severity 不合法");
+            }
+            requireText(error.suggestedUserErrorTypeName(), "errorAnalysis.suggestedUserErrorTypeName 不能为空");
+            requireText(error.suggestedUserErrorTypeDescription(), "errorAnalysis.suggestedUserErrorTypeDescription 不能为空");
+            if (error.suggestedUserErrorTypeName().trim().length() > 128) {
+                throw invalid("建议的用户错误类型名称过长");
+            }
+            if (error.suggestedUserErrorTypeDescription().trim().length() > 255) {
+                throw invalid("建议的用户错误类型说明过长");
+            }
+            if (!errorKeys.add(error.errorTypeCode() + "\u0000" + original)) {
+                throw invalid("errorAnalysis 存在重复错误");
+            }
+        }
+    }
+
+    public void validateArticle(
+            List<AiAnswerErrorAnalysisDTO> errorAnalysis,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode,
+            String answerText,
+            List<String> sourceSegments,
+            List<String> referenceSegments
+    ) {
+        if (errorAnalysis == null) {
+            throw invalid("errorAnalysis 不能为空");
+        }
+        Set<String> errorKeys = new LinkedHashSet<>();
+        for (AiAnswerErrorAnalysisDTO error : errorAnalysis) {
+            if (error == null) {
+                throw invalid("errorAnalysis 项不能为空");
+            }
+            if (!errorTypesByCode.containsKey(error.errorTypeCode())) {
+                throw invalid("errorAnalysis.errorTypeCode 不合法");
+            }
+            requireText(error.original(), "errorAnalysis.original 不能为空");
+            String original = error.original().trim();
+            if ("OMISSION".equals(error.errorTypeCode())) {
+                if (!sourceSegments.contains(original)) {
+                    throw invalid("漏译错误的 original 必须是对应中文原句");
+                }
+            } else if (!answerText.contains(original)) {
+                throw invalid("errorAnalysis.original 不属于用户答案");
+            }
+            requireText(error.issue(), "errorAnalysis.issue 不能为空");
+            requireText(error.suggestion(), "errorAnalysis.suggestion 不能为空");
+            if (!referenceSegments.contains(error.suggestion().trim())) {
+                throw invalid("文章错误 suggestion 必须是对应的完整日文参考句");
+            }
+            if (!VALID_SEVERITIES.contains(error.severity())) {
+                throw invalid("errorAnalysis.severity 不合法");
+            }
+            requireText(error.suggestedUserErrorTypeName(), "errorAnalysis.suggestedUserErrorTypeName 不能为空");
+            requireText(error.suggestedUserErrorTypeDescription(), "errorAnalysis.suggestedUserErrorTypeDescription 不能为空");
+            if (error.suggestedUserErrorTypeName().trim().length() > 128) {
+                throw invalid("建议的用户错误类型名称过长");
+            }
+            if (error.suggestedUserErrorTypeDescription().trim().length() > 255) {
+                throw invalid("建议的用户错误类型说明过长");
+            }
+            if (!errorKeys.add(error.errorTypeCode() + "\u0000" + original)) {
+                throw invalid("errorAnalysis 存在重复错误");
+            }
+        }
+    }
+
+    private boolean isValid(
+            AiAnswerErrorAnalysisDTO error,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode,
+            String answerText,
+            List<String> sourceSegments,
+            List<String> referenceSegments,
+            boolean article,
+            Set<String> errorKeys
+    ) {
+        if (error == null || !errorTypesByCode.containsKey(error.errorTypeCode())
+                || !hasText(error.original()) || !hasText(error.issue()) || !hasText(error.suggestion())
+                || !VALID_SEVERITIES.contains(error.severity())
+                || !hasText(error.suggestedUserErrorTypeName())
+                || !hasText(error.suggestedUserErrorTypeDescription())
+                || error.suggestedUserErrorTypeName().trim().length() > 128
+                || error.suggestedUserErrorTypeDescription().trim().length() > 255) {
+            return false;
+        }
+        String original = error.original().trim();
+        if (article && "OMISSION".equals(error.errorTypeCode())) {
+            if (!sourceSegments.contains(original)) {
+                return false;
+            }
+        } else if (!answerText.contains(original)) {
+            return false;
+        }
+        if (article && !referenceSegments.contains(error.suggestion().trim())) {
+            return false;
+        }
+        return errorKeys.add(error.errorTypeCode() + "\u0000" + original);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private void requireText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw invalid(message);
+        }
+    }
+
+    private BusinessException invalid(String message) {
+        return new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 " + message);
+    }
+}

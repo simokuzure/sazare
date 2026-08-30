@@ -2,7 +2,7 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.jt.learning.mapper.QuestionMapper">
+<mapper namespace="com.sazare.mapper.QuestionMapper">
 
     <sql id="questionColumns">
         id,
@@ -96,7 +96,7 @@
         )
     </insert>
 
-    <select id="selectActiveQuestionById" resultType="com.jt.learning.entity.Question">
+    <select id="selectActiveQuestionById" resultType="com.sazare.entity.Question">
         select
             <include refid="questionColumns" />
         from questions
@@ -105,7 +105,7 @@
           and deleted = false
     </select>
 
-    <select id="selectQuestionById" resultType="com.jt.learning.entity.Question">
+    <select id="selectQuestionById" resultType="com.sazare.entity.Question">
         select
             <include refid="questionColumns" />
         from questions
@@ -113,7 +113,7 @@
           and deleted = false
     </select>
 
-    <select id="selectQuestionForUpdateById" resultType="com.jt.learning.entity.Question">
+    <select id="selectQuestionForUpdateById" resultType="com.sazare.entity.Question">
         select
             <include refid="questionColumns" />
         from questions
@@ -146,7 +146,7 @@
         limit 1
     </select>
 
-    <select id="selectQuestionsByIds" resultType="com.jt.learning.entity.Question">
+    <select id="selectQuestionsByIds" resultType="com.sazare.entity.Question">
         select
             <include refid="questionColumns" />
         from questions

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.jt.learning.mapper.ReviewCycleMapper">
+<mapper namespace="com.sazare.mapper.ReviewCycleMapper">
 
     <sql id="cycleColumns">
         id, review_card_id, cycle_no, status, target_success_count, successful_review_count, failed_review_count,
@@ -17,13 +17,13 @@
         )
     </insert>
 
-    <select id="selectCurrentByCardId" resultType="com.jt.learning.entity.ReviewCycle">
+    <select id="selectCurrentByCardId" resultType="com.sazare.entity.ReviewCycle">
         select <include refid="cycleColumns" />
         from review_cycles
         where review_card_id = #{reviewCardId} and status = 'IN_PROGRESS'
     </select>
 
-    <select id="selectLatestByCardId" resultType="com.jt.learning.entity.ReviewCycle">
+    <select id="selectLatestByCardId" resultType="com.sazare.entity.ReviewCycle">
         select <include refid="cycleColumns" />
         from review_cycles
         where review_card_id = #{reviewCardId}
@@ -31,7 +31,7 @@
         limit 1
     </select>
 
-    <select id="selectCurrentForUpdateByCardId" resultType="com.jt.learning.entity.ReviewCycle">
+    <select id="selectCurrentForUpdateByCardId" resultType="com.sazare.entity.ReviewCycle">
         select <include refid="cycleColumns" />
         from review_cycles
         where review_card_id = #{reviewCardId} and status = 'IN_PROGRESS'

@@ -2,7 +2,7 @@ import type { QuestionType } from '../types/question'
 
 export type LearningMode = 'ZH_TO_JA' | 'EN_TO_JA'
 export type UiLanguage = 'zh-CN' | 'en-US'
-export const LEARNING_MODE_STORAGE_KEY = 'jt.learningMode'
+export const LEARNING_MODE_STORAGE_KEY = 'sazare.learningMode'
 
 export type TranslationDirection = {
   learningMode: LearningMode

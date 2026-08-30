@@ -119,10 +119,10 @@ docker compose down
 
 ```powershell
 Get-Content -Raw -Encoding UTF8 .\backend\src\main\resources\db\schema.sql |
-  docker compose exec -T postgres psql -U jt_user -d jt_learning
+  docker compose exec -T postgres psql -U sazare_user -d sazare
 
 Get-Content -Raw -Encoding UTF8 .\backend\src\main\resources\db\seed.sql |
-  docker compose exec -T postgres psql -U jt_user -d jt_learning
+  docker compose exec -T postgres psql -U sazare_user -d sazare
 ```
 
 `schema.sql` 是新数据库的完整结构基线，`seed.sql` 写入默认用户、标签和错误类型。已有 PostgreSQL 数据卷不会自动应用后续结构变更。

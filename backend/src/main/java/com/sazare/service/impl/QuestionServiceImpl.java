@@ -1,0 +1,1815 @@
+package com.sazare.service.impl;
+
+import com.sazare.common.ArticleLengthTier;
+import com.sazare.common.TranslationDirection;
+import com.sazare.dto.AiAnswerErrorAnalysisDTO;
+import com.sazare.dto.AiArticleGenerationRequest;
+import com.sazare.dto.AiArticleGenerationResponseDTO;
+import com.sazare.dto.AiArticleBlueprintDTO;
+import com.sazare.dto.AiArticleRetryContext;
+import com.sazare.dto.AiArticleSentenceDTO;
+import com.sazare.dto.AiArticleSentenceReviewDTO;
+import com.sazare.dto.AiErrorTypeOptionDTO;
+import com.sazare.dto.AiAnswerRecommendedExpressionDTO;
+import com.sazare.dto.AiAnswerReviewCommentsDTO;
+import com.sazare.dto.AiAnswerReviewDTO;
+import com.sazare.dto.AiAnswerScoresDTO;
+import com.sazare.dto.AiAnswerScoringRequest;
+import com.sazare.dto.AiAnswerScoringResponseDTO;
+import com.sazare.dto.AiGeneratedArticleDTO;
+import com.sazare.dto.AiGeneratedQuestionDTO;
+import com.sazare.dto.AiQuestionAnswerDTO;
+import com.sazare.dto.AiQuestionGenerationRequest;
+import com.sazare.dto.AiQuestionGenerationResponseDTO;
+import com.sazare.dto.AiQuestionTagOptionDTO;
+import com.sazare.dto.QuestionAnswerRequest;
+import com.sazare.dto.QuestionCreateRequest;
+import com.sazare.dto.QuestionEnabledRequest;
+import com.sazare.dto.QuestionEmbeddingBackfillRequest;
+import com.sazare.dto.QuestionEmbeddingMatch;
+import com.sazare.dto.QuestionQueryRequest;
+import com.sazare.dto.QuestionTagRow;
+import com.sazare.dto.QuestionUpdateRequest;
+import com.sazare.entity.Question;
+import com.sazare.entity.QuestionAnswer;
+import com.sazare.entity.Tag;
+import com.sazare.entity.User;
+import com.sazare.entity.UserAnswer;
+import com.sazare.exception.BusinessException;
+import com.sazare.exception.ErrorCode;
+import com.sazare.mapper.QuestionAnswerMapper;
+import com.sazare.mapper.ArticleGenerationMetadataMapper;
+import com.sazare.mapper.ErrorTypeMapper;
+import com.sazare.mapper.QuestionMapper;
+import com.sazare.mapper.QuestionTagMapper;
+import com.sazare.mapper.TagMapper;
+import com.sazare.mapper.UserAnswerMapper;
+import com.sazare.mapper.UserMapper;
+import com.sazare.service.ai.AiAnswerScoringClient;
+import com.sazare.service.ai.AiQuestionClient;
+import com.sazare.service.ai.AiQuestionPrompt;
+import com.sazare.service.ai.prompt.AiAnswerScoringPromptBuilder;
+import com.sazare.service.ai.prompt.AiArticleQuestionPromptBuilder;
+import com.sazare.service.ai.prompt.ArticleGenreRoleRegistry;
+import com.sazare.service.ai.prompt.AiQuestionPromptBuilder;
+import com.sazare.service.ai.validation.AiErrorAnalysisValidator;
+import com.sazare.service.QuestionService;
+import com.sazare.service.DictionaryCacheService;
+import com.sazare.service.question.QuestionEmbeddingService;
+import com.sazare.vo.AnswerErrorAnalysisVO;
+import com.sazare.vo.AnswerRecommendedExpressionVO;
+import com.sazare.vo.AnswerReviewCommentsVO;
+import com.sazare.vo.AnswerReviewVO;
+import com.sazare.vo.AnswerScoresVO;
+import com.sazare.vo.ArticleSentenceReviewVO;
+import com.sazare.vo.PageVO;
+import com.sazare.vo.QuestionAnswerVO;
+import com.sazare.vo.QuestionVO;
+import com.sazare.vo.QuestionEmbeddingBackfillVO;
+import com.sazare.vo.TagVO;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
+import static com.sazare.util.TagHierarchyUtils.secondLevelTags;
+
+@Service
+public class QuestionServiceImpl implements QuestionService {
+
+    private static final String SOURCE_TYPE_AI = "AI";
+    private static final String SOURCE_TYPE_MANUAL = "MANUAL";
+    private static final String SOURCE_TYPE_REVIEW_DERIVED = "REVIEW_DERIVED";
+    private static final String TAG_TYPE_SCENE = "SCENE";
+    private static final String TAG_TYPE_FUNCTION = "FUNCTION";
+    private static final String TAG_TYPE_GENRE = "GENRE";
+    private static final String ANSWER_TYPE_STANDARD = "STANDARD";
+    private static final String ANSWER_TYPE_REFERENCE = "REFERENCE";
+    private static final String LOCAL_DEFAULT_USER_CODE = "LOCAL_DEFAULT";
+    private static final String ANSWER_STATUS_SUBMITTED = "SUBMITTED";
+    private static final String ANSWER_STATUS_REVIEWED = "REVIEWED";
+
+    private static final Set<String> VALID_ANSWER_TYPES = Set.of(ANSWER_TYPE_STANDARD, ANSWER_TYPE_REFERENCE);
+    private static final Set<String> VALID_FORMALITIES = Set.of("CASUAL", "NEUTRAL", "POLITE", "BUSINESS");
+    private static final Pattern CHINESE_PATTERN = Pattern.compile("[\\u4e00-\\u9fff]");
+    private static final Pattern JAPANESE_TEXT_PATTERN = Pattern.compile("[\\u3040-\\u30ff\\u4e00-\\u9fff]");
+    private static final Pattern JAPANESE_KANA_PATTERN = Pattern.compile("[\\u3040-\\u30ff]");
+    private static final Pattern ARTICLE_END_PATTERN = Pattern.compile(".*[。？！][\"'”’」』》】）〕〗〙〛〉)]*$");
+    private static final String ARTICLE_SEPARATOR = "\n\n";
+    private static final int ARTICLE_MIN_LENGTH = 150;
+    private static final int ARTICLE_MAX_LENGTH = 300;
+    private static final int ARTICLE_MAX_SENTENCES = 30;
+
+    private final TagMapper tagMapper;
+    private final QuestionMapper questionMapper;
+    private final QuestionAnswerMapper questionAnswerMapper;
+    private final QuestionTagMapper questionTagMapper;
+    private final UserMapper userMapper;
+    private final UserAnswerMapper userAnswerMapper;
+    private final ErrorTypeMapper errorTypeMapper;
+    private final DictionaryCacheService dictionaryCacheService;
+    private final AiQuestionPromptBuilder promptBuilder;
+    private final AiQuestionClient aiQuestionClient;
+    private final AiAnswerScoringPromptBuilder answerScoringPromptBuilder;
+    private final AiAnswerScoringClient aiAnswerScoringClient;
+    private final AiErrorAnalysisValidator aiErrorAnalysisValidator;
+    private final QuestionEmbeddingService questionEmbeddingService;
+    private final ArticleGenerationMetadataMapper articleGenerationMetadataMapper;
+    private final ObjectMapper objectMapper;
+
+    public QuestionServiceImpl(
+            TagMapper tagMapper,
+            QuestionMapper questionMapper,
+            QuestionAnswerMapper questionAnswerMapper,
+            QuestionTagMapper questionTagMapper,
+            UserMapper userMapper,
+            UserAnswerMapper userAnswerMapper,
+            ErrorTypeMapper errorTypeMapper,
+            DictionaryCacheService dictionaryCacheService,
+            AiQuestionPromptBuilder promptBuilder,
+            AiQuestionClient aiQuestionClient,
+            AiAnswerScoringPromptBuilder answerScoringPromptBuilder,
+            AiAnswerScoringClient aiAnswerScoringClient,
+            AiErrorAnalysisValidator aiErrorAnalysisValidator,
+            QuestionEmbeddingService questionEmbeddingService,
+            ArticleGenerationMetadataMapper articleGenerationMetadataMapper,
+            ObjectMapper objectMapper
+    ) {
+        this.tagMapper = tagMapper;
+        this.questionMapper = questionMapper;
+        this.questionAnswerMapper = questionAnswerMapper;
+        this.questionTagMapper = questionTagMapper;
+        this.userMapper = userMapper;
+        this.userAnswerMapper = userAnswerMapper;
+        this.errorTypeMapper = errorTypeMapper;
+        this.dictionaryCacheService = dictionaryCacheService;
+        this.promptBuilder = promptBuilder;
+        this.aiQuestionClient = aiQuestionClient;
+        this.answerScoringPromptBuilder = answerScoringPromptBuilder;
+        this.aiAnswerScoringClient = aiAnswerScoringClient;
+        this.aiErrorAnalysisValidator = aiErrorAnalysisValidator;
+        this.questionEmbeddingService = questionEmbeddingService;
+        this.articleGenerationMetadataMapper = articleGenerationMetadataMapper;
+        this.objectMapper = objectMapper;
+    }
+
+    @Override
+    @Transactional
+    public List<QuestionVO> generateQuestionsByAi(AiQuestionGenerationRequest request) {
+        TranslationDirection direction = TranslationDirection.fromLearningMode(request.learningMode());
+        List<Tag> sceneTags = loadCandidateTags(TAG_TYPE_SCENE, request.sceneTagCodes());
+        List<Tag> functionTags = loadCandidateTags(TAG_TYPE_FUNCTION, request.functionTagCodes());
+        if (sceneTags.isEmpty()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "没有可用场景标签");
+        }
+
+        List<AiQuestionTagOptionDTO> sceneTagOptions = toTagOptions(sceneTags, direction);
+        List<AiQuestionTagOptionDTO> functionTagOptions = toTagOptions(functionTags, direction);
+        List<List<Float>> excludedEmbeddings = embedExcludedSourceTexts(request.excludedSourceTexts());
+        List<String> promptExcludedSourceTexts = new ArrayList<>(emptyIfNull(request.excludedSourceTexts()));
+        List<PreparedGeneratedQuestion> acceptedQuestions = new ArrayList<>();
+
+        for (int attempt = 0; attempt < 3 && acceptedQuestions.size() < request.questionCount(); attempt++) {
+            AiQuestionGenerationRequest attemptRequest = createRetryRequest(
+                    request,
+                    request.questionCount() - acceptedQuestions.size(),
+                    promptExcludedSourceTexts
+            );
+            AiQuestionPrompt prompt = promptBuilder.build(attemptRequest, sceneTagOptions, functionTagOptions);
+            AiQuestionGenerationResponseDTO aiResponse = parseAiResponse(
+                    aiQuestionClient.generateQuestions(prompt, attemptRequest, sceneTagOptions, functionTagOptions)
+            );
+            List<ValidatedGeneratedQuestion> validatedQuestions = validateAiResponse(
+                    attemptRequest,
+                    aiResponse,
+                    toTagMap(sceneTags),
+                    toTagMap(functionTags)
+            );
+
+            for (ValidatedGeneratedQuestion validatedQuestion : validatedQuestions) {
+                List<Float> embedding = questionEmbeddingService.embedQuestion(
+                        validatedQuestion.question().sourceText(),
+                        validatedQuestion.question().contextText()
+                );
+                if (isDuplicate(embedding, excludedEmbeddings, acceptedQuestions,
+                        validatedQuestion.question().questionType())) {
+                    promptExcludedSourceTexts.add(validatedQuestion.question().sourceText().trim());
+                    continue;
+                }
+                acceptedQuestions.add(new PreparedGeneratedQuestion(validatedQuestion, embedding));
+                promptExcludedSourceTexts.add(validatedQuestion.question().sourceText().trim());
+            }
+        }
+
+        if (acceptedQuestions.size() != request.questionCount()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 生成题目存在近似重复，补生成后仍未达到要求数量");
+        }
+        return acceptedQuestions.stream().map(this::saveQuestion).toList();
+    }
+
+    @Override
+    @Transactional
+    public QuestionVO generateArticleByAi(AiArticleGenerationRequest request) {
+        TranslationDirection direction = TranslationDirection.fromLearningMode(request.learningMode());
+        Tag genreTag = resolveArticleGenre(request.genreTagCode());
+        AiArticleGenerationRequest effectiveRequest = request.genreTagCode() == null
+                ? new AiArticleGenerationRequest(
+                        request.level(),
+                        request.difficulty(),
+                        genreTag.getCode(),
+                        request.topic(),
+                        request.extraRequirements(),
+                        request.learningMode(),
+                        request.lengthTier()
+                )
+                : request;
+        AiQuestionTagOptionDTO genreOption = new AiQuestionTagOptionDTO(
+                genreTag.getCode(),
+                direction == TranslationDirection.EN_TO_JA ? genreTag.getNameEn() : genreTag.getName(),
+                direction == TranslationDirection.EN_TO_JA ? genreTag.getDescriptionEn() : genreTag.getDescription()
+        );
+        AiArticleQuestionPromptBuilder articlePromptBuilder = new AiArticleQuestionPromptBuilder(objectMapper);
+        AiArticleRetryContext retryContext = null;
+
+        for (int attempt = 0; attempt < 3; attempt++) {
+            String seed = UUID.randomUUID().toString();
+            AiQuestionPrompt prompt = articlePromptBuilder.build(effectiveRequest, genreOption, seed, retryContext);
+            AiArticleGenerationResponseDTO response = parseArticleResponse(
+                    aiQuestionClient.generateArticle(prompt, effectiveRequest, seed)
+            );
+            ValidatedArticle article = validateArticleResponse(effectiveRequest, response, seed);
+            List<Float> embedding = questionEmbeddingService.embedArticleBody(article.sourceText());
+            List<QuestionEmbeddingMatch> matches = questionEmbeddingService.findSimilarQuestions(
+                    embedding,
+                    direction.articleQuestionType()
+            );
+            if (!matches.isEmpty()) {
+                retryContext = createArticleRetryContext(article.sourceText(), matches);
+                continue;
+            }
+            return saveArticle(article, genreTag, embedding);
+        }
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 生成文章存在近似重复，补生成后仍未获得可用文章");
+    }
+
+    private Tag resolveArticleGenre(String genreTagCode) {
+        if (genreTagCode == null) {
+            List<Tag> genreTags = dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_GENRE);
+            if (genreTags.isEmpty()) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "没有可用文章体裁");
+            }
+            return genreTags.get(ThreadLocalRandom.current().nextInt(genreTags.size()));
+        }
+        List<Tag> genreTags = tagMapper.selectEnabledTagsByCodes(TAG_TYPE_GENRE, List.of(genreTagCode));
+        if (genreTags.size() != 1) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "genreTagCode 不存在、未启用或不是 GENRE 标签");
+        }
+        return genreTags.getFirst();
+    }
+
+    @Override
+    @Transactional
+    public QuestionEmbeddingBackfillVO backfillQuestionEmbeddings(QuestionEmbeddingBackfillRequest request) {
+        return questionEmbeddingService.backfill(request.batchSize());
+    }
+
+    @Override
+    @Transactional
+    public QuestionVO createQuestion(QuestionCreateRequest request) {
+        validateQuestionContent(
+                request.questionType(),
+                request.sourceText(),
+                request.contextText(),
+                request.grammarPoint()
+        );
+        List<Tag> tags = loadQuestionTags(request.tagCodes());
+        validateSelectedTags(request.questionType(), tags);
+        List<AiQuestionAnswerDTO> answers = toAnswerDTOs(request.answers());
+        validateAnswers(answers, "题目");
+
+        LocalDateTime now = LocalDateTime.now();
+        Question question = new Question();
+        question.setQuestionType(request.questionType());
+        question.setSourceText(request.sourceText().trim());
+        question.setContextText(request.contextText().trim());
+        question.setLevel(request.level().trim());
+        question.setDifficulty(request.difficulty());
+        question.setGrammarPoint(request.grammarPoint().trim());
+        question.setSpoken(request.spoken());
+        question.setBusiness(request.business());
+        question.setExam(request.exam());
+        question.setSourceType(SOURCE_TYPE_MANUAL);
+        question.setEnabled(true);
+        question.setDeleted(false);
+        question.setCreatedAt(now);
+        question.setUpdatedAt(now);
+        questionMapper.insertQuestion(question);
+        questionEmbeddingService.synchronizeEmbedding(question);
+
+        List<QuestionAnswer> savedAnswers = saveAnswers(question.getId(), answers, now);
+        saveQuestionTags(question.getId(), tags);
+        return toQuestionVO(question, tags, savedAnswers);
+    }
+
+    @Override
+    public PageVO<QuestionVO> listQuestions(QuestionQueryRequest request) {
+        QuestionQueryRequest normalizedRequest = normalizeQueryRequest(request);
+        long total = questionMapper.countQuestions(normalizedRequest);
+        if (total == 0) {
+            return new PageVO<>(List.of(), normalizedRequest.page(), normalizedRequest.size(), 0);
+        }
+
+        long offset = (long) (normalizedRequest.page() - 1) * normalizedRequest.size();
+        List<Long> questionIds = questionMapper.selectQuestionIds(normalizedRequest, normalizedRequest.size(), offset);
+        if (questionIds.isEmpty()) {
+            return new PageVO<>(List.of(), normalizedRequest.page(), normalizedRequest.size(), total);
+        }
+
+        List<QuestionVO> items = loadQuestionVOs(questionIds);
+        return new PageVO<>(items, normalizedRequest.page(), normalizedRequest.size(), total);
+    }
+
+    @Override
+    public QuestionVO getRandomQuestion(QuestionQueryRequest request) {
+        QuestionQueryRequest normalizedRequest = normalizeQueryRequest(request);
+        Long questionId = questionMapper.selectRandomQuestionId(normalizedRequest);
+        if (questionId == null) {
+            return null;
+        }
+
+        List<QuestionVO> questions = loadQuestionVOs(List.of(questionId));
+        if (questions.isEmpty()) {
+            return null;
+        }
+        QuestionVO question = questions.getFirst();
+        if (!TranslationDirection.fromQuestionType(question.questionType()).isArticle(question.questionType())) {
+            return question;
+        }
+        return new QuestionVO(
+                question.id(),
+                question.questionType(),
+                question.sourceText(),
+                question.contextText(),
+                question.level(),
+                question.difficulty(),
+                question.grammarPoint(),
+                question.spoken(),
+                question.business(),
+                question.exam(),
+                question.sourceType(),
+                question.enabled(),
+                question.tags(),
+                List.of(),
+                question.createdAt(),
+                question.updatedAt()
+        );
+    }
+
+    private List<QuestionVO> loadQuestionVOs(List<Long> questionIds) {
+        List<Question> questions = questionMapper.selectQuestionsByIds(questionIds);
+        Map<Long, List<QuestionTagRow>> tagsByQuestionId = tagMapper.selectEnabledTagsByQuestionIds(questionIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        QuestionTagRow::getQuestionId,
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+        Map<Long, List<QuestionAnswer>> answersByQuestionId = questionAnswerMapper.selectActiveAnswersByQuestionIds(questionIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        QuestionAnswer::getQuestionId,
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+
+        List<QuestionVO> items = questions.stream()
+                .map(question -> toQuestionVOFromRows(
+                        question,
+                        tagsByQuestionId.getOrDefault(question.getId(), List.of()),
+                        answersByQuestionId.getOrDefault(question.getId(), List.of())
+                ))
+                .toList();
+        return items;
+    }
+
+    @Override
+    public QuestionVO getQuestion(Long id) {
+        Question question = loadExistingQuestion(id);
+        List<Tag> tags = tagMapper.selectEnabledTagsByQuestionId(id);
+        List<QuestionAnswer> answers = questionAnswerMapper.selectActiveAnswersByQuestionId(id);
+        return toQuestionVO(question, tags, answers);
+    }
+
+    @Override
+    @Transactional
+    public QuestionVO updateQuestion(Long id, QuestionUpdateRequest request) {
+        Question existingQuestion = loadExistingQuestion(id);
+        if (!existingQuestion.getQuestionType().equals(request.questionType())) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "编辑时不能修改 questionType");
+        }
+        validateQuestionContent(
+                request.questionType(),
+                request.sourceText(),
+                request.contextText(),
+                request.grammarPoint()
+        );
+        List<Tag> tags = loadQuestionTags(request.tagCodes());
+        validateSelectedTags(request.questionType(), tags);
+        List<AiQuestionAnswerDTO> answers = toAnswerDTOs(request.answers());
+        validateAnswers(answers, "题目");
+        if (TranslationDirection.fromQuestionType(request.questionType()).isArticle(request.questionType())) {
+            validateArticleEdit(request.sourceText(), answers);
+        }
+
+        Question question = new Question();
+        question.setId(id);
+        question.setQuestionType(existingQuestion.getQuestionType());
+        question.setSourceText(normalizeText(request.sourceText()));
+        question.setContextText(request.contextText().trim());
+        question.setLevel(request.level().trim());
+        question.setDifficulty(request.difficulty());
+        question.setGrammarPoint(request.grammarPoint().trim());
+        question.setSpoken(request.spoken());
+        question.setBusiness(request.business());
+        question.setExam(request.exam());
+        question.setSourceType(existingQuestion.getSourceType());
+        question.setEnabled(existingQuestion.getEnabled());
+        question.setDeleted(false);
+        question.setCreatedAt(existingQuestion.getCreatedAt());
+        question.setUpdatedAt(LocalDateTime.now());
+        if (questionMapper.updateQuestion(question) == 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或已删除");
+        }
+        if (!SOURCE_TYPE_REVIEW_DERIVED.equals(question.getSourceType())) {
+            questionEmbeddingService.synchronizeEmbedding(question);
+        }
+
+        questionAnswerMapper.logicalDeleteByQuestionId(id);
+        questionTagMapper.deleteQuestionTagsByQuestionId(id);
+        List<QuestionAnswer> savedAnswers = saveAnswers(id, answers, question.getUpdatedAt());
+        saveQuestionTags(id, tags);
+        return toQuestionVO(question, tags, savedAnswers);
+    }
+
+    @Override
+    @Transactional
+    public void updateQuestionEnabled(Long id, QuestionEnabledRequest request) {
+        int updatedRows = questionMapper.updateEnabled(id, request.enabled(), LocalDateTime.now());
+        if (updatedRows == 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或已删除");
+        }
+    }
+
+    @Override
+    @Transactional
+    public void deleteQuestion(Long id) {
+        int updatedRows = questionMapper.logicalDelete(id, LocalDateTime.now());
+        if (updatedRows == 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或已删除");
+        }
+    }
+
+    @Override
+    @Transactional
+    public AnswerReviewVO submitAnswer(Long questionId, AiAnswerScoringRequest request) {
+        Question question = questionMapper.selectActiveQuestionById(questionId);
+        if (question == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或不可用");
+        }
+        if (SOURCE_TYPE_REVIEW_DERIVED.equals(question.getSourceType())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "复习衍生题必须通过复习接口作答");
+        }
+
+        List<QuestionAnswer> standardAnswers = questionAnswerMapper.selectActiveAnswersByQuestionId(questionId);
+        if (standardAnswers.isEmpty()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目没有可用标准答案");
+        }
+
+        User user = userMapper.selectEnabledUserByCode(LOCAL_DEFAULT_USER_CODE);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "本地用户不存在或不可用");
+        }
+
+        TranslationDirection direction = TranslationDirection.fromQuestionType(question.getQuestionType());
+        List<Tag> tags = tagMapper.selectEnabledTagsByQuestionId(questionId);
+        List<AiQuestionTagOptionDTO> tagOptions = toTagOptions(tags, direction);
+        List<AiErrorTypeOptionDTO> errorTypeOptions = localizeErrorTypes(
+                dictionaryCacheService.getEnabledLeafErrorTypes(), direction);
+        if (errorTypeOptions.isEmpty()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "没有可用的二级错误类型");
+        }
+        Map<String, AiErrorTypeOptionDTO> errorTypesByCode = errorTypeOptions.stream()
+                .collect(Collectors.toMap(AiErrorTypeOptionDTO::code, option -> option));
+        String answerText = normalizeText(request.answerText());
+        int maxAnswerLength = direction.isArticle(question.getQuestionType()) ? 5000 : 2000;
+        if (answerText.isBlank()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "答案不能为空");
+        }
+        if (answerText.length() > maxAnswerLength) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "答案长度不能超过 " + maxAnswerLength + " 个字符");
+        }
+        if (direction.isArticle(question.getQuestionType())
+                && !containsJapaneseKana(answerText)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "文章答案必须包含日语假名");
+        }
+        AiAnswerScoringRequest normalizedRequest = new AiAnswerScoringRequest(answerText);
+        AiQuestionPrompt prompt = answerScoringPromptBuilder.build(
+                question,
+                standardAnswers,
+                tagOptions,
+                errorTypeOptions,
+                normalizedRequest
+        );
+        AiAnswerScoringResponseDTO aiResponse = parseAiAnswerScoringResponse(
+                aiAnswerScoringClient.scoreAnswer(prompt, normalizedRequest, question, standardAnswers, tagOptions)
+        );
+        AiAnswerReviewDTO review = validateAnswerReview(
+                aiResponse,
+                errorTypesByCode,
+                answerText,
+                question,
+                standardAnswers
+        );
+        BigDecimal totalScore = calculateTotalScore(review.scores());
+        UserAnswer userAnswer = saveSubmittedAnswer(user.getId(), questionId, answerText, direction.learningMode());
+        LocalDateTime updatedAt = LocalDateTime.now();
+        userAnswerMapper.updateReviewed(
+                userAnswer.getId(),
+                review.scores().grammarVocabularyScore(),
+                review.scores().naturalFluencyScore(),
+                review.scores().scenarioAdaptationScore(),
+                review.scores().informationCompletenessScore(),
+                totalScore,
+                review.overallComment().trim(),
+                updatedAt
+        );
+        userAnswer.setAnswerStatus(ANSWER_STATUS_REVIEWED);
+        userAnswer.setGrammarVocabularyScore(review.scores().grammarVocabularyScore());
+        userAnswer.setNaturalFluencyScore(review.scores().naturalFluencyScore());
+        userAnswer.setScenarioAdaptationScore(review.scores().scenarioAdaptationScore());
+        userAnswer.setInformationCompletenessScore(review.scores().informationCompletenessScore());
+        userAnswer.setTotalScore(totalScore);
+        userAnswer.setAiOverallComment(review.overallComment().trim());
+        userAnswer.setUpdatedAt(updatedAt);
+        return toAnswerReviewVO(userAnswer, review, errorTypesByCode);
+    }
+
+    private UserAnswer saveSubmittedAnswer(Long userId, Long questionId, String answerText, String learningMode) {
+        LocalDateTime now = LocalDateTime.now();
+        UserAnswer userAnswer = new UserAnswer();
+        userAnswer.setUserId(userId);
+        userAnswer.setQuestionId(questionId);
+        userAnswer.setLearningMode(learningMode);
+        userAnswer.setAnswerText(answerText);
+        userAnswer.setAnswerStatus(ANSWER_STATUS_SUBMITTED);
+        userAnswer.setDeleted(false);
+        userAnswer.setCreatedAt(now);
+        userAnswer.setUpdatedAt(now);
+        userAnswerMapper.insertUserAnswer(userAnswer);
+        return userAnswer;
+    }
+
+    private QuestionQueryRequest normalizeQueryRequest(QuestionQueryRequest request) {
+        return new QuestionQueryRequest(
+                request.questionType(),
+                request.level(),
+                request.difficulty(),
+                normalizeQueryTagCodes(request.tagCodes()),
+                request.spoken(),
+                request.business(),
+                request.exam(),
+                request.sourceType(),
+                request.enabled(),
+                request.page(),
+                request.size()
+        );
+    }
+
+    private List<String> normalizeQueryTagCodes(List<String> tagCodes) {
+        if (tagCodes == null || tagCodes.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> normalizedCodes = tagCodes.stream()
+                .flatMap(tagCode -> List.of(tagCode.split(",")).stream())
+                .map(String::trim)
+                .collect(Collectors.toCollection(LinkedHashSet::new))
+                .stream()
+                .toList();
+        if (normalizedCodes.stream().anyMatch(String::isBlank)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "tagCodes 不能包含空值");
+        }
+        return normalizedCodes;
+    }
+
+    private Question loadExistingQuestion(Long id) {
+        Question question = questionMapper.selectQuestionById(id);
+        if (question == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或已删除");
+        }
+        return question;
+    }
+
+    private void validateQuestionContent(
+            String questionType,
+            String sourceText,
+            String contextText,
+            String grammarPoint
+    ) {
+        TranslationDirection.fromQuestionType(questionType);
+        validateRequiredText(sourceText, "sourceText 不能为空");
+        if (!containsChinese(sourceText)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "sourceText 必须包含中文");
+        }
+        validateRequiredText(contextText, "contextText 不能为空");
+        validateRequiredText(grammarPoint, "grammarPoint 不能为空");
+    }
+
+    private List<Tag> loadQuestionTags(List<String> tagCodes) {
+        List<String> normalizedCodes = normalizeCodes(tagCodes);
+        if (normalizedCodes.isEmpty()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "tagCodes 不能为空");
+        }
+
+        List<Tag> tags = tagMapper.selectEnabledTagsByAnyCodes(normalizedCodes);
+        Map<String, Tag> tagMap = tags.stream()
+                .collect(Collectors.toMap(Tag::getCode, tag -> tag, (left, right) -> left, LinkedHashMap::new));
+        List<String> missingCodes = normalizedCodes.stream()
+                .filter(code -> !tagMap.containsKey(code))
+                .toList();
+        if (!missingCodes.isEmpty()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "标签 code 不存在或未启用: " + missingCodes);
+        }
+        return normalizedCodes.stream()
+                .map(tagMap::get)
+                .toList();
+    }
+
+    private void validateSelectedTags(String questionType, List<Tag> tags) {
+        if (TranslationDirection.fromQuestionType(questionType).isArticle(questionType)) {
+            long genreTagCount = tags.stream()
+                    .filter(tag -> TAG_TYPE_GENRE.equals(tag.getTagType()))
+                    .count();
+            if (genreTagCount != 1) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题必须且只能选择 1 个体裁标签");
+            }
+            return;
+        }
+        boolean hasSceneTag = tags.stream()
+                .anyMatch(tag -> TAG_TYPE_SCENE.equals(tag.getTagType()));
+        if (!hasSceneTag) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "tagCodes 至少需要 1 个场景标签");
+        }
+    }
+
+    private void validateArticleEdit(String sourceText, List<AiQuestionAnswerDTO> answers) {
+        if (answers.size() != 1
+                || !ANSWER_TYPE_STANDARD.equals(answers.getFirst().answerType())
+                || !Boolean.TRUE.equals(answers.getFirst().primaryAnswer())) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题必须有且只有 1 个主标准答案");
+        }
+        List<String> sourceSegments = splitArticleSegments(sourceText, "sourceText");
+        List<String> referenceSegments = splitArticleSegments(answers.getFirst().answerText(), "answerText");
+        if (sourceSegments.size() != referenceSegments.size()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题中文题干与日文参考答案段落数必须一致");
+        }
+        int characterCount = sourceSegments.stream()
+                .flatMapToInt(String::codePoints)
+                .filter(codePoint -> !Character.isWhitespace(codePoint))
+                .map(codePoint -> 1)
+                .sum();
+        if (characterCount < ARTICLE_MIN_LENGTH || characterCount > ARTICLE_MAX_LENGTH) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题中文长度必须在 150 到 300 个非空白字符之间");
+        }
+        for (String sourceSegment : sourceSegments) {
+            if (!containsChinese(sourceSegment)
+                    || containsJapaneseKana(sourceSegment)
+                    || !ARTICLE_END_PATTERN.matcher(sourceSegment).matches()) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题每个 sourceText 段落必须是无假名的完整中文句子");
+            }
+        }
+        Set<String> uniqueReferences = new LinkedHashSet<>();
+        for (String referenceSegment : referenceSegments) {
+            if (!containsJapaneseKana(referenceSegment)) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题每个 answerText 段落必须包含日语假名");
+            }
+            if (!uniqueReferences.add(referenceSegment)) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题日文参考句不能重复");
+            }
+        }
+    }
+
+    private List<String> splitArticleSegments(String text, String fieldName) {
+        String normalized = normalizeText(text);
+        List<String> segments = Pattern.compile("\\n\\s*\\n")
+                .splitAsStream(normalized)
+                .map(String::trim)
+                .toList();
+        if (segments.isEmpty() || segments.size() > ARTICLE_MAX_SENTENCES
+                || segments.stream().anyMatch(String::isBlank)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, fieldName + " 文章段落不合法");
+        }
+        return segments;
+    }
+
+    private String normalizeText(String text) {
+        return text.replace("\r\n", "\n").replace('\r', '\n').trim();
+    }
+
+    private List<AiQuestionAnswerDTO> toAnswerDTOs(List<QuestionAnswerRequest> requests) {
+        return requests.stream()
+                .map(request -> new AiQuestionAnswerDTO(
+                        request.answerText(),
+                        request.answerType(),
+                        request.primaryAnswer(),
+                        request.sortOrder()
+                ))
+                .toList();
+    }
+
+    private void saveQuestionTags(Long questionId, List<Tag> tags) {
+        for (Tag tag : tags) {
+            questionTagMapper.insertQuestionTag(questionId, tag.getId());
+        }
+    }
+
+    private AiAnswerScoringResponseDTO parseAiAnswerScoringResponse(String aiContent) {
+        if (aiContent == null || aiContent.isBlank()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分输出为空");
+        }
+
+        try {
+            JsonNode root = objectMapper.readTree(aiContent);
+            validateAnswerScoringRootJson(root);
+            return objectMapper.treeToValue(root, AiAnswerScoringResponseDTO.class);
+        } catch (JacksonException exception) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分输出不是合法 JSON");
+        }
+    }
+
+    private void validateAnswerScoringRootJson(JsonNode root) {
+        if (!root.isObject()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 JSON 顶层必须是对象");
+        }
+
+        List<String> fields = new ArrayList<>(root.propertyNames());
+        if (!fields.equals(List.of("review"))) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 JSON 顶层只能包含 review 字段");
+        }
+        if (!root.get("review").isObject()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 review 必须是对象");
+        }
+    }
+
+    private AiAnswerReviewDTO validateAnswerReview(
+            AiAnswerScoringResponseDTO aiResponse,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode,
+            String answerText,
+            Question question,
+            List<QuestionAnswer> standardAnswers
+    ) {
+        if (aiResponse.review() == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 review 不能为空");
+        }
+
+        AiAnswerReviewDTO review = aiResponse.review();
+        validateScores(review.scores());
+        validateRequiredText(review.overallComment(), "AI 评分 overallComment 不能为空");
+        validateComments(review.comments());
+        review = normalizeOptionalReviewContent(review);
+        if (TranslationDirection.fromQuestionType(question.getQuestionType()).isArticle(question.getQuestionType())) {
+            List<String> sourceSegments = splitArticleSegments(question.getSourceText(), "sourceText");
+            List<String> referenceSegments = splitArticleSegments(
+                    standardAnswers.getFirst().getAnswerText(),
+                    "answerText"
+            );
+            review = normalizeArticleSentenceReviews(
+                    review,
+                    answerText,
+                    sourceSegments,
+                    referenceSegments
+            );
+            review = copyReviewWithErrors(review, aiErrorAnalysisValidator.sanitizeArticle(
+                    review.errorAnalysis(),
+                    errorTypesByCode,
+                    answerText,
+                    sourceSegments,
+                    referenceSegments
+            ));
+            validateArticleSentenceReviews(review.sentenceReviews(), sourceSegments, referenceSegments, answerText);
+            aiErrorAnalysisValidator.validateArticle(
+                    review.errorAnalysis(),
+                    errorTypesByCode,
+                    answerText,
+                    sourceSegments,
+                    referenceSegments
+            );
+        } else {
+            review = copyReviewWithErrors(review, aiErrorAnalysisValidator.sanitize(
+                    review.errorAnalysis(), errorTypesByCode, answerText));
+            aiErrorAnalysisValidator.validate(review.errorAnalysis(), errorTypesByCode, answerText);
+        }
+        validateRevisionSuggestions(review.revisionSuggestions());
+        validateRecommendedExpressions(review.recommendedExpressions());
+        return review;
+    }
+
+    private AiAnswerReviewDTO normalizeOptionalReviewContent(AiAnswerReviewDTO review) {
+        List<String> normalizedRevisionSuggestions = review.revisionSuggestions() == null
+                ? List.of()
+                : review.revisionSuggestions().stream()
+                        .filter(suggestion -> suggestion != null && !suggestion.isBlank())
+                        .map(String::trim)
+                        .toList();
+        List<AiAnswerRecommendedExpressionDTO> normalizedRecommendedExpressions =
+                review.recommendedExpressions() == null
+                        ? List.of()
+                        : review.recommendedExpressions().stream()
+                                .filter(this::isCompleteRecommendedExpression)
+                                .toList();
+        return new AiAnswerReviewDTO(
+                review.scores(),
+                calculateTotalScore(review.scores()),
+                review.overallComment(),
+                review.comments(),
+                review.sentenceReviews(),
+                review.errorAnalysis(),
+                normalizedRevisionSuggestions,
+                normalizedRecommendedExpressions
+        );
+    }
+
+    private boolean isCompleteRecommendedExpression(AiAnswerRecommendedExpressionDTO expression) {
+        return expression != null
+                && expression.expression() != null && !expression.expression().isBlank()
+                && expression.usage() != null && !expression.usage().isBlank()
+                && VALID_FORMALITIES.contains(expression.formality())
+                && expression.note() != null && !expression.note().isBlank();
+    }
+
+    private AiAnswerReviewDTO normalizeArticleSentenceReviews(
+            AiAnswerReviewDTO review,
+            String answerText,
+            List<String> sourceSegments,
+            List<String> referenceSegments
+    ) {
+        List<AiArticleSentenceReviewDTO> sentenceReviews = review.sentenceReviews();
+        if (sentenceReviews == null || sentenceReviews.size() != sourceSegments.size()) {
+            return review;
+        }
+        Map<Integer, AiArticleSentenceReviewDTO> reviewsByIndex = new LinkedHashMap<>();
+        for (AiArticleSentenceReviewDTO sentenceReview : sentenceReviews) {
+            if (sentenceReview == null || sentenceReview.sourceSegmentIndex() == null
+                    || sentenceReview.sourceSegmentIndex() < 0
+                    || sentenceReview.sourceSegmentIndex() >= sourceSegments.size()
+                    || reviewsByIndex.putIfAbsent(sentenceReview.sourceSegmentIndex(), sentenceReview) != null) {
+                return review;
+            }
+        }
+        List<AiArticleSentenceReviewDTO> normalizedSentenceReviews = new ArrayList<>();
+        for (int index = 0; index < sourceSegments.size(); index++) {
+            AiArticleSentenceReviewDTO sentenceReview = reviewsByIndex.get(index);
+            if (sentenceReview == null) {
+                return review;
+            }
+            normalizedSentenceReviews.add(normalizeArticleSentenceReview(
+                    sentenceReview,
+                    index,
+                    answerText,
+                    sourceSegments.get(index),
+                    referenceSegments.get(index),
+                    review.overallComment()
+            ));
+        }
+        return new AiAnswerReviewDTO(
+                review.scores(),
+                review.totalScore(),
+                review.overallComment(),
+                review.comments(),
+                List.copyOf(normalizedSentenceReviews),
+                review.errorAnalysis(),
+                review.revisionSuggestions(),
+                review.recommendedExpressions()
+        );
+    }
+
+    private AiArticleSentenceReviewDTO normalizeArticleSentenceReview(
+            AiArticleSentenceReviewDTO sentenceReview,
+            int index,
+            String answerText,
+            String sourceText,
+            String referenceText,
+            String overallComment
+    ) {
+        String answerExcerpt = sentenceReview.answerExcerpt();
+        if (answerExcerpt != null) {
+            answerExcerpt = normalizeText(answerExcerpt);
+            if (answerExcerpt.isBlank()) {
+                answerExcerpt = null;
+            } else if (!answerText.contains(answerExcerpt)) {
+                answerExcerpt = answerText;
+            }
+        }
+        return new AiArticleSentenceReviewDTO(
+                index,
+                sourceText,
+                referenceText,
+                answerExcerpt,
+                referenceText,
+                sentenceReview.comment() == null || sentenceReview.comment().isBlank()
+                        ? overallComment
+                        : sentenceReview.comment().trim()
+        );
+    }
+
+    private AiAnswerReviewDTO copyReviewWithErrors(
+            AiAnswerReviewDTO review,
+            List<AiAnswerErrorAnalysisDTO> errorAnalysis
+    ) {
+        return new AiAnswerReviewDTO(
+                review.scores(),
+                review.totalScore(),
+                review.overallComment(),
+                review.comments(),
+                review.sentenceReviews(),
+                errorAnalysis,
+                review.revisionSuggestions(),
+                review.recommendedExpressions()
+        );
+    }
+
+    private void validateArticleSentenceReviews(
+            List<AiArticleSentenceReviewDTO> sentenceReviews,
+            List<String> sourceSegments,
+            List<String> referenceSegments,
+            String answerText
+    ) {
+        if (sourceSegments.size() != referenceSegments.size()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "文章题中文与日文参考段落数不一致");
+        }
+        if (sentenceReviews == null || sentenceReviews.size() != sourceSegments.size()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 sentenceReviews 数量不一致");
+        }
+        for (int index = 0; index < sentenceReviews.size(); index++) {
+            AiArticleSentenceReviewDTO review = sentenceReviews.get(index);
+            if (review == null || review.sourceSegmentIndex() == null
+                    || review.sourceSegmentIndex() != index) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 sentenceReviews 索引不连续");
+            }
+            if (!sourceSegments.get(index).equals(review.sourceText())
+                    || !referenceSegments.get(index).equals(review.referenceText())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分逐句原文或参考答案不一致");
+            }
+            if (review.answerExcerpt() != null && !review.answerExcerpt().isBlank()
+                    && !answerText.contains(review.answerExcerpt())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 answerExcerpt 不属于用户完整答案");
+            }
+            if (!referenceSegments.get(index).equals(review.revisedText())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 revisedText 必须是对应完整参考句");
+            }
+            validateRequiredText(review.comment(), "AI 评分 sentenceReviews.comment 不能为空");
+        }
+    }
+
+    private void validateScores(AiAnswerScoresDTO scores) {
+        if (scores == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 scores 不能为空");
+        }
+        validateScore(scores.grammarVocabularyScore(), "grammarVocabularyScore");
+        validateScore(scores.naturalFluencyScore(), "naturalFluencyScore");
+        validateScore(scores.scenarioAdaptationScore(), "scenarioAdaptationScore");
+        validateScore(scores.informationCompletenessScore(), "informationCompletenessScore");
+    }
+
+    private void validateScore(Integer score, String fieldName) {
+        if (score == null || score < 0 || score > 100) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 " + fieldName + " 不合法");
+        }
+    }
+
+    private void validateComments(AiAnswerReviewCommentsDTO comments) {
+        if (comments == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 comments 不能为空");
+        }
+        validateRequiredText(comments.grammarComment(), "AI 评分 grammarComment 不能为空");
+        validateRequiredText(comments.vocabularyComment(), "AI 评分 vocabularyComment 不能为空");
+        validateRequiredText(comments.naturalnessComment(), "AI 评分 naturalnessComment 不能为空");
+        validateRequiredText(comments.scenarioComment(), "AI 评分 scenarioComment 不能为空");
+    }
+
+    private void validateRevisionSuggestions(List<String> revisionSuggestions) {
+        if (revisionSuggestions == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 revisionSuggestions 不能为空");
+        }
+        for (String suggestion : revisionSuggestions) {
+            validateRequiredText(suggestion, "AI 评分 revisionSuggestions 项不能为空");
+        }
+    }
+
+    private void validateRecommendedExpressions(List<AiAnswerRecommendedExpressionDTO> recommendedExpressions) {
+        if (recommendedExpressions == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 recommendedExpressions 不能为空");
+        }
+        for (AiAnswerRecommendedExpressionDTO expression : recommendedExpressions) {
+            if (expression == null) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 recommendedExpressions 项不能为空");
+            }
+            validateRequiredText(expression.expression(), "AI 评分 recommendedExpressions.expression 不能为空");
+            validateRequiredText(expression.usage(), "AI 评分 recommendedExpressions.usage 不能为空");
+            if (!VALID_FORMALITIES.contains(expression.formality())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 评分 recommendedExpressions.formality 不合法");
+            }
+            validateRequiredText(expression.note(), "AI 评分 recommendedExpressions.note 不能为空");
+        }
+    }
+
+    private BigDecimal calculateTotalScore(AiAnswerScoresDTO scores) {
+        int sum = scores.grammarVocabularyScore()
+                + scores.naturalFluencyScore()
+                + scores.scenarioAdaptationScore()
+                + scores.informationCompletenessScore();
+        return BigDecimal.valueOf(sum)
+                .divide(BigDecimal.valueOf(4), 2, RoundingMode.HALF_UP);
+    }
+
+    private List<Tag> loadCandidateTags(String tagType, List<String> requestedCodes) {
+        List<String> codes = normalizeCodes(requestedCodes);
+        if (codes.isEmpty()) {
+            return secondLevelTags(dictionaryCacheService.getEnabledTagsByType(tagType));
+        }
+
+        List<Tag> tags = secondLevelTags(tagMapper.selectEnabledTagsByCodes(tagType, codes));
+        Set<String> foundCodes = tags.stream()
+                .map(Tag::getCode)
+                .collect(Collectors.toSet());
+        List<String> missingCodes = codes.stream()
+                .filter(code -> !foundCodes.contains(code))
+                .toList();
+        if (!missingCodes.isEmpty()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, tagType + " 标签 code 不存在或未启用: " + missingCodes);
+        }
+        return tags;
+    }
+
+    private List<String> normalizeCodes(List<String> codes) {
+        if (codes == null || codes.isEmpty()) {
+            return List.of();
+        }
+        return codes.stream()
+                .map(String::trim)
+                .collect(Collectors.toCollection(LinkedHashSet::new))
+                .stream()
+                .toList();
+    }
+
+    private List<AiQuestionTagOptionDTO> toTagOptions(List<Tag> tags, TranslationDirection direction) {
+        return tags.stream()
+                .map(tag -> new AiQuestionTagOptionDTO(
+                        tag.getCode(),
+                        direction.displayText(tag.getName(), tag.getNameEn()),
+                        direction.displayText(tag.getDescription(), tag.getDescriptionEn())))
+                .toList();
+    }
+
+    private List<AiErrorTypeOptionDTO> localizeErrorTypes(
+            List<AiErrorTypeOptionDTO> options,
+            TranslationDirection direction
+    ) {
+        return options.stream().map(option -> new AiErrorTypeOptionDTO(
+                option.id(), option.code(),
+                direction.displayText(option.name(), option.nameEn()),
+                direction.displayText(option.description(), option.descriptionEn()),
+                option.parentCode(),
+                direction.displayText(option.parentName(), option.parentNameEn())
+        )).toList();
+    }
+
+    private Map<String, Tag> toTagMap(List<Tag> tags) {
+        return tags.stream()
+                .collect(Collectors.toMap(Tag::getCode, tag -> tag, (left, right) -> left, LinkedHashMap::new));
+    }
+
+    private AiArticleGenerationResponseDTO parseArticleResponse(String aiContent) {
+        if (aiContent == null || aiContent.isBlank()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章输出为空");
+        }
+        try {
+            JsonNode root = objectMapper.readTree(aiContent);
+            if (!root.isObject()
+                    || !new LinkedHashSet<>(root.propertyNames()).equals(Set.of("blueprint", "article"))
+                    || root.get("blueprint") == null
+                    || !root.get("blueprint").isObject()
+                    || root.get("article") == null
+                    || !root.get("article").isObject()) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 JSON 顶层必须且只能包含 blueprint 和 article 对象");
+            }
+            return objectMapper.treeToValue(root, AiArticleGenerationResponseDTO.class);
+        } catch (JacksonException exception) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章输出不是合法 JSON");
+        }
+    }
+
+    private ValidatedArticle validateArticleResponse(
+            AiArticleGenerationRequest request,
+            AiArticleGenerationResponseDTO response,
+            String expectedSeed
+    ) {
+        TranslationDirection direction = TranslationDirection.fromLearningMode(request.learningMode());
+        AiArticleBlueprintDTO blueprint = validateArticleBlueprint(
+                response.blueprint(),
+                request.genreTagCode(),
+                expectedSeed
+        );
+        if (response.article() == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 article 不能为空");
+        }
+        var article = response.article();
+        if (!direction.articleQuestionType().equals(article.questionType())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 questionType 不合法");
+        }
+        if (!request.level().equals(article.level()) || !request.difficulty().equals(article.difficulty())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章等级或难度与请求不一致");
+        }
+        validateRequiredText(article.contextText(), "AI 文章 contextText 不能为空");
+        validateRequiredText(article.grammarPoint(), "AI 文章 grammarPoint 不能为空");
+        if (article.grammarPoint().length() > 255) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章生词提示不能超过 255 个字符");
+        }
+        if (article.spoken() == null || article.business() == null || article.exam() == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 spoken、business、exam 必须是布尔值");
+        }
+        if (article.sentences() == null || article.sentences().isEmpty()
+                || article.sentences().size() > ARTICLE_MAX_SENTENCES) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章句子数量必须在 1 到 30 之间");
+        }
+
+        List<String> sourceSegments = new ArrayList<>();
+        List<String> referenceSegments = new ArrayList<>();
+        Set<String> uniqueReferences = new LinkedHashSet<>();
+        for (int index = 0; index < article.sentences().size(); index++) {
+            AiArticleSentenceDTO sentence = article.sentences().get(index);
+            if (sentence == null || sentence.index() == null || sentence.index() != index) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章句子索引必须从 0 连续递增");
+            }
+            String sourceText = requireArticleText(sentence.chineseText(), "AI 文章源句不能为空");
+            if (direction == TranslationDirection.ZH_TO_JA) {
+                validateAiArticleChineseSentence(sourceText, index);
+            } else if (containsChinese(sourceText) || containsJapaneseKana(sourceText)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 英文文章源句不能包含中日文字");
+            }
+            String japanese = requireArticleText(sentence.japaneseReference(), "AI 文章 japaneseReference 不能为空");
+            if (containsLineBreak(japanese) || !containsJapaneseKana(japanese)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 japaneseReference 必须是无换行的日语句子");
+            }
+            if (!uniqueReferences.add(japanese)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 japaneseReference 不能重复");
+            }
+            sourceSegments.add(sourceText);
+            referenceSegments.add(japanese);
+        }
+
+        int articleLength = direction.countArticleLength(String.join(" ", sourceSegments));
+        ArticleLengthTier lengthTier = ArticleLengthTier.from(request.lengthTier());
+        int minimumLength = lengthTier.minimum(direction);
+        int maximumLength = lengthTier.maximum(direction);
+        if (articleLength < minimumLength || articleLength > maximumLength) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "AI 文章长度必须在 " + minimumLength + " 到 "
+                            + maximumLength + " " + direction.articleLengthUnit() + "之间");
+        }
+        return new ValidatedArticle(
+                blueprint,
+                article,
+                String.join(ARTICLE_SEPARATOR, sourceSegments),
+                String.join(ARTICLE_SEPARATOR, referenceSegments)
+        );
+    }
+
+    private AiArticleBlueprintDTO validateArticleBlueprint(
+            AiArticleBlueprintDTO blueprint,
+            String genreCode,
+            String expectedSeed
+    ) {
+        if (blueprint == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 blueprint 不能为空");
+        }
+        if (!expectedSeed.equals(blueprint.seed())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 blueprint.seed 与本次请求不一致");
+        }
+        try {
+            UUID.fromString(blueprint.seed());
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 blueprint.seed 不是合法 UUID");
+        }
+        validateRequiredText(blueprint.coreConcept(), "AI 文章 coreConcept 不能为空");
+        Set<String> expectedRoleKeys = ArticleGenreRoleRegistry.roleKeysFor(genreCode);
+        if (blueprint.roles() == null || !blueprint.roles().keySet().equals(expectedRoleKeys)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章 roles 与 GENRE 语义角色不一致");
+        }
+        Map<String, String> normalizedRoles = new LinkedHashMap<>();
+        for (String roleKey : expectedRoleKeys) {
+            String roleValue = blueprint.roles().get(roleKey);
+            validateRequiredText(roleValue, "AI 文章角色 " + roleKey + " 不能为空");
+            normalizedRoles.put(roleKey, roleValue.trim());
+        }
+        return new AiArticleBlueprintDTO(
+                blueprint.seed(),
+                blueprint.coreConcept().trim(),
+                Map.copyOf(normalizedRoles)
+        );
+    }
+
+    private AiArticleRetryContext createArticleRetryContext(
+            String rejectedArticle,
+            List<QuestionEmbeddingMatch> matches
+    ) {
+        double highestSimilarity = matches.getFirst().similarity();
+        String rejectionReason = String.format(
+                Locale.ROOT,
+                "正文向量与 %d 篇历史文章相似，最高相似度为 %.4f，达到拒绝阈值 %.2f。",
+                matches.size(),
+                highestSimilarity,
+                QuestionEmbeddingService.SIMILARITY_THRESHOLD
+        );
+        return new AiArticleRetryContext(rejectionReason, rejectedArticle, List.copyOf(matches));
+    }
+
+    private QuestionVO saveArticle(ValidatedArticle article, Tag genreTag, List<Float> embedding) {
+        LocalDateTime now = LocalDateTime.now();
+        Question question = new Question();
+        question.setQuestionType(article.article().questionType());
+        question.setSourceText(article.sourceText());
+        question.setContextText(article.article().contextText().trim());
+        question.setLevel(article.article().level());
+        question.setDifficulty(article.article().difficulty());
+        question.setGrammarPoint(article.article().grammarPoint().trim());
+        question.setSpoken(article.article().spoken());
+        question.setBusiness(article.article().business());
+        question.setExam(article.article().exam());
+        question.setSourceType(SOURCE_TYPE_AI);
+        question.setEnabled(true);
+        question.setDeleted(false);
+        question.setCreatedAt(now);
+        question.setUpdatedAt(now);
+        questionMapper.insertQuestion(question);
+        questionEmbeddingService.saveEmbedding(question, embedding);
+
+        QuestionAnswer answer = new QuestionAnswer();
+        answer.setQuestionId(question.getId());
+        answer.setAnswerText(article.referenceText());
+        answer.setAnswerType(ANSWER_TYPE_STANDARD);
+        answer.setPrimaryAnswer(true);
+        answer.setSortOrder(0);
+        answer.setDeleted(false);
+        answer.setCreatedAt(now);
+        answer.setUpdatedAt(now);
+        questionAnswerMapper.insertQuestionAnswer(answer);
+        questionTagMapper.insertQuestionTag(question.getId(), genreTag.getId());
+        articleGenerationMetadataMapper.insertArticleGenerationMetadata(
+                question.getId(),
+                UUID.fromString(article.blueprint().seed()),
+                serializeArticleBlueprint(article.blueprint()),
+                now
+        );
+        return toQuestionVO(question, List.of(genreTag), List.of());
+    }
+
+    private String serializeArticleBlueprint(AiArticleBlueprintDTO blueprint) {
+        try {
+            return objectMapper.writeValueAsString(Map.of(
+                    "coreConcept", blueprint.coreConcept(),
+                    "roles", blueprint.roles()
+            ));
+        } catch (JacksonException exception) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 文章蓝图序列化失败");
+        }
+    }
+
+    private String requireArticleText(String value, String message) {
+        validateRequiredText(value, message);
+        return value.trim();
+    }
+
+    private boolean containsLineBreak(String value) {
+        return value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0;
+    }
+
+    private boolean containsChinese(String value) {
+        return value != null && CHINESE_PATTERN.matcher(value).find();
+    }
+
+    private boolean containsJapaneseText(String value) {
+        return value != null && JAPANESE_TEXT_PATTERN.matcher(value).find();
+    }
+
+    private boolean containsJapaneseKana(String value) {
+        return value != null && JAPANESE_KANA_PATTERN.matcher(value).find();
+    }
+
+    private void validateAiArticleChineseSentence(String value, int index) {
+        String fieldName = "AI 文章第 " + (index + 1) + " 句 chineseText";
+        if (containsLineBreak(value)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, fieldName + " 不能包含换行");
+        }
+        if (!containsChinese(value)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, fieldName + " 必须包含中文");
+        }
+        var kanaMatcher = JAPANESE_KANA_PATTERN.matcher(value);
+        if (kanaMatcher.find()) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    fieldName + " 不能包含平假名或片假名，检测到：" + kanaMatcher.group()
+            );
+        }
+        if (!ARTICLE_END_PATTERN.matcher(value).matches()) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    fieldName + " 必须以。？！之一结束，末尾可以跟引号或括号"
+            );
+        }
+    }
+
+    private AiQuestionGenerationResponseDTO parseAiResponse(String aiContent) {
+        if (aiContent == null || aiContent.isBlank()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 输出为空");
+        }
+
+        try {
+            JsonNode root = objectMapper.readTree(aiContent);
+            validateRootJson(root);
+            return objectMapper.treeToValue(root, AiQuestionGenerationResponseDTO.class);
+        } catch (JacksonException exception) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 输出不是合法 JSON");
+        }
+    }
+
+    private void validateRootJson(JsonNode root) {
+        if (!root.isObject()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 输出 JSON 顶层必须是对象");
+        }
+
+        List<String> fields = new ArrayList<>(root.propertyNames());
+        if (!fields.equals(List.of("questions"))) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 输出 JSON 顶层只能包含 questions 字段");
+        }
+        if (!root.get("questions").isArray()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 输出 questions 必须是数组");
+        }
+    }
+
+    private List<ValidatedGeneratedQuestion> validateAiResponse(
+            AiQuestionGenerationRequest request,
+            AiQuestionGenerationResponseDTO aiResponse,
+            Map<String, Tag> sceneTagMap,
+            Map<String, Tag> functionTagMap
+    ) {
+        if (aiResponse.questions() == null || aiResponse.questions().size() != request.questionCount()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 输出题目数量不一致");
+        }
+
+        Map<String, Tag> allowedTagMap = new LinkedHashMap<>();
+        allowedTagMap.putAll(sceneTagMap);
+        allowedTagMap.putAll(functionTagMap);
+
+        List<ValidatedGeneratedQuestion> validatedQuestions = new ArrayList<>();
+        for (int i = 0; i < aiResponse.questions().size(); i++) {
+            AiGeneratedQuestionDTO question = aiResponse.questions().get(i);
+            validatedQuestions.add(validateQuestion(request, question, sceneTagMap, allowedTagMap, i));
+        }
+        return validatedQuestions;
+    }
+
+    private List<List<Float>> embedExcludedSourceTexts(List<String> sourceTexts) {
+        return emptyIfNull(sourceTexts).stream()
+                .map(sourceText -> questionEmbeddingService.embedQuestion(sourceText, ""))
+                .toList();
+    }
+
+    private AiQuestionGenerationRequest createRetryRequest(
+            AiQuestionGenerationRequest request,
+            int questionCount,
+            List<String> excludedSourceTexts
+    ) {
+        return new AiQuestionGenerationRequest(
+                questionCount,
+                request.level(),
+                request.difficulty(),
+                request.sceneTagCodes(),
+                request.functionTagCodes(),
+                List.copyOf(excludedSourceTexts),
+                request.extraRequirements(),
+                request.learningMode()
+        );
+    }
+
+    private boolean isDuplicate(
+            List<Float> embedding,
+            List<List<Float>> excludedEmbeddings,
+            List<PreparedGeneratedQuestion> acceptedQuestions,
+            String questionType
+    ) {
+        List<QuestionEmbeddingMatch> matches = TranslationDirection.ZH_TO_JA.shortQuestionType().equals(questionType)
+                ? questionEmbeddingService.findSimilarQuestions(embedding)
+                : questionEmbeddingService.findSimilarQuestions(embedding, questionType);
+        if (!matches.isEmpty()) {
+            return true;
+        }
+        if (excludedEmbeddings.stream().anyMatch(excluded -> questionEmbeddingService.isSimilar(embedding, excluded))) {
+            return true;
+        }
+        return acceptedQuestions.stream()
+                .anyMatch(accepted -> questionEmbeddingService.isSimilar(embedding, accepted.embedding()));
+    }
+
+    private List<String> emptyIfNull(List<String> values) {
+        return values == null ? List.of() : values;
+    }
+
+    private ValidatedGeneratedQuestion validateQuestion(
+            AiQuestionGenerationRequest request,
+            AiGeneratedQuestionDTO question,
+            Map<String, Tag> sceneTagMap,
+            Map<String, Tag> allowedTagMap,
+            int index
+    ) {
+        String prefix = "第 " + (index + 1) + " 道题";
+        if (question == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + "不能为空");
+        }
+        TranslationDirection direction = TranslationDirection.fromLearningMode(request.learningMode());
+        if (!direction.shortQuestionType().equals(question.questionType())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " questionType 不合法");
+        }
+        validateRequiredText(question.sourceText(), prefix + " sourceText 不能为空");
+        if (!containsChinese(question.sourceText())) {
+            if (direction == TranslationDirection.ZH_TO_JA) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " sourceText 必须包含中文");
+            }
+        }
+        if (direction == TranslationDirection.EN_TO_JA
+                && (containsChinese(question.sourceText()) || containsJapaneseKana(question.sourceText()))) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " sourceText 必须是英文");
+        }
+        validateRequiredText(question.contextText(), prefix + " contextText 不能为空");
+        if (!request.level().equals(question.level())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " level 与请求不一致");
+        }
+        if (!request.difficulty().equals(question.difficulty())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " difficulty 与请求不一致");
+        }
+        validateRequiredText(question.grammarPoint(), prefix + " grammarPoint 不能为空");
+        if (question.spoken() == null || question.business() == null || question.exam() == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " spoken、business、exam 必须是布尔值");
+        }
+
+        List<Tag> selectedTags = validateTagCodes(question.tagCodes(), sceneTagMap, allowedTagMap, prefix);
+        validateAnswers(question.answers(), prefix);
+        return new ValidatedGeneratedQuestion(question, selectedTags);
+    }
+
+    private void validateRequiredText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, message);
+        }
+    }
+
+    private List<Tag> validateTagCodes(
+            List<String> tagCodes,
+            Map<String, Tag> sceneTagMap,
+            Map<String, Tag> allowedTagMap,
+            String prefix
+    ) {
+        List<String> normalizedCodes = normalizeCodes(tagCodes);
+        if (normalizedCodes.isEmpty()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " tagCodes 不能为空");
+        }
+
+        boolean hasSceneTag = normalizedCodes.stream().anyMatch(sceneTagMap::containsKey);
+        if (!hasSceneTag) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " 至少需要 1 个场景标签");
+        }
+
+        List<Tag> selectedTags = new ArrayList<>();
+        for (String tagCode : normalizedCodes) {
+            Tag tag = allowedTagMap.get(tagCode);
+            if (tag == null) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " 存在非法标签 code: " + tagCode);
+            }
+            selectedTags.add(tag);
+        }
+        return selectedTags;
+    }
+
+    private void validateAnswers(List<AiQuestionAnswerDTO> answers, String prefix) {
+        if (answers == null || answers.isEmpty()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " answers 不能为空");
+        }
+
+        int primaryStandardCount = 0;
+        Set<String> answerTexts = new LinkedHashSet<>();
+        for (AiQuestionAnswerDTO answer : answers) {
+            if (answer == null) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " answer 不能为空");
+            }
+            validateAnswer(answer, prefix);
+            if (!answerTexts.add(answer.answerText().trim())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " answerText 不能重复");
+            }
+            if (ANSWER_TYPE_STANDARD.equals(answer.answerType()) && Boolean.TRUE.equals(answer.primaryAnswer())) {
+                primaryStandardCount++;
+            }
+        }
+
+        if (primaryStandardCount != 1) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " 必须有且只有 1 个主标准答案");
+        }
+    }
+
+    private void validateAnswer(AiQuestionAnswerDTO answer, String prefix) {
+        validateRequiredText(answer.answerText(), prefix + " answerText 不能为空");
+        if (!containsJapaneseText(answer.answerText())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " answerText 必须包含日语假名或汉字");
+        }
+        if (!VALID_ANSWER_TYPES.contains(answer.answerType())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " answerType 不合法");
+        }
+        if (answer.primaryAnswer() == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " primaryAnswer 不能为空");
+        }
+        if (answer.sortOrder() == null || answer.sortOrder() < 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " sortOrder 不合法");
+        }
+
+        if (ANSWER_TYPE_STANDARD.equals(answer.answerType())) {
+            if (!Boolean.TRUE.equals(answer.primaryAnswer()) || answer.sortOrder() != 0) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " STANDARD 主答案规则不合法");
+            }
+            return;
+        }
+
+        if (Boolean.TRUE.equals(answer.primaryAnswer())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " REFERENCE 答案不能是主答案");
+        }
+    }
+
+    private QuestionVO saveQuestion(PreparedGeneratedQuestion preparedQuestion) {
+        ValidatedGeneratedQuestion validatedQuestion = preparedQuestion.question();
+        AiGeneratedQuestionDTO generatedQuestion = validatedQuestion.question();
+        LocalDateTime now = LocalDateTime.now();
+
+        Question question = new Question();
+        question.setQuestionType(generatedQuestion.questionType());
+        question.setSourceText(generatedQuestion.sourceText().trim());
+        question.setContextText(generatedQuestion.contextText().trim());
+        question.setLevel(generatedQuestion.level());
+        question.setDifficulty(generatedQuestion.difficulty());
+        question.setGrammarPoint(generatedQuestion.grammarPoint().trim());
+        question.setSpoken(generatedQuestion.spoken());
+        question.setBusiness(generatedQuestion.business());
+        question.setExam(generatedQuestion.exam());
+        question.setSourceType(SOURCE_TYPE_AI);
+        question.setEnabled(true);
+        question.setDeleted(false);
+        question.setCreatedAt(now);
+        question.setUpdatedAt(now);
+        questionMapper.insertQuestion(question);
+        questionEmbeddingService.saveEmbedding(question, preparedQuestion.embedding());
+
+        List<QuestionAnswer> answers = saveAnswers(question.getId(), generatedQuestion.answers(), now);
+        for (Tag tag : validatedQuestion.tags()) {
+            questionTagMapper.insertQuestionTag(question.getId(), tag.getId());
+        }
+
+        return toQuestionVO(question, validatedQuestion.tags(), answers);
+    }
+
+    private List<QuestionAnswer> saveAnswers(Long questionId, List<AiQuestionAnswerDTO> answerDTOs, LocalDateTime now) {
+        List<QuestionAnswer> answers = new ArrayList<>();
+        for (AiQuestionAnswerDTO answerDTO : answerDTOs) {
+            QuestionAnswer answer = new QuestionAnswer();
+            answer.setQuestionId(questionId);
+            answer.setAnswerText(answerDTO.answerText().trim());
+            answer.setAnswerType(answerDTO.answerType());
+            answer.setPrimaryAnswer(answerDTO.primaryAnswer());
+            answer.setSortOrder(answerDTO.sortOrder());
+            answer.setDeleted(false);
+            answer.setCreatedAt(now);
+            answer.setUpdatedAt(now);
+            questionAnswerMapper.insertQuestionAnswer(answer);
+            answers.add(answer);
+        }
+        return answers;
+    }
+
+    private QuestionVO toQuestionVO(Question question, List<Tag> tags, List<QuestionAnswer> answers) {
+        return new QuestionVO(
+                question.getId(),
+                question.getQuestionType(),
+                question.getSourceText(),
+                question.getContextText(),
+                question.getLevel(),
+                question.getDifficulty(),
+                question.getGrammarPoint(),
+                question.getSpoken(),
+                question.getBusiness(),
+                question.getExam(),
+                question.getSourceType(),
+                question.getEnabled(),
+                tags.stream().map(this::toTagVO).toList(),
+                answers.stream().map(this::toAnswerVO).toList(),
+                question.getCreatedAt(),
+                question.getUpdatedAt()
+        );
+    }
+
+    private QuestionVO toQuestionVOFromRows(
+            Question question,
+            List<QuestionTagRow> tags,
+            List<QuestionAnswer> answers
+    ) {
+        return new QuestionVO(
+                question.getId(),
+                question.getQuestionType(),
+                question.getSourceText(),
+                question.getContextText(),
+                question.getLevel(),
+                question.getDifficulty(),
+                question.getGrammarPoint(),
+                question.getSpoken(),
+                question.getBusiness(),
+                question.getExam(),
+                question.getSourceType(),
+                question.getEnabled(),
+                tags.stream().map(this::toTagVO).toList(),
+                answers.stream().map(this::toAnswerVO).toList(),
+                question.getCreatedAt(),
+                question.getUpdatedAt()
+        );
+    }
+
+    private TagVO toTagVO(Tag tag) {
+        return new TagVO(
+                tag.getId(),
+                tag.getTagType(),
+                tag.getParentId(),
+                tag.getCode(),
+                tag.getName(),
+                tag.getDescription(),
+                tag.getNameEn(),
+                tag.getDescriptionEn(),
+                tag.getSortOrder()
+        );
+    }
+
+    private TagVO toTagVO(QuestionTagRow tag) {
+        return new TagVO(
+                tag.getId(),
+                tag.getTagType(),
+                tag.getParentId(),
+                tag.getCode(),
+                tag.getName(),
+                tag.getDescription(),
+                tag.getNameEn(),
+                tag.getDescriptionEn(),
+                tag.getSortOrder()
+        );
+    }
+
+    private AnswerReviewVO toAnswerReviewVO(
+            UserAnswer userAnswer,
+            AiAnswerReviewDTO review,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode
+    ) {
+        return new AnswerReviewVO(
+                userAnswer.getId(),
+                userAnswer.getQuestionId(),
+                userAnswer.getAnswerText(),
+                userAnswer.getAnswerStatus(),
+                toAnswerScoresVO(userAnswer),
+                userAnswer.getTotalScore(),
+                userAnswer.getAiOverallComment(),
+                toAnswerReviewCommentsVO(review.comments()),
+                review.sentenceReviews() == null
+                        ? null
+                        : review.sentenceReviews().stream()
+                                .map(AiArticleSentenceReviewDTO::revisedText)
+                                .collect(Collectors.joining(ARTICLE_SEPARATOR)),
+                review.sentenceReviews() == null
+                        ? List.of()
+                        : review.sentenceReviews().stream()
+                                .map(this::toArticleSentenceReviewVO)
+                                .toList(),
+                review.errorAnalysis().stream()
+                        .map(error -> toAnswerErrorAnalysisVO(error, errorTypesByCode))
+                        .toList(),
+                review.revisionSuggestions().stream().map(String::trim).toList(),
+                review.recommendedExpressions().stream().map(this::toAnswerRecommendedExpressionVO).toList(),
+                userAnswer.getCreatedAt(),
+                userAnswer.getUpdatedAt()
+        );
+    }
+
+    private ArticleSentenceReviewVO toArticleSentenceReviewVO(AiArticleSentenceReviewDTO review) {
+        return new ArticleSentenceReviewVO(
+                review.sourceSegmentIndex(),
+                review.sourceText(),
+                review.referenceText(),
+                review.answerExcerpt(),
+                review.revisedText(),
+                review.comment().trim()
+        );
+    }
+
+    private AnswerScoresVO toAnswerScoresVO(UserAnswer userAnswer) {
+        return new AnswerScoresVO(
+                userAnswer.getGrammarVocabularyScore(),
+                userAnswer.getNaturalFluencyScore(),
+                userAnswer.getScenarioAdaptationScore(),
+                userAnswer.getInformationCompletenessScore()
+        );
+    }
+
+    private AnswerReviewCommentsVO toAnswerReviewCommentsVO(AiAnswerReviewCommentsDTO comments) {
+        return new AnswerReviewCommentsVO(
+                comments.grammarComment().trim(),
+                comments.vocabularyComment().trim(),
+                comments.naturalnessComment().trim(),
+                comments.scenarioComment().trim()
+        );
+    }
+
+    private AnswerErrorAnalysisVO toAnswerErrorAnalysisVO(
+            AiAnswerErrorAnalysisDTO error,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode
+    ) {
+        AiErrorTypeOptionDTO errorType = errorTypesByCode.get(error.errorTypeCode());
+        return new AnswerErrorAnalysisVO(
+                errorType.code(),
+                errorType.id(),
+                errorType.code(),
+                errorType.name(),
+                error.original().trim(),
+                error.issue().trim(),
+                error.suggestion().trim(),
+                error.severity(),
+                error.suggestedUserErrorTypeName().trim(),
+                error.suggestedUserErrorTypeDescription().trim()
+        );
+    }
+
+    private AnswerRecommendedExpressionVO toAnswerRecommendedExpressionVO(AiAnswerRecommendedExpressionDTO expression) {
+        return new AnswerRecommendedExpressionVO(
+                expression.expression().trim(),
+                expression.usage().trim(),
+                expression.formality(),
+                expression.note().trim()
+        );
+    }
+
+    private QuestionAnswerVO toAnswerVO(QuestionAnswer answer) {
+        return new QuestionAnswerVO(
+                answer.getId(),
+                answer.getAnswerText(),
+                answer.getAnswerType(),
+                answer.getPrimaryAnswer(),
+                answer.getSortOrder()
+        );
+    }
+
+    private record ValidatedGeneratedQuestion(
+            AiGeneratedQuestionDTO question,
+            List<Tag> tags
+    ) {
+    }
+
+    private record PreparedGeneratedQuestion(
+            ValidatedGeneratedQuestion question,
+            List<Float> embedding
+    ) {
+    }
+
+    private record ValidatedArticle(
+            AiArticleBlueprintDTO blueprint,
+            AiGeneratedArticleDTO article,
+            String sourceText,
+            String referenceText
+    ) {
+    }
+}

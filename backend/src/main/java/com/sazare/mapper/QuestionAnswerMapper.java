@@ -1,0 +1,19 @@
+package com.sazare.mapper;
+
+import com.sazare.entity.QuestionAnswer;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
+
+@Mapper
+public interface QuestionAnswerMapper {
+
+    int insertQuestionAnswer(QuestionAnswer questionAnswer);
+
+    List<QuestionAnswer> selectActiveAnswersByQuestionId(@Param("questionId") Long questionId);
+
+    List<QuestionAnswer> selectActiveAnswersByQuestionIds(@Param("questionIds") List<Long> questionIds);
+
+    int logicalDeleteByQuestionId(@Param("questionId") Long questionId);
+}

@@ -2,7 +2,7 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.jt.learning.mapper.QuestionAnswerMapper">
+<mapper namespace="com.sazare.mapper.QuestionAnswerMapper">
 
     <insert id="insertQuestionAnswer" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
         insert into question_answers (
@@ -26,7 +26,7 @@
         )
     </insert>
 
-    <select id="selectActiveAnswersByQuestionId" resultType="com.jt.learning.entity.QuestionAnswer">
+    <select id="selectActiveAnswersByQuestionId" resultType="com.sazare.entity.QuestionAnswer">
         select
             id,
             question_id,
@@ -43,7 +43,7 @@
         order by sort_order asc, id asc
     </select>
 
-    <select id="selectActiveAnswersByQuestionIds" resultType="com.jt.learning.entity.QuestionAnswer">
+    <select id="selectActiveAnswersByQuestionIds" resultType="com.sazare.entity.QuestionAnswer">
         select
             id,
             question_id,

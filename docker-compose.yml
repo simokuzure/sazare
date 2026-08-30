@@ -3,15 +3,15 @@ services:
     image: pgvector/pgvector:0.8.6-pg16-bookworm
     container_name: sazare-postgres
     environment:
-      POSTGRES_DB: jt_learning
-      POSTGRES_USER: jt_user
-      POSTGRES_PASSWORD: jt_password
+      POSTGRES_DB: sazare
+      POSTGRES_USER: sazare_user
+      POSTGRES_PASSWORD: sazare_password
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U jt_user -d jt_learning"]
+      test: ["CMD-SHELL", "pg_isready -U sazare_user -d sazare"]
       interval: 10s
       timeout: 5s
       retries: 5

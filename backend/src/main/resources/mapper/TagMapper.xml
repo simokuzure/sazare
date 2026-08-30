@@ -2,7 +2,7 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.jt.learning.mapper.TagMapper">
+<mapper namespace="com.sazare.mapper.TagMapper">
 
     <sql id="tagWhereClause">
         where deleted = false
@@ -23,7 +23,7 @@
         <include refid="tagWhereClause" />
     </select>
 
-    <select id="selectTags" resultType="com.jt.learning.entity.Tag">
+    <select id="selectTags" resultType="com.sazare.entity.Tag">
         select
             id,
             tag_type,
@@ -41,7 +41,7 @@
         offset #{offset}
     </select>
 
-    <select id="selectEnabledTagsByType" resultType="com.jt.learning.entity.Tag">
+    <select id="selectEnabledTagsByType" resultType="com.sazare.entity.Tag">
         select
             id,
             tag_type,
@@ -63,7 +63,7 @@
         order by sort_order asc, id asc
     </select>
 
-    <select id="selectEnabledTagsByCodes" resultType="com.jt.learning.entity.Tag">
+    <select id="selectEnabledTagsByCodes" resultType="com.sazare.entity.Tag">
         select
             id,
             tag_type,
@@ -89,7 +89,7 @@
         order by sort_order asc, id asc
     </select>
 
-    <select id="selectEnabledTagsByAnyCodes" resultType="com.jt.learning.entity.Tag">
+    <select id="selectEnabledTagsByAnyCodes" resultType="com.sazare.entity.Tag">
         select
             id,
             tag_type,
@@ -114,7 +114,7 @@
         order by sort_order asc, id asc
     </select>
 
-    <select id="selectEnabledTagsByQuestionId" resultType="com.jt.learning.entity.Tag">
+    <select id="selectEnabledTagsByQuestionId" resultType="com.sazare.entity.Tag">
         select
             t.id,
             t.tag_type,
@@ -137,7 +137,7 @@
         order by t.sort_order asc, t.id asc
     </select>
 
-    <select id="selectEnabledTagsByQuestionIds" resultType="com.jt.learning.dto.QuestionTagRow">
+    <select id="selectEnabledTagsByQuestionIds" resultType="com.sazare.dto.QuestionTagRow">
         select
             qt.question_id,
             t.id,

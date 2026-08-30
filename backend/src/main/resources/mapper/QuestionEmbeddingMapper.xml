@@ -2,9 +2,9 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.jt.learning.mapper.QuestionEmbeddingMapper">
+<mapper namespace="com.sazare.mapper.QuestionEmbeddingMapper">
 
-    <select id="selectSimilarQuestionEmbeddings" resultType="com.jt.learning.dto.QuestionEmbeddingMatch">
+    <select id="selectSimilarQuestionEmbeddings" resultType="com.sazare.dto.QuestionEmbeddingMatch">
         select
             qe.question_id,
             q.source_text,
@@ -20,7 +20,7 @@
         order by qe.embedding &lt;=&gt; cast(#{embedding} as vector), qe.question_id
     </select>
 
-    <select id="selectRegularQuestionEmbeddingCandidates" resultType="com.jt.learning.entity.QuestionEmbeddingCandidate">
+    <select id="selectRegularQuestionEmbeddingCandidates" resultType="com.sazare.entity.QuestionEmbeddingCandidate">
         select
             q.id as question_id,
             q.question_type,

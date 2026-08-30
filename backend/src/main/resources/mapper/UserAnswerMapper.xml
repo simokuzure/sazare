@@ -2,7 +2,7 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.jt.learning.mapper.UserAnswerMapper">
+<mapper namespace="com.sazare.mapper.UserAnswerMapper">
 
     <sql id="userAnswerListColumns">
         ua.id,
@@ -159,7 +159,7 @@
         <include refid="userAnswerFilterClause" />
     </select>
 
-    <select id="selectUserAnswerList" resultType="com.jt.learning.dto.UserAnswerListItemRow">
+    <select id="selectUserAnswerList" resultType="com.sazare.dto.UserAnswerListItemRow">
         select
             <include refid="userAnswerListColumns" />
         from user_answers ua
@@ -170,7 +170,7 @@
         offset #{offset}
     </select>
 
-    <select id="selectUserAnswerDetail" resultType="com.jt.learning.dto.UserAnswerDetailRow">
+    <select id="selectUserAnswerDetail" resultType="com.sazare.dto.UserAnswerDetailRow">
         select
             <include refid="userAnswerDetailColumns" />
         from user_answers ua
@@ -181,7 +181,7 @@
           and (ua.question_id is null or q.deleted = false)
     </select>
 
-    <select id="selectActiveUserAnswerById" resultType="com.jt.learning.entity.UserAnswer">
+    <select id="selectActiveUserAnswerById" resultType="com.sazare.entity.UserAnswer">
         select
             id,
             user_id,

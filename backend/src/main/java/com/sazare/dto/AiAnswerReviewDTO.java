@@ -1,0 +1,16 @@
+package com.sazare.dto;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+public record AiAnswerReviewDTO(
+        AiAnswerScoresDTO scores,
+        BigDecimal totalScore,
+        String overallComment,
+        AiAnswerReviewCommentsDTO comments,
+        List<AiArticleSentenceReviewDTO> sentenceReviews,
+        List<AiAnswerErrorAnalysisDTO> errorAnalysis,
+        List<String> revisionSuggestions,
+        List<AiAnswerRecommendedExpressionDTO> recommendedExpressions
+) {
+}

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.jt.learning.mapper.ReviewCardMapper">
+<mapper namespace="com.sazare.mapper.ReviewCardMapper">
 
     <sql id="cardColumns">
         id, user_id, user_error_type_id, status, ease_factor, repetition_count,
@@ -22,7 +22,7 @@
         </if>
     </select>
 
-    <select id="selectCardList" resultType="com.jt.learning.dto.ReviewCardListRow">
+    <select id="selectCardList" resultType="com.sazare.dto.ReviewCardListRow">
         select
             card.id,
             card.user_error_type_id,
@@ -74,20 +74,20 @@
         offset #{offset}
     </select>
 
-    <select id="selectByIdAndUserId" resultType="com.jt.learning.entity.ReviewCard">
+    <select id="selectByIdAndUserId" resultType="com.sazare.entity.ReviewCard">
         select <include refid="cardColumns" />
         from review_cards
         where id = #{id} and user_id = #{userId} and deleted = false
     </select>
 
-    <select id="selectForUpdateByIdAndUserId" resultType="com.jt.learning.entity.ReviewCard">
+    <select id="selectForUpdateByIdAndUserId" resultType="com.sazare.entity.ReviewCard">
         select <include refid="cardColumns" />
         from review_cards
         where id = #{id} and user_id = #{userId} and deleted = false
         for update
     </select>
 
-    <select id="selectForUpdateByUserErrorTypeId" resultType="com.jt.learning.entity.ReviewCard">
+    <select id="selectForUpdateByUserErrorTypeId" resultType="com.sazare.entity.ReviewCard">
         select <include refid="cardColumns" />
         from review_cards
         where user_error_type_id = #{userErrorTypeId}

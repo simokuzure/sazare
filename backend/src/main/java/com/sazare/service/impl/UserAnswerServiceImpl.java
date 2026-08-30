@@ -1,0 +1,919 @@
+package com.sazare.service.impl;
+
+import com.sazare.common.TranslationDirection;
+import com.sazare.dto.UserAnswerDetailRow;
+import com.sazare.dto.UserAnswerErrorConfirmItemRequest;
+import com.sazare.dto.UserAnswerErrorConfirmRequest;
+import com.sazare.dto.ReviewCardCreateRequest;
+import com.sazare.dto.UserAnswerListItemRow;
+import com.sazare.dto.UserAnswerQueryRequest;
+import com.sazare.dto.UserErrorTypeListItemRow;
+import com.sazare.dto.UserErrorTypeQueryRequest;
+import com.sazare.entity.ErrorType;
+import com.sazare.entity.Question;
+import com.sazare.entity.QuestionAnswer;
+import com.sazare.entity.ReviewCard;
+import com.sazare.entity.Tag;
+import com.sazare.entity.User;
+import com.sazare.entity.UserAnswer;
+import com.sazare.entity.UserAnswerError;
+import com.sazare.entity.UserErrorType;
+import com.sazare.event.ReviewQuestionTagEnrichmentRequestedEvent;
+import com.sazare.exception.BusinessException;
+import com.sazare.exception.ErrorCode;
+import com.sazare.mapper.ErrorTypeMapper;
+import com.sazare.mapper.QuestionAnswerMapper;
+import com.sazare.mapper.QuestionMapper;
+import com.sazare.mapper.QuestionTagMapper;
+import com.sazare.mapper.TagMapper;
+import com.sazare.mapper.UserAnswerErrorMapper;
+import com.sazare.mapper.UserAnswerMapper;
+import com.sazare.mapper.UserErrorTypeMapper;
+import com.sazare.mapper.UserMapper;
+import com.sazare.service.UserAnswerService;
+import com.sazare.service.ReviewService;
+import com.sazare.vo.AnswerScoresVO;
+import com.sazare.vo.PageVO;
+import com.sazare.vo.QuestionAnswerVO;
+import com.sazare.vo.ReviewCardCreatedVO;
+import com.sazare.vo.TagVO;
+import com.sazare.vo.UserAnswerDetailVO;
+import com.sazare.vo.UserAnswerErrorVO;
+import com.sazare.vo.UserAnswerListItemVO;
+import com.sazare.vo.UserErrorTypeVO;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
+
+@Service
+public class UserAnswerServiceImpl implements UserAnswerService {
+
+    private static final String LOCAL_DEFAULT_USER_CODE = "LOCAL_DEFAULT";
+    private static final String ANSWER_STATUS_REVIEWED = "REVIEWED";
+    private static final String USER_ERROR_TYPE_STATUS_ACTIVE = "ACTIVE";
+    private static final String CONFIRM_MODE_NEW = "NEW_USER_ERROR_TYPE";
+    private static final String CONFIRM_MODE_EXISTING = "EXISTING_USER_ERROR_TYPE";
+    private static final String SOURCE_TYPE_REVIEW_DERIVED = "REVIEW_DERIVED";
+    private static final String DEFAULT_CORRECTION_REVIEW_LEVEL = "N3";
+    private static final int DEFAULT_CORRECTION_REVIEW_DIFFICULTY = 3;
+    private static final String CUSTOM_REVIEW_ERROR_TYPE_CODE = "UNNATURAL_EXPRESSION";
+    private static final String CUSTOM_REVIEW_TYPE_DESCRIPTION = "用户自定义复习重点。";
+    private static final Set<String> TRANSLATION_ONLY_ERROR_CODES = Set.of(
+            "OMISSION", "MISTRANSLATION", "ADDITION", "FALSE_FRIEND", "CHINESE_CALQUE"
+    );
+    private static final Pattern JAPANESE_KANA_PATTERN = Pattern.compile("[\\p{IsHiragana}\\p{IsKatakana}]");
+    private static final Pattern HAN_PATTERN = Pattern.compile("\\p{IsHan}");
+
+    private final UserMapper userMapper;
+    private final UserAnswerMapper userAnswerMapper;
+    private final TagMapper tagMapper;
+    private final QuestionAnswerMapper questionAnswerMapper;
+    private final QuestionMapper questionMapper;
+    private final QuestionTagMapper questionTagMapper;
+    private final ErrorTypeMapper errorTypeMapper;
+    private final UserErrorTypeMapper userErrorTypeMapper;
+    private final UserAnswerErrorMapper userAnswerErrorMapper;
+    private final ReviewService reviewService;
+    private final ApplicationEventPublisher eventPublisher;
+
+    public UserAnswerServiceImpl(
+            UserMapper userMapper,
+            UserAnswerMapper userAnswerMapper,
+            TagMapper tagMapper,
+            QuestionAnswerMapper questionAnswerMapper,
+            QuestionMapper questionMapper,
+            QuestionTagMapper questionTagMapper,
+            ErrorTypeMapper errorTypeMapper,
+            UserErrorTypeMapper userErrorTypeMapper,
+            UserAnswerErrorMapper userAnswerErrorMapper,
+            ReviewService reviewService,
+            ApplicationEventPublisher eventPublisher
+    ) {
+        this.userMapper = userMapper;
+        this.userAnswerMapper = userAnswerMapper;
+        this.tagMapper = tagMapper;
+        this.questionAnswerMapper = questionAnswerMapper;
+        this.questionMapper = questionMapper;
+        this.questionTagMapper = questionTagMapper;
+        this.errorTypeMapper = errorTypeMapper;
+        this.userErrorTypeMapper = userErrorTypeMapper;
+        this.userAnswerErrorMapper = userAnswerErrorMapper;
+        this.reviewService = reviewService;
+        this.eventPublisher = eventPublisher;
+    }
+
+    @Override
+    public PageVO<UserAnswerListItemVO> listUserAnswers(UserAnswerQueryRequest request) {
+        UserAnswerQueryRequest normalizedRequest = normalizeQueryRequest(request);
+        validateScoreRange(normalizedRequest);
+
+        User user = getLocalDefaultUser();
+        long total = userAnswerMapper.countUserAnswers(user.getId(), normalizedRequest);
+        if (total == 0) {
+            return new PageVO<>(List.of(), normalizedRequest.page(), normalizedRequest.size(), 0);
+        }
+
+        long offset = (long) (normalizedRequest.page() - 1) * normalizedRequest.size();
+        List<UserAnswerListItemVO> items = userAnswerMapper.selectUserAnswerList(
+                        user.getId(),
+                        normalizedRequest,
+                        normalizedRequest.size(),
+                        offset
+                )
+                .stream()
+                .map(this::toVO)
+                .toList();
+        return new PageVO<>(items, normalizedRequest.page(), normalizedRequest.size(), total);
+    }
+
+    @Override
+    public UserAnswerDetailVO getUserAnswerDetail(Long id) {
+        User user = getLocalDefaultUser();
+        UserAnswerDetailRow row = userAnswerMapper.selectUserAnswerDetail(user.getId(), id);
+        if (row == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "答题记录不存在或已删除");
+        }
+
+        List<TagVO> tags = row.getQuestionId() == null
+                ? List.of()
+                : tagMapper.selectEnabledTagsByQuestionId(row.getQuestionId()).stream().map(this::toTagVO).toList();
+        List<QuestionAnswerVO> answers = row.getQuestionId() == null
+                ? List.of()
+                : questionAnswerMapper.selectActiveAnswersByQuestionId(row.getQuestionId())
+                        .stream()
+                        .map(this::toQuestionAnswerVO)
+                        .toList();
+        return toDetailVO(row, tags, answers);
+    }
+
+    @Override
+    @Transactional
+    public List<UserAnswerErrorVO> confirmUserAnswerErrors(
+            Long userAnswerId,
+            UserAnswerErrorConfirmRequest request
+    ) {
+        User user = getLocalDefaultUser();
+        UserAnswer userAnswer = userAnswerMapper.selectActiveUserAnswerById(user.getId(), userAnswerId);
+        if (userAnswer == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "作答记录不存在");
+        }
+        if (!ANSWER_STATUS_REVIEWED.equals(userAnswer.getAnswerStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "仅已评分的作答可以确认错误");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        if (userAnswer.getQuestionId() == null) {
+            List<SavedCorrectionError> savedErrors = request.errors().stream()
+                    .map(item -> saveConfirmedCorrectionError(user, userAnswer, item, now))
+                    .toList();
+            recordCorrectionReviewQuestions(user, userAnswer, savedErrors, now);
+            return savedErrors.stream().map(SavedCorrectionError::error).toList();
+        }
+
+        Question question = questionMapper.selectQuestionById(userAnswer.getQuestionId());
+        if (question == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "作答对应题目不存在");
+        }
+
+        List<UserAnswerErrorVO> savedErrors = request.errors().stream()
+                .map(item -> saveConfirmedError(user, userAnswer, question, item, now))
+                .toList();
+        if (TranslationDirection.fromQuestionType(question.getQuestionType()).isArticle(question.getQuestionType())) {
+            recordArticleReviewQuestions(user, userAnswer, question, savedErrors, now);
+            return savedErrors;
+        }
+        savedErrors.stream()
+                .map(UserAnswerErrorVO::userErrorTypeId)
+                .distinct()
+                .sorted()
+                .forEach(userErrorTypeId -> reviewService.recordPracticeError(
+                        user.getId(), userAnswer.getId(), userAnswer.getQuestionId(), userErrorTypeId, now));
+        return savedErrors;
+    }
+
+    @Override
+    @Transactional
+    public ReviewCardCreatedVO createReviewCard(Long userAnswerId, ReviewCardCreateRequest request) {
+        User user = getLocalDefaultUser();
+        UserAnswer userAnswer = userAnswerMapper.selectActiveUserAnswerById(user.getId(), userAnswerId);
+        if (userAnswer == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "作答记录不存在");
+        }
+        if (!ANSWER_STATUS_REVIEWED.equals(userAnswer.getAnswerStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "仅已评分的作答可以添加复习卡片");
+        }
+
+        String name = request.name().trim();
+        String targetExpression = request.targetExpression().trim();
+        if (!JAPANESE_KANA_PATTERN.matcher(targetExpression).find()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "目标日语表达必须包含日语假名");
+        }
+
+        Question sourceQuestion = userAnswer.getQuestionId() == null
+                ? null
+                : questionMapper.selectQuestionById(userAnswer.getQuestionId());
+        if (userAnswer.getQuestionId() != null && sourceQuestion == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "作答对应题目不存在");
+        }
+        String learningMode = sourceQuestion == null
+                ? TranslationDirection.fromLearningMode(userAnswer.getLearningMode()).learningMode()
+                : TranslationDirection.fromQuestionType(sourceQuestion.getQuestionType()).learningMode();
+        String reviewSourceText = resolveCustomReviewSource(
+                sourceQuestion, learningMode, request);
+
+        ErrorType errorType = errorTypeMapper.selectEnabledLeafByCode(CUSTOM_REVIEW_ERROR_TYPE_CODE);
+        if (errorType == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "自定义复习卡片分类不可用");
+        }
+        UserErrorType existing = userErrorTypeMapper.selectActiveByUserIdAndErrorTypeIdAndName(
+                user.getId(), errorType.getId(), learningMode, name);
+        if (existing != null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同名复习卡片已存在，请使用其他复习重点");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        UserErrorType userErrorType = new UserErrorType();
+        userErrorType.setUserId(user.getId());
+        userErrorType.setErrorTypeId(errorType.getId());
+        userErrorType.setLearningMode(learningMode);
+        userErrorType.setName(name);
+        userErrorType.setDescription(CUSTOM_REVIEW_TYPE_DESCRIPTION);
+        userErrorType.setStatus(USER_ERROR_TYPE_STATUS_ACTIVE);
+        userErrorType.setCreatedAt(now);
+        userErrorType.setUpdatedAt(now);
+        userErrorTypeMapper.insertUserErrorType(userErrorType);
+
+        UserAnswerError reviewItem = new UserAnswerError();
+        reviewItem.setUserAnswerId(userAnswer.getId());
+        reviewItem.setUserId(user.getId());
+        reviewItem.setQuestionId(userAnswer.getQuestionId());
+        reviewItem.setErrorTypeId(errorType.getId());
+        reviewItem.setUserErrorTypeId(userErrorType.getId());
+        reviewItem.setOriginalText(reviewSourceText);
+        reviewItem.setIssue(name);
+        reviewItem.setSuggestion(targetExpression);
+        reviewItem.setSeverity("LOW");
+        reviewItem.setSortOrder(0);
+        reviewItem.setCreatedAt(now);
+        reviewItem.setUpdatedAt(now);
+        userAnswerErrorMapper.insertUserAnswerError(reviewItem);
+
+        Long reviewQuestionId = createCustomReviewQuestion(
+                sourceQuestion, learningMode, reviewSourceText, targetExpression, name, now);
+        ReviewCard card = reviewService.recordPracticeError(
+                user.getId(), userAnswer.getId(), reviewQuestionId, userErrorType.getId(), now);
+        return new ReviewCardCreatedVO(card.getId(), name, card.getStatus(), card.getDueAt());
+    }
+
+    private String resolveCustomReviewSource(
+            Question question,
+            String learningMode,
+            ReviewCardCreateRequest request
+    ) {
+        if (question == null) {
+            if (request.sourceSegmentIndex() != null) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "纯日语纠错不能提交中文原句索引");
+            }
+            String sourceText = requireText(request.reviewSourceText(), "纯日语纠错必须填写复习题中文");
+            TranslationDirection direction = TranslationDirection.fromLearningMode(learningMode);
+            boolean invalidLanguage = direction == TranslationDirection.ZH_TO_JA
+                    ? !HAN_PATTERN.matcher(sourceText).find()
+                    : HAN_PATTERN.matcher(sourceText).find();
+            if (sourceText.length() > 1000 || invalidLanguage
+                    || JAPANESE_KANA_PATTERN.matcher(sourceText).find()) {
+                String message = direction == TranslationDirection.ZH_TO_JA
+                        ? "纯日语纠错的复习题中文文本必须包含中文且不能包含日语假名"
+                        : "复习题英文必须是英文且不能包含中文或日语假名";
+                throw new BusinessException(ErrorCode.PARAM_ERROR, message);
+            }
+            return sourceText;
+        }
+
+        if (request.reviewSourceText() != null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "有题目作答不能提交复习题中文");
+        }
+        TranslationDirection direction = TranslationDirection.fromQuestionType(question.getQuestionType());
+        if (direction.isArticle(question.getQuestionType())) {
+            if (request.sourceSegmentIndex() == null) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "文章复习卡片必须选择中文原句");
+            }
+            List<String> segments = splitSegments(question.getSourceText());
+            int index = request.sourceSegmentIndex();
+            if (index >= segments.size()) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "sourceSegmentIndex 超出文章原句范围");
+            }
+            return segments.get(index);
+        }
+        if (!direction.shortQuestionType().equals(question.getQuestionType())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前题型不支持自定义复习卡片");
+        }
+        if (request.sourceSegmentIndex() != null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "短句复习卡片不能提交 sourceSegmentIndex");
+        }
+        return requireText(question.getSourceText(), "题目中文原文不能为空");
+    }
+
+    private Long createCustomReviewQuestion(
+            Question sourceQuestion,
+            String learningMode,
+            String sourceText,
+            String targetExpression,
+            String reviewFocus,
+            LocalDateTime now
+    ) {
+        boolean requiresTagEnrichment = sourceQuestion == null
+                || TranslationDirection.fromQuestionType(sourceQuestion.getQuestionType())
+                .isArticle(sourceQuestion.getQuestionType());
+        Question question = new Question();
+        question.setQuestionType(sourceQuestion == null
+                ? TranslationDirection.fromLearningMode(learningMode).shortQuestionType()
+                : TranslationDirection.fromQuestionType(sourceQuestion.getQuestionType()).shortQuestionType());
+        question.setSourceText(sourceText);
+        question.setContextText(customReviewContext(sourceQuestion));
+        question.setLevel(sourceQuestion == null || sourceQuestion.getLevel() == null
+                ? DEFAULT_CORRECTION_REVIEW_LEVEL : sourceQuestion.getLevel());
+        question.setDifficulty(sourceQuestion == null || sourceQuestion.getDifficulty() == null
+                ? DEFAULT_CORRECTION_REVIEW_DIFFICULTY : sourceQuestion.getDifficulty());
+        question.setGrammarPoint(reviewFocus);
+        question.setSpoken(sourceQuestion != null && Boolean.TRUE.equals(sourceQuestion.getSpoken()));
+        question.setBusiness(sourceQuestion != null && Boolean.TRUE.equals(sourceQuestion.getBusiness()));
+        question.setExam(sourceQuestion != null && Boolean.TRUE.equals(sourceQuestion.getExam()));
+        question.setSourceType(SOURCE_TYPE_REVIEW_DERIVED);
+        question.setEnabled(true);
+        question.setDeleted(false);
+        question.setCreatedAt(now);
+        question.setUpdatedAt(now);
+        questionMapper.insertQuestion(question);
+        if (!requiresTagEnrichment) {
+            copyEnabledQuestionTags(sourceQuestion, question.getId());
+        }
+
+        QuestionAnswer answer = new QuestionAnswer();
+        answer.setQuestionId(question.getId());
+        answer.setAnswerText(targetExpression);
+        answer.setAnswerType("STANDARD");
+        answer.setPrimaryAnswer(true);
+        answer.setSortOrder(0);
+        answer.setDeleted(false);
+        answer.setCreatedAt(now);
+        answer.setUpdatedAt(now);
+        questionAnswerMapper.insertQuestionAnswer(answer);
+        if (requiresTagEnrichment) {
+            requestTagEnrichment(question.getId());
+        }
+        return question.getId();
+    }
+
+    private String customReviewContext(Question sourceQuestion) {
+        if (sourceQuestion == null) {
+            return "日语纠错自定义复习";
+        }
+        String context = sourceQuestion.getContextText();
+        return context == null || context.isBlank()
+                ? "自定义复习卡片"
+                : context.trim() + "（自定义复习卡片）";
+    }
+
+    private SavedCorrectionError saveConfirmedCorrectionError(
+            User user,
+            UserAnswer userAnswer,
+            UserAnswerErrorConfirmItemRequest request,
+            LocalDateTime now
+    ) {
+        ResolvedUserErrorType resolvedType = resolveUserErrorType(
+                user.getId(), userAnswer.getLearningMode(), request, now);
+        ErrorType errorType = errorTypeMapper.selectEnabledLeafById(resolvedType.errorTypeId());
+        if (errorType == null || TRANSLATION_ONLY_ERROR_CODES.contains(errorType.getCode())) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "该错误类型不适用于纯日语纠错");
+        }
+        validateCorrectionErrorSource(userAnswer, request);
+
+        UserAnswerError error = new UserAnswerError();
+        error.setUserAnswerId(userAnswer.getId());
+        error.setUserId(user.getId());
+        error.setQuestionId(null);
+        error.setErrorTypeId(resolvedType.errorTypeId());
+        error.setUserErrorTypeId(resolvedType.userErrorTypeId());
+        error.setOriginalText(request.originalText().trim());
+        error.setIssue(request.issue().trim());
+        error.setSuggestion(request.suggestion().trim());
+        error.setSeverity(request.severity());
+        error.setSortOrder(request.sortOrder());
+        error.setCreatedAt(now);
+        error.setUpdatedAt(now);
+        userAnswerErrorMapper.insertUserAnswerError(error);
+        return new SavedCorrectionError(toUserAnswerErrorVO(error), request.reviewSourceText().trim());
+    }
+
+    private void validateCorrectionErrorSource(
+            UserAnswer userAnswer,
+            UserAnswerErrorConfirmItemRequest request
+    ) {
+        String original = request.originalText().trim();
+        if (!userAnswer.getAnswerText().contains(original)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "originalText 必须属于本次纠错原文");
+        }
+        String suggestion = request.suggestion().trim();
+        if (userAnswer.getAiRevisedText() == null || !userAnswer.getAiRevisedText().contains(suggestion)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "suggestion 必须属于本次完整纠正文稿");
+        }
+        String reviewSourceText = requireText(
+                request.reviewSourceText(),
+                "日语纠错错误的 reviewSourceText 不能为空"
+        );
+        if (reviewSourceText.length() > 1000
+                || JAPANESE_KANA_PATTERN.matcher(reviewSourceText).find()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "reviewSourceText 必须是不超过 1000 字符的中英文文本");
+        }
+    }
+
+    private void recordCorrectionReviewQuestions(
+            User user,
+            UserAnswer userAnswer,
+            List<SavedCorrectionError> savedErrors,
+            LocalDateTime now
+    ) {
+        Map<String, Long> questionIdsByContent = new LinkedHashMap<>();
+        Map<Long, List<Long>> questionIdsByUserErrorType = new LinkedHashMap<>();
+        for (SavedCorrectionError savedError : savedErrors) {
+            UserAnswerErrorVO error = savedError.error();
+            String key = savedError.reviewSourceText() + "\u0000" + error.suggestion();
+            Long questionId = questionIdsByContent.computeIfAbsent(
+                    key,
+                    ignored -> createCorrectionReviewQuestion(
+                            savedError.reviewSourceText(),
+                            error.suggestion(),
+                            userAnswer.getLearningMode(),
+                            user.getId(),
+                            error.userErrorTypeId(),
+                            now
+                    )
+            );
+            questionIdsByUserErrorType
+                    .computeIfAbsent(error.userErrorTypeId(), ignored -> new java.util.ArrayList<>())
+                    .add(questionId);
+        }
+        questionIdsByUserErrorType.forEach((userErrorTypeId, questionIds) ->
+                reviewService.recordPracticeErrors(
+                        user.getId(), userAnswer.getId(), questionIds, userErrorTypeId, now));
+    }
+
+    private Long createCorrectionReviewQuestion(
+            String sourceText,
+            String referenceText,
+            String learningMode,
+            Long userId,
+            Long userErrorTypeId,
+            LocalDateTime now
+    ) {
+        UserErrorType userErrorType = userErrorTypeMapper.selectActiveByIdAndUserId(userErrorTypeId, userId);
+        if (userErrorType == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "用户错误类型不存在或已归档");
+        }
+
+        Question question = new Question();
+        TranslationDirection direction = TranslationDirection.fromLearningMode(learningMode);
+        question.setQuestionType(direction.shortQuestionType());
+        question.setSourceText(sourceText);
+        question.setContextText(direction == TranslationDirection.EN_TO_JA
+                ? "Review of an expression corrected from Japanese writing"
+                : "日语纠错错句复习");
+        question.setLevel(DEFAULT_CORRECTION_REVIEW_LEVEL);
+        question.setDifficulty(DEFAULT_CORRECTION_REVIEW_DIFFICULTY);
+        question.setGrammarPoint(userErrorType.getName());
+        question.setSpoken(false);
+        question.setBusiness(false);
+        question.setExam(false);
+        question.setSourceType(SOURCE_TYPE_REVIEW_DERIVED);
+        question.setEnabled(true);
+        question.setDeleted(false);
+        question.setCreatedAt(now);
+        question.setUpdatedAt(now);
+        questionMapper.insertQuestion(question);
+
+        QuestionAnswer answer = new QuestionAnswer();
+        answer.setQuestionId(question.getId());
+        answer.setAnswerText(referenceText);
+        answer.setAnswerType("STANDARD");
+        answer.setPrimaryAnswer(true);
+        answer.setSortOrder(0);
+        answer.setDeleted(false);
+        answer.setCreatedAt(now);
+        answer.setUpdatedAt(now);
+        questionAnswerMapper.insertQuestionAnswer(answer);
+        requestTagEnrichment(question.getId());
+        return question.getId();
+    }
+
+    @Override
+    public PageVO<UserErrorTypeVO> listUserErrorTypes(UserErrorTypeQueryRequest request) {
+        User user = getLocalDefaultUser();
+        long total = userErrorTypeMapper.countUserErrorTypes(
+                user.getId(), request.status(), request.learningMode());
+        if (total == 0) {
+            return new PageVO<>(List.of(), request.page(), request.size(), 0);
+        }
+
+        long offset = (long) (request.page() - 1) * request.size();
+        List<UserErrorTypeVO> items = userErrorTypeMapper.selectUserErrorTypeList(
+                        user.getId(),
+                        request.status(),
+                        request.learningMode(),
+                        request.size(),
+                        offset
+                )
+                .stream()
+                .map(this::toUserErrorTypeVO)
+                .toList();
+        return new PageVO<>(items, request.page(), request.size(), total);
+    }
+
+    private UserAnswerErrorVO saveConfirmedError(
+            User user,
+            UserAnswer userAnswer,
+            Question question,
+            UserAnswerErrorConfirmItemRequest request,
+            LocalDateTime now
+    ) {
+        ResolvedUserErrorType resolvedType = resolveUserErrorType(
+                user.getId(), userAnswer.getLearningMode(), request, now);
+        ErrorType errorType = errorTypeMapper.selectEnabledLeafById(resolvedType.errorTypeId());
+        validateConfirmedOriginal(question, userAnswer, errorType, request.originalText());
+        UserAnswerError error = new UserAnswerError();
+        error.setUserAnswerId(userAnswer.getId());
+        error.setUserId(user.getId());
+        error.setQuestionId(userAnswer.getQuestionId());
+        error.setErrorTypeId(resolvedType.errorTypeId());
+        error.setUserErrorTypeId(resolvedType.userErrorTypeId());
+        error.setOriginalText(request.originalText().trim());
+        error.setIssue(request.issue().trim());
+        error.setSuggestion(request.suggestion().trim());
+        error.setSeverity(request.severity());
+        error.setSortOrder(request.sortOrder());
+        error.setCreatedAt(now);
+        error.setUpdatedAt(now);
+        userAnswerErrorMapper.insertUserAnswerError(error);
+        return toUserAnswerErrorVO(error);
+    }
+
+    private void validateConfirmedOriginal(
+            Question question,
+            UserAnswer userAnswer,
+            ErrorType errorType,
+            String originalText
+    ) {
+        String original = originalText.trim();
+        if (TranslationDirection.fromQuestionType(question.getQuestionType()).isArticle(question.getQuestionType())
+                && "OMISSION".equals(errorType.getCode())) {
+            if (!splitSegments(question.getSourceText()).contains(original)) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "漏译错误的 originalText 必须是文章中文原句");
+            }
+            return;
+        }
+        if (!userAnswer.getAnswerText().contains(original)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "originalText 必须属于本次作答");
+        }
+    }
+
+    private void recordArticleReviewQuestions(
+            User user,
+            UserAnswer userAnswer,
+            Question articleQuestion,
+            List<UserAnswerErrorVO> savedErrors,
+            LocalDateTime now
+    ) {
+        List<QuestionAnswer> answers = questionAnswerMapper.selectActiveAnswersByQuestionId(articleQuestion.getId());
+        if (answers.size() != 1) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "文章题标准答案不合法");
+        }
+        List<String> sourceSegments = splitSegments(articleQuestion.getSourceText());
+        List<String> referenceSegments = splitSegments(answers.getFirst().getAnswerText());
+        if (sourceSegments.size() != referenceSegments.size()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "文章题中日段落数不一致");
+        }
+
+        Map<String, Long> extractedQuestionIds = new LinkedHashMap<>();
+        Map<Long, List<Long>> questionIdsByUserErrorType = new LinkedHashMap<>();
+        for (UserAnswerErrorVO error : savedErrors) {
+            String referenceText = error.suggestion().trim();
+            int segmentIndex = referenceSegments.indexOf(referenceText);
+            if (segmentIndex < 0) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "文章错误 suggestion 必须是完整日文参考句");
+            }
+            Long extractedQuestionId = extractedQuestionIds.computeIfAbsent(
+                    referenceText,
+                    ignored -> createArticleSentenceQuestion(
+                            articleQuestion,
+                            sourceSegments.get(segmentIndex),
+                            referenceText,
+                            user.getId(),
+                            error.userErrorTypeId(),
+                            now
+                    )
+            );
+            questionIdsByUserErrorType
+                    .computeIfAbsent(error.userErrorTypeId(), ignored -> new java.util.ArrayList<>())
+                    .add(extractedQuestionId);
+        }
+        questionIdsByUserErrorType.forEach((userErrorTypeId, questionIds) ->
+                reviewService.recordPracticeErrors(
+                        user.getId(),
+                        userAnswer.getId(),
+                        questionIds,
+                        userErrorTypeId,
+                        now
+                ));
+    }
+
+    private Long createArticleSentenceQuestion(
+            Question articleQuestion,
+            String sourceText,
+            String referenceText,
+            Long userId,
+            Long userErrorTypeId,
+            LocalDateTime now
+    ) {
+        UserErrorType userErrorType = userErrorTypeMapper.selectActiveByIdAndUserId(
+                userErrorTypeId,
+                userId
+        );
+        if (userErrorType == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "用户错误类型不存在或已归档");
+        }
+        Question question = new Question();
+        question.setQuestionType(
+                TranslationDirection.fromQuestionType(articleQuestion.getQuestionType()).shortQuestionType());
+        question.setSourceText(sourceText);
+        question.setContextText(articleQuestion.getContextText() + "（文章错句复习）");
+        question.setLevel(articleQuestion.getLevel());
+        question.setDifficulty(articleQuestion.getDifficulty());
+        question.setGrammarPoint(userErrorType.getName());
+        question.setSpoken(articleQuestion.getSpoken());
+        question.setBusiness(articleQuestion.getBusiness());
+        question.setExam(articleQuestion.getExam());
+        question.setSourceType(SOURCE_TYPE_REVIEW_DERIVED);
+        question.setEnabled(true);
+        question.setDeleted(false);
+        question.setCreatedAt(now);
+        question.setUpdatedAt(now);
+        questionMapper.insertQuestion(question);
+
+        QuestionAnswer answer = new QuestionAnswer();
+        answer.setQuestionId(question.getId());
+        answer.setAnswerText(referenceText);
+        answer.setAnswerType("STANDARD");
+        answer.setPrimaryAnswer(true);
+        answer.setSortOrder(0);
+        answer.setDeleted(false);
+        answer.setCreatedAt(now);
+        answer.setUpdatedAt(now);
+        questionAnswerMapper.insertQuestionAnswer(answer);
+        requestTagEnrichment(question.getId());
+        return question.getId();
+    }
+
+    private void copyEnabledQuestionTags(Question sourceQuestion, Long targetQuestionId) {
+        if (sourceQuestion == null) {
+            return;
+        }
+        for (Tag tag : tagMapper.selectEnabledTagsByQuestionId(sourceQuestion.getId())) {
+            questionTagMapper.insertQuestionTag(targetQuestionId, tag.getId());
+        }
+    }
+
+    private void requestTagEnrichment(Long questionId) {
+        eventPublisher.publishEvent(new ReviewQuestionTagEnrichmentRequestedEvent(questionId));
+    }
+
+    private List<String> splitSegments(String text) {
+        return List.of(text.replace("\r\n", "\n").replace('\r', '\n').split("\\n\\s*\\n"))
+                .stream()
+                .map(String::trim)
+                .toList();
+    }
+
+    private ResolvedUserErrorType resolveUserErrorType(
+            Long userId,
+            String learningMode,
+            UserAnswerErrorConfirmItemRequest request,
+            LocalDateTime now
+    ) {
+        if (CONFIRM_MODE_EXISTING.equals(request.mode())) {
+            if (request.userErrorTypeId() == null) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "追加已有用户错误类型时 userErrorTypeId 不能为空");
+            }
+            UserErrorType userErrorType = userErrorTypeMapper.selectActiveByIdAndUserId(request.userErrorTypeId(), userId);
+            if (userErrorType == null) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "用户错误类型不存在或已归档");
+            }
+            validateEnabledLeafErrorType(userErrorType.getErrorTypeId());
+            return new ResolvedUserErrorType(userErrorType.getErrorTypeId(), userErrorType.getId());
+        }
+
+        if (!CONFIRM_MODE_NEW.equals(request.mode())) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "不支持的错误确认方式");
+        }
+        if (request.errorTypeId() == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "新建用户错误类型时 errorTypeId 不能为空");
+        }
+        String name = requireText(request.userErrorTypeName(), "新建用户错误类型时 userErrorTypeName 不能为空");
+        String description = requireText(
+                request.userErrorTypeDescription(),
+                "新建用户错误类型时 userErrorTypeDescription 不能为空"
+        );
+        validateEnabledLeafErrorType(request.errorTypeId());
+
+        UserErrorType existing = userErrorTypeMapper.selectActiveByUserIdAndErrorTypeIdAndName(
+                userId,
+                request.errorTypeId(),
+                learningMode,
+                name
+        );
+        if (existing != null) {
+            if (!USER_ERROR_TYPE_STATUS_ACTIVE.equals(existing.getStatus())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同名用户错误类型已归档，请选择已有类型");
+            }
+            return new ResolvedUserErrorType(existing.getErrorTypeId(), existing.getId());
+        }
+
+        UserErrorType userErrorType = new UserErrorType();
+        userErrorType.setUserId(userId);
+        userErrorType.setErrorTypeId(request.errorTypeId());
+        userErrorType.setLearningMode(learningMode);
+        userErrorType.setName(name);
+        userErrorType.setDescription(description);
+        userErrorType.setStatus(USER_ERROR_TYPE_STATUS_ACTIVE);
+        userErrorType.setCreatedAt(now);
+        userErrorType.setUpdatedAt(now);
+        userErrorTypeMapper.insertUserErrorType(userErrorType);
+        return new ResolvedUserErrorType(userErrorType.getErrorTypeId(), userErrorType.getId());
+    }
+
+    private void validateEnabledLeafErrorType(Long errorTypeId) {
+        ErrorType errorType = errorTypeMapper.selectEnabledLeafById(errorTypeId);
+        if (errorType == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "错误类型不存在、未启用或不是二级分类");
+        }
+    }
+
+    private String requireText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, message);
+        }
+        return value.trim();
+    }
+
+    private UserAnswerQueryRequest normalizeQueryRequest(UserAnswerQueryRequest request) {
+        return new UserAnswerQueryRequest(
+                request.answerStatus(),
+                request.questionType(),
+                request.questionId(),
+                request.level(),
+                request.minTotalScore(),
+                request.maxTotalScore(),
+                request.page(),
+                request.size(),
+                request.learningMode()
+        );
+    }
+
+    private void validateScoreRange(UserAnswerQueryRequest request) {
+        if (request.minTotalScore() != null
+                && request.maxTotalScore() != null
+                && request.minTotalScore().compareTo(request.maxTotalScore()) > 0) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "minTotalScore 不能大于 maxTotalScore");
+        }
+    }
+
+    private User getLocalDefaultUser() {
+        User user = userMapper.selectEnabledUserByCode(LOCAL_DEFAULT_USER_CODE);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "本地用户不存在或不可用");
+        }
+        return user;
+    }
+
+    private UserAnswerListItemVO toVO(UserAnswerListItemRow row) {
+        return new UserAnswerListItemVO(
+                row.getId(),
+                row.getQuestionId(),
+                row.getLearningMode(),
+                row.getQuestionType(),
+                row.getSourceText(),
+                row.getLevel(),
+                row.getDifficulty(),
+                row.getAnswerText(),
+                row.getAnswerStatus(),
+                new AnswerScoresVO(
+                        row.getGrammarVocabularyScore(),
+                        row.getNaturalFluencyScore(),
+                        row.getScenarioAdaptationScore(),
+                        row.getInformationCompletenessScore()
+                ),
+                row.getTotalScore(),
+                row.getRevisedText(),
+                row.getCreatedAt(),
+                row.getUpdatedAt()
+        );
+    }
+
+    private UserAnswerDetailVO toDetailVO(
+            UserAnswerDetailRow row,
+            List<TagVO> tags,
+            List<QuestionAnswerVO> answers
+    ) {
+        return new UserAnswerDetailVO(
+                row.getId(),
+                row.getQuestionId(),
+                row.getLearningMode(),
+                row.getQuestionType(),
+                row.getSourceText(),
+                row.getContextText(),
+                row.getLevel(),
+                row.getDifficulty(),
+                row.getGrammarPoint(),
+                tags,
+                answers,
+                row.getAnswerText(),
+                row.getAnswerStatus(),
+                new AnswerScoresVO(
+                        row.getGrammarVocabularyScore(),
+                        row.getNaturalFluencyScore(),
+                        row.getScenarioAdaptationScore(),
+                        row.getInformationCompletenessScore()
+                ),
+                row.getTotalScore(),
+                row.getOverallComment(),
+                row.getRevisedText(),
+                row.getCreatedAt(),
+                row.getUpdatedAt()
+        );
+    }
+
+    private TagVO toTagVO(Tag tag) {
+        return new TagVO(
+                tag.getId(),
+                tag.getTagType(),
+                tag.getParentId(),
+                tag.getCode(),
+                tag.getName(),
+                tag.getDescription(),
+                tag.getNameEn(),
+                tag.getDescriptionEn(),
+                tag.getSortOrder()
+        );
+    }
+
+    private QuestionAnswerVO toQuestionAnswerVO(QuestionAnswer answer) {
+        return new QuestionAnswerVO(
+                answer.getId(),
+                answer.getAnswerText(),
+                answer.getAnswerType(),
+                answer.getPrimaryAnswer(),
+                answer.getSortOrder()
+        );
+    }
+
+    private UserAnswerErrorVO toUserAnswerErrorVO(UserAnswerError error) {
+        return new UserAnswerErrorVO(
+                error.getId(),
+                error.getUserAnswerId(),
+                error.getErrorTypeId(),
+                error.getUserErrorTypeId(),
+                error.getOriginalText(),
+                error.getIssue(),
+                error.getSuggestion(),
+                error.getSeverity(),
+                error.getSortOrder(),
+                error.getCreatedAt()
+        );
+    }
+
+    private UserErrorTypeVO toUserErrorTypeVO(UserErrorTypeListItemRow row) {
+        return new UserErrorTypeVO(
+                row.getId(),
+                row.getLearningMode(),
+                row.getErrorTypeId(),
+                row.getErrorTypeCode(),
+                row.getErrorTypeName(),
+                row.getName(),
+                row.getDescription(),
+                row.getStatus(),
+                row.getCreatedAt(),
+                row.getUpdatedAt()
+        );
+    }
+
+    private record ResolvedUserErrorType(Long errorTypeId, Long userErrorTypeId) {
+    }
+
+    private record SavedCorrectionError(UserAnswerErrorVO error, String reviewSourceText) {
+    }
+}

@@ -2,9 +2,9 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.jt.learning.mapper.LearningStatisticsMapper">
+<mapper namespace="com.sazare.mapper.LearningStatisticsMapper">
 
-    <select id="selectOverview" resultType="com.jt.learning.dto.LearningStatisticsOverviewRow">
+    <select id="selectOverview" resultType="com.sazare.dto.LearningStatisticsOverviewRow">
         select
             count(1) as attempt_count,
             avg(total_score) filter (where answer_status = 'REVIEWED') as average_total_score
@@ -17,7 +17,7 @@
           and created_at &lt; #{endAt}
     </select>
 
-    <select id="selectCorrectionOverview" resultType="com.jt.learning.dto.LearningStatisticsOverviewRow">
+    <select id="selectCorrectionOverview" resultType="com.sazare.dto.LearningStatisticsOverviewRow">
         select
             count(1) as attempt_count,
             avg(total_score) filter (where answer_status = 'REVIEWED') as average_total_score
@@ -39,7 +39,7 @@
         order by activity_date desc
     </select>
 
-    <select id="selectDailyTrends" resultType="com.jt.learning.dto.LearningStatisticsDailyTrendRow">
+    <select id="selectDailyTrends" resultType="com.sazare.dto.LearningStatisticsDailyTrendRow">
         select
             created_at::date as day,
             count(1) as attempt_count,
@@ -55,7 +55,7 @@
         order by day
     </select>
 
-    <select id="selectCorrectionDailyTrends" resultType="com.jt.learning.dto.LearningStatisticsDailyTrendRow">
+    <select id="selectCorrectionDailyTrends" resultType="com.sazare.dto.LearningStatisticsDailyTrendRow">
         select
             created_at::date as day,
             count(1) as attempt_count,
@@ -71,7 +71,7 @@
         order by day
     </select>
 
-    <select id="selectScoreDimensions" resultType="com.jt.learning.dto.LearningStatisticsScoreDimensionsRow">
+    <select id="selectScoreDimensions" resultType="com.sazare.dto.LearningStatisticsScoreDimensionsRow">
         select
             avg(grammar_vocabulary_score) as grammar_vocabulary_score,
             avg(natural_fluency_score) as natural_fluency_score,
@@ -87,7 +87,7 @@
           and created_at &lt; #{endAt}
     </select>
 
-    <select id="selectCorrectionScoreDimensions" resultType="com.jt.learning.dto.LearningStatisticsScoreDimensionsRow">
+    <select id="selectCorrectionScoreDimensions" resultType="com.sazare.dto.LearningStatisticsScoreDimensionsRow">
         select
             avg(grammar_vocabulary_score) as grammar_vocabulary_score,
             avg(natural_fluency_score) as natural_fluency_score,
@@ -103,7 +103,7 @@
           and created_at &lt; #{endAt}
     </select>
 
-    <select id="selectCurrentReviewSummary" resultType="com.jt.learning.dto.LearningStatisticsCurrentReviewRow">
+    <select id="selectCurrentReviewSummary" resultType="com.sazare.dto.LearningStatisticsCurrentReviewRow">
         select
             count(*) filter (where review_card.status = 'ACTIVE' and review_card.due_at &lt;= #{now}) as due_card_count,
             count(*) filter (
@@ -120,7 +120,7 @@
           and review_card.deleted = false
     </select>
 
-    <select id="selectPeriodReviewSummary" resultType="com.jt.learning.dto.LearningStatisticsPeriodReviewRow">
+    <select id="selectPeriodReviewSummary" resultType="com.sazare.dto.LearningStatisticsPeriodReviewRow">
         select
             count(1) as review_attempt_count,
             count(*) filter (where review_attempt.result = 'PASS') as review_pass_count
