@@ -69,13 +69,13 @@ public class AiAnswerScoringPromptBuilder {
         TranslationDirection direction = TranslationDirection.fromQuestionType(question.getQuestionType());
         if (direction.isArticle(question.getQuestionType())) {
             return new AiQuestionPrompt(
-                    direction.adaptPrompt(ARTICLE_SYSTEM_PROMPT),
-                    direction.adaptPrompt(buildArticleUserPrompt(
+                    direction.applyPromptRules(ARTICLE_SYSTEM_PROMPT),
+                    direction.applyPromptRules(buildArticleUserPrompt(
                             question, standardAnswers, tagOptions, errorTypeOptions, request))
             );
         }
-        return new AiQuestionPrompt(direction.adaptPrompt(SYSTEM_PROMPT),
-                direction.adaptPrompt(buildUserPrompt(
+        return new AiQuestionPrompt(direction.applyPromptRules(SYSTEM_PROMPT),
+                direction.applyPromptRules(buildUserPrompt(
                         question, standardAnswers, tagOptions, errorTypeOptions, request)));
     }
 

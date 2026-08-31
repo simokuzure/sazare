@@ -15,6 +15,7 @@ import com.sazare.service.ai.prompt.AiJapaneseCorrectionPromptBuilder;
 import com.sazare.service.ai.validation.JapaneseCorrectionAiResponseValidator;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -28,6 +29,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class JapaneseCorrectionServiceImplTest {
+
+    @Test
+    void correctShouldNotOpenTransactionAroundAiCall() throws NoSuchMethodException {
+        var method = JapaneseCorrectionServiceImpl.class.getMethod("correct", JapaneseCorrectionRequest.class);
+
+        assertThat(method.isAnnotationPresent(Transactional.class)).isFalse();
+    }
 
     @Test
     void shouldSaveReviewedCorrectionWithoutQuestionAndRecalculateTotalScore() {

@@ -3,10 +3,7 @@ package com.sazare.service.impl;
 import com.sazare.common.TranslationDirection;
 import com.sazare.dto.AiAnswerErrorAnalysisDTO;
 import com.sazare.dto.AiErrorTypeOptionDTO;
-import com.sazare.dto.AiQuestionAnswerDTO;
-import com.sazare.dto.AiQuestionTagOptionDTO;
 import com.sazare.dto.AiReviewDTO;
-import com.sazare.dto.AiReviewGeneratedQuestionDTO;
 import com.sazare.dto.ReviewAttemptHistoryRow;
 import com.sazare.dto.ReviewAttemptRequest;
 import com.sazare.dto.ReviewCardListRow;
@@ -28,7 +25,6 @@ import com.sazare.exception.ErrorCode;
 import com.sazare.mapper.ErrorTypeMapper;
 import com.sazare.mapper.QuestionAnswerMapper;
 import com.sazare.mapper.QuestionMapper;
-import com.sazare.mapper.QuestionTagMapper;
 import com.sazare.mapper.ReviewAttemptMapper;
 import com.sazare.mapper.ReviewCardMapper;
 import com.sazare.mapper.ReviewCycleMapper;
@@ -38,14 +34,13 @@ import com.sazare.mapper.UserAnswerMapper;
 import com.sazare.mapper.UserErrorTypeMapper;
 import com.sazare.mapper.UserMapper;
 import com.sazare.service.ai.AiQuestionPrompt;
-import com.sazare.service.ai.AiReviewQuestionClient;
 import com.sazare.service.ai.AiReviewScoringClient;
-import com.sazare.service.ai.prompt.AiReviewQuestionPromptBuilder;
 import com.sazare.service.ai.prompt.AiReviewScoringPromptBuilder;
 import com.sazare.service.ai.validation.ReviewAiResponseValidator;
 import com.sazare.service.ReviewService;
 import com.sazare.service.DictionaryCacheService;
 import com.sazare.service.review.Sm2Result;
+import com.sazare.service.review.ReviewDerivedQuestionService;
 import com.sazare.service.review.Sm2Scheduler;
 import com.sazare.util.ReviewDueAtCalculator;
 import com.sazare.vo.AnswerErrorAnalysisVO;
@@ -64,19 +59,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.sazare.util.TagHierarchyUtils.secondLevelTags;
+import static com.sazare.service.review.ReviewDerivedQuestionService.GeneratedQuestionIds;
+import static com.sazare.service.review.ReviewDerivedQuestionService.PreparedDerivedQuestion;
 
 @Service
 public class ReviewServiceImpl implements ReviewService {
@@ -87,15 +81,11 @@ public class ReviewServiceImpl implements ReviewService {
     private static final String CARD_MASTERED = "MASTERED";
     private static final String CYCLE_IN_PROGRESS = "IN_PROGRESS";
     private static final String QUESTION_ORIGINAL = "ORIGINAL";
-    private static final String QUESTION_DERIVED = "DERIVED";
     private static final String STATUS_PENDING = "PENDING";
     private static final String STATUS_RETRY = "RETRY";
     private static final String STATUS_PASSED = "PASSED";
     private static final String RESULT_PASS = "PASS";
     private static final String RESULT_FAIL = "FAIL";
-    private static final String SOURCE_REVIEW_DERIVED = "REVIEW_DERIVED";
-    private static final String TAG_TYPE_SCENE = "SCENE";
-    private static final String TAG_TYPE_FUNCTION = "FUNCTION";
 
     private final ReviewCardMapper reviewCardMapper;
     private final ReviewCycleMapper reviewCycleMapper;
@@ -107,15 +97,14 @@ public class ReviewServiceImpl implements ReviewService {
     private final DictionaryCacheService dictionaryCacheService;
     private final QuestionMapper questionMapper;
     private final QuestionAnswerMapper questionAnswerMapper;
-    private final QuestionTagMapper questionTagMapper;
     private final TagMapper tagMapper;
     private final UserAnswerMapper userAnswerMapper;
     private final Sm2Scheduler sm2Scheduler;
     private final AiReviewScoringPromptBuilder scoringPromptBuilder;
-    private final AiReviewQuestionPromptBuilder questionPromptBuilder;
     private final AiReviewScoringClient scoringClient;
-    private final AiReviewQuestionClient questionClient;
     private final ReviewAiResponseValidator aiResponseValidator;
+    private final ReviewDerivedQuestionService derivedQuestionService;
+    private final TransactionTemplate transactionTemplate;
 
     public ReviewServiceImpl(
             ReviewCardMapper reviewCardMapper,
@@ -128,15 +117,14 @@ public class ReviewServiceImpl implements ReviewService {
             DictionaryCacheService dictionaryCacheService,
             QuestionMapper questionMapper,
             QuestionAnswerMapper questionAnswerMapper,
-            QuestionTagMapper questionTagMapper,
             TagMapper tagMapper,
             UserAnswerMapper userAnswerMapper,
             Sm2Scheduler sm2Scheduler,
             AiReviewScoringPromptBuilder scoringPromptBuilder,
-            AiReviewQuestionPromptBuilder questionPromptBuilder,
             AiReviewScoringClient scoringClient,
-            AiReviewQuestionClient questionClient,
-            ReviewAiResponseValidator aiResponseValidator
+            ReviewAiResponseValidator aiResponseValidator,
+            ReviewDerivedQuestionService derivedQuestionService,
+            TransactionTemplate transactionTemplate
     ) {
         this.reviewCardMapper = reviewCardMapper;
         this.reviewCycleMapper = reviewCycleMapper;
@@ -148,15 +136,14 @@ public class ReviewServiceImpl implements ReviewService {
         this.dictionaryCacheService = dictionaryCacheService;
         this.questionMapper = questionMapper;
         this.questionAnswerMapper = questionAnswerMapper;
-        this.questionTagMapper = questionTagMapper;
         this.tagMapper = tagMapper;
         this.userAnswerMapper = userAnswerMapper;
         this.sm2Scheduler = sm2Scheduler;
         this.scoringPromptBuilder = scoringPromptBuilder;
-        this.questionPromptBuilder = questionPromptBuilder;
         this.scoringClient = scoringClient;
-        this.questionClient = questionClient;
         this.aiResponseValidator = aiResponseValidator;
+        this.derivedQuestionService = derivedQuestionService;
+        this.transactionTemplate = transactionTemplate;
     }
 
     @Override
@@ -229,17 +216,70 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     @Override
-    @Transactional
     public ReviewAttemptVO submitReviewAttempt(Long cardId, ReviewAttemptRequest request) {
+        ReviewAttemptContext context = transactionTemplate.execute(
+                status -> loadReviewAttemptContext(cardId, request));
+
+        AiReviewDTO review;
+        try {
+            AiQuestionPrompt prompt = scoringPromptBuilder.build(
+                    context.userErrorType(), context.errorType(), context.question(), context.standardAnswers(),
+                    context.errorTypeOptions(), request.answerText());
+            review = aiResponseValidator.parseScoring(
+                    scoringClient.scoreAnswer(prompt), context.errorTypesByCode(), request.answerText().trim());
+        } catch (RuntimeException exception) {
+            if (exception instanceof BusinessException businessException) {
+                throw businessException;
+            }
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "复习 AI 评分失败");
+        }
+
+        ReviewAttemptWriteResult writeResult = transactionTemplate.execute(
+                status -> saveReviewAttempt(context, request, review));
+        ReviewCycleProgressRow progress = writeResult.progress();
+        String generationStatus = "NOT_REQUIRED";
+        if (writeResult.requiresDerivedQuestion()) {
+            try {
+                PreparedDerivedQuestion prepared = derivedQuestionService.prepare(
+                        writeResult.cycle(), context.userErrorType(), context.errorType());
+                DerivedQuestionWriteResult generated = transactionTemplate.execute(status -> savePreparedDerivedQuestion(
+                        writeResult.card().getId(), context.user().getId(), writeResult.cycle().getId(), prepared));
+                generationStatus = "SUCCEEDED";
+                progress = generated.progress();
+            } catch (BusinessException exception) {
+                log.error(
+                        "复习衍生题生成失败: cardId={}, cycleId={}",
+                        writeResult.card().getId(),
+                        writeResult.cycle().getId(),
+                        exception
+                );
+                generationStatus = "FAILED";
+            }
+        }
+
+        return new ReviewAttemptVO(
+                writeResult.userAnswer().getId(), review.quality(), writeResult.passed() ? RESULT_PASS : RESULT_FAIL,
+                review.targetErrorResolved(), review.feedback(), new AnswerScoresVO(
+                        review.scores().grammarVocabularyScore(),
+                        review.scores().naturalFluencyScore(),
+                        review.scores().scenarioAdaptationScore(),
+                        review.scores().informationCompletenessScore()
+                ), writeResult.totalScore(),
+                toErrorAnalysisVO(review.errorAnalysis(), context.errorTypesByCode()),
+                toProgressVO(writeResult.cycle(), progress), writeResult.nextDueAt(),
+                writeResult.completed() ? CARD_MASTERED : CARD_ACTIVE,
+                context.standardAnswers().stream().map(this::toAnswerVO).toList(), generationStatus
+        );
+    }
+
+    private ReviewAttemptContext loadReviewAttemptContext(Long cardId, ReviewAttemptRequest request) {
         User user = requireLocalUser();
-        LocalDateTime now = LocalDateTime.now();
         ReviewCard card = requireCard(reviewCardMapper.selectForUpdateByIdAndUserId(cardId, user.getId()));
-        requireReadyCard(card, now, request.earlyReview());
+        requireReadyCard(card, LocalDateTime.now(), request.earlyReview());
         ReviewCycle cycle = requireCurrentCycle(card.getId());
         ReviewCycleQuestion cycleQuestion = reviewCycleQuestionMapper
                 .selectByIdAndCycleId(request.cycleQuestionId(), cycle.getId());
         validateAttemptVersionAndEligibility(cycle, cycleQuestion, request.expectedAttemptCount());
-
         Question question = requireQuestion(cycleQuestion.getQuestionId());
         List<QuestionAnswer> standardAnswers = requireAnswers(question.getId());
         UserErrorType userErrorType = requireUserErrorType(card, user.getId());
@@ -249,23 +289,33 @@ public class ReviewServiceImpl implements ReviewService {
                 dictionaryCacheService.getEnabledLeafErrorTypes(), direction);
         Map<String, AiErrorTypeOptionDTO> errorTypesByCode = errorTypeOptions.stream()
                 .collect(Collectors.toMap(AiErrorTypeOptionDTO::code, Function.identity()));
+        return new ReviewAttemptContext(
+                user, card, cycle, cycleQuestion, question, standardAnswers, userErrorType, errorType,
+                errorTypeOptions, errorTypesByCode);
+    }
 
-        AiReviewDTO review;
-        try {
-            AiQuestionPrompt prompt = scoringPromptBuilder.build(
-                    userErrorType, errorType, question, standardAnswers, errorTypeOptions, request.answerText());
-            review = aiResponseValidator.parseScoring(
-                    scoringClient.scoreAnswer(prompt), errorTypesByCode, request.answerText().trim());
-        } catch (RuntimeException exception) {
-            if (exception instanceof BusinessException businessException) {
-                throw businessException;
-            }
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "复习 AI 评分失败");
+    private ReviewAttemptWriteResult saveReviewAttempt(
+            ReviewAttemptContext context,
+            ReviewAttemptRequest request,
+            AiReviewDTO review
+    ) {
+        LocalDateTime now = LocalDateTime.now();
+        ReviewCard card = requireCard(reviewCardMapper.selectForUpdateByIdAndUserId(
+                context.card().getId(), context.user().getId()));
+        requireReadyCard(card, now, request.earlyReview());
+        ReviewCycle cycle = requireCurrentCycle(card.getId());
+        ReviewCycleQuestion cycleQuestion = reviewCycleQuestionMapper
+                .selectByIdAndCycleId(request.cycleQuestionId(), cycle.getId());
+        validateAttemptVersionAndEligibility(cycle, cycleQuestion, request.expectedAttemptCount());
+        if (!cycle.getId().equals(context.cycle().getId())
+                || !cycleQuestion.getQuestionId().equals(context.question().getId())) {
+            throw business("复习题版本已过期，请刷新后重试");
         }
 
         BigDecimal totalScore = calculateTotalScore(review);
         UserAnswer userAnswer = createSubmittedAnswer(
-                user.getId(), question.getId(), userErrorType.getLearningMode(), request.answerText().trim(), now);
+                context.user().getId(), context.question().getId(), context.userErrorType().getLearningMode(),
+                request.answerText().trim(), now);
         userAnswerMapper.updateReviewed(
                 userAnswer.getId(),
                 review.scores().grammarVocabularyScore(),
@@ -300,40 +350,13 @@ public class ReviewServiceImpl implements ReviewService {
         }
 
         ReviewAttempt attempt = buildAttempt(
-                user.getId(), card.getId(), cycle.getId(), cycleQuestion.getId(), userAnswer.getId(),
+                context.user().getId(), card.getId(), cycle.getId(), cycleQuestion.getId(), userAnswer.getId(),
                 "REVIEW", passed ? RESULT_PASS : RESULT_FAIL, review.quality(), passed, review.feedback(),
                 sm2, successfulCount, nextDueAt, now);
         reviewAttemptMapper.insertAttempt(attempt);
-
-        String generationStatus = "NOT_REQUIRED";
-        if (!completed && requiresDerivedQuestion(cycle, progress)) {
-            try {
-                generateDerivedQuestionLocked(card, cycle, userErrorType, errorType, now);
-                generationStatus = "SUCCEEDED";
-                progress = loadProgress(cycle);
-            } catch (BusinessException exception) {
-                log.error(
-                        "复习衍生题生成失败: cardId={}, cycleId={}",
-                        card.getId(),
-                        cycle.getId(),
-                        exception
-                );
-                generationStatus = "FAILED";
-            }
-        }
-
-        return new ReviewAttemptVO(
-                userAnswer.getId(), review.quality(), passed ? RESULT_PASS : RESULT_FAIL,
-                review.targetErrorResolved(), review.feedback(), new AnswerScoresVO(
-                        review.scores().grammarVocabularyScore(),
-                        review.scores().naturalFluencyScore(),
-                        review.scores().scenarioAdaptationScore(),
-                        review.scores().informationCompletenessScore()
-                ), totalScore,
-                toErrorAnalysisVO(review.errorAnalysis(), errorTypesByCode),
-                toProgressVO(cycle, progress), nextDueAt, completed ? CARD_MASTERED : CARD_ACTIVE,
-                standardAnswers.stream().map(this::toAnswerVO).toList(), generationStatus
-        );
+        return new ReviewAttemptWriteResult(
+                card, cycle, userAnswer, progress, nextDueAt, totalScore, passed, completed,
+                !completed && requiresDerivedQuestion(cycle, progress));
     }
 
     private BigDecimal calculateTotalScore(AiReviewDTO review) {
@@ -346,8 +369,18 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     @Override
-    @Transactional
     public ReviewDerivedQuestionGenerationVO generateDerivedQuestion(Long cardId) {
+        DerivedGenerationContext context = transactionTemplate.execute(
+                status -> loadDerivedGenerationContext(cardId));
+        PreparedDerivedQuestion prepared = derivedQuestionService.prepare(
+                context.cycle(), context.userErrorType(), context.errorType());
+        DerivedQuestionWriteResult result = transactionTemplate.execute(status -> savePreparedDerivedQuestion(
+                context.card().getId(), context.user().getId(), context.cycle().getId(), prepared));
+        return new ReviewDerivedQuestionGenerationVO(
+                result.ids().questionId(), result.ids().cycleQuestionId(), "SUCCEEDED");
+    }
+
+    private DerivedGenerationContext loadDerivedGenerationContext(Long cardId) {
         User user = requireLocalUser();
         ReviewCard card = requireCard(reviewCardMapper.selectForUpdateByIdAndUserId(cardId, user.getId()));
         if (!CARD_ACTIVE.equals(card.getStatus())) {
@@ -356,9 +389,10 @@ public class ReviewServiceImpl implements ReviewService {
         ReviewCycle cycle = requireCurrentCycle(card.getId());
         UserErrorType userErrorType = requireUserErrorType(card, user.getId());
         ErrorType errorType = requireErrorType(userErrorType.getErrorTypeId());
-        GeneratedQuestionIds ids = generateDerivedQuestionLocked(
-                card, cycle, userErrorType, errorType, LocalDateTime.now());
-        return new ReviewDerivedQuestionGenerationVO(ids.questionId(), ids.cycleQuestionId(), "SUCCEEDED");
+        if (!requiresDerivedQuestion(cycle, loadProgress(cycle))) {
+            throw business("当前周期不需要生成衍生题");
+        }
+        return new DerivedGenerationContext(user, card, cycle, userErrorType, errorType);
     }
 
     @Override
@@ -517,81 +551,24 @@ public class ReviewServiceImpl implements ReviewService {
                 cycle.getSuccessfulReviewCount(), dueAt, occurredAt));
     }
 
-    private GeneratedQuestionIds generateDerivedQuestionLocked(
-            ReviewCard card,
-            ReviewCycle cycle,
-            UserErrorType userErrorType,
-            ErrorType errorType,
-            LocalDateTime now
+    private DerivedQuestionWriteResult savePreparedDerivedQuestion(
+            Long cardId,
+            Long userId,
+            Long expectedCycleId,
+            PreparedDerivedQuestion prepared
     ) {
-        ReviewCycleProgressRow progress = loadProgress(cycle);
-        if (!requiresDerivedQuestion(cycle, progress)) {
-            throw business("当前周期不需要生成衍生题");
+        ReviewCard card = requireCard(reviewCardMapper.selectForUpdateByIdAndUserId(cardId, userId));
+        if (!CARD_ACTIVE.equals(card.getStatus())) {
+            throw business("已掌握卡片不能生成衍生题");
+        }
+        ReviewCycle cycle = requireCurrentCycle(card.getId());
+        if (!cycle.getId().equals(expectedCycleId) || !requiresDerivedQuestion(cycle, loadProgress(cycle))) {
+            throw business("复习周期已变化，当前不需要生成衍生题");
         }
 
-        List<ReviewCycleQuestion> cycleQuestions = reviewCycleQuestionMapper.selectAllByCycleId(cycle.getId());
-        List<Long> questionIds = cycleQuestions.stream().map(ReviewCycleQuestion::getQuestionId).toList();
-        List<Question> questions = questionMapper.selectQuestionsByIds(questionIds);
-        Map<Long, Question> questionsById = questions.stream()
-                .collect(Collectors.toMap(Question::getId, Function.identity()));
-        List<QuestionAnswer> answers = questionAnswerMapper.selectActiveAnswersByQuestionIds(questionIds);
-        Map<Long, List<QuestionAnswer>> answersByQuestionId = answers.stream()
-                .collect(Collectors.groupingBy(QuestionAnswer::getQuestionId, LinkedHashMap::new, Collectors.toList()));
-        List<Tag> sceneTags = secondLevelTags(dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_SCENE));
-        List<Tag> functionTags = secondLevelTags(dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_FUNCTION));
-        Map<String, Tag> allowedTagsByCode = java.util.stream.Stream.concat(
-                        sceneTags.stream(), functionTags.stream())
-                .collect(Collectors.toMap(Tag::getCode, Function.identity(), (left, right) -> left, LinkedHashMap::new));
-        TranslationDirection direction = TranslationDirection.fromLearningMode(userErrorType.getLearningMode());
-        List<AiQuestionTagOptionDTO> sceneTagOptions = toTagOptions(sceneTags, direction);
-        List<AiQuestionTagOptionDTO> functionTagOptions = toTagOptions(functionTags, direction);
-        AiQuestionPrompt prompt = questionPromptBuilder.build(
-                userErrorType, errorType, questions, answersByQuestionId, sceneTagOptions, functionTagOptions);
-        Set<String> sourceTexts = questions.stream().map(Question::getSourceText).collect(Collectors.toSet());
-        AiReviewGeneratedQuestionDTO generated = aiResponseValidator.parseQuestion(
-                questionClient.generateQuestion(prompt, sceneTagOptions, functionTagOptions),
-                sourceTexts,
-                sceneTags.stream().map(Tag::getCode).collect(Collectors.toSet()),
-                allowedTagsByCode.keySet());
-
-        ReviewCycleQuestion baseCycleQuestion = reviewCycleQuestionMapper.selectLatestFailedOriginal(cycle.getId());
-        if (baseCycleQuestion == null) {
-            baseCycleQuestion = cycleQuestions.stream()
-                    .filter(item -> QUESTION_ORIGINAL.equals(item.getQuestionRole()))
-                    .max(Comparator.comparing(
-                            ReviewCycleQuestion::getLastAttemptAt,
-                            Comparator.nullsFirst(Comparator.naturalOrder())))
-                    .orElseThrow(() -> business("当前周期缺少原题"));
-        }
-        Question baseQuestion = questionsById.get(baseCycleQuestion.getQuestionId());
-        if (baseQuestion == null) {
-            throw business("复习原题不存在");
-        }
-
-        Question derived = newDerivedQuestion(baseQuestion, generated, now);
-        questionMapper.insertQuestion(derived);
-        for (AiQuestionAnswerDTO answerDTO : generated.answers()) {
-            questionAnswerMapper.insertQuestionAnswer(newDerivedAnswer(derived.getId(), answerDTO, now));
-        }
-        for (String tagCode : generated.tagCodes()) {
-            questionTagMapper.insertQuestionTag(derived.getId(), allowedTagsByCode.get(tagCode.trim()).getId());
-        }
-
-        ReviewCycleQuestion cycleQuestion = new ReviewCycleQuestion();
-        cycleQuestion.setReviewCycleId(cycle.getId());
-        cycleQuestion.setQuestionId(derived.getId());
-        cycleQuestion.setQuestionRole(QUESTION_DERIVED);
-        cycleQuestion.setReviewStatus(STATUS_PENDING);
-        cycleQuestion.setAttemptCount(0);
-        cycleQuestion.setLastQuality(null);
-        cycleQuestion.setLastAttemptAt(null);
-        cycleQuestion.setPassedAt(null);
-        cycleQuestion.setSortOrder(cycleQuestions.stream()
-                .map(ReviewCycleQuestion::getSortOrder).max(Integer::compareTo).orElse(-1) + 1);
-        cycleQuestion.setCreatedAt(now);
-        cycleQuestion.setUpdatedAt(now);
-        reviewCycleQuestionMapper.insertQuestion(cycleQuestion);
-        return new GeneratedQuestionIds(derived.getId(), cycleQuestion.getId());
+        LocalDateTime now = LocalDateTime.now();
+        GeneratedQuestionIds ids = derivedQuestionService.save(cycle, prepared, now);
+        return new DerivedQuestionWriteResult(ids, loadProgress(cycle));
     }
 
     private boolean requiresDerivedQuestion(ReviewCycle cycle, ReviewCycleProgressRow progress) {
@@ -661,14 +638,6 @@ public class ReviewServiceImpl implements ReviewService {
                 cycleQuestion.getId(), question.getId(), cycleQuestion.getQuestionRole(), question.getSourceText(),
                 question.getContextText(), question.getLevel(), question.getDifficulty(), question.getGrammarPoint(),
                 question.getSpoken(), question.getBusiness(), question.getExam(), tags, cycleQuestion.getAttemptCount());
-    }
-
-    private List<AiQuestionTagOptionDTO> toTagOptions(List<Tag> tags, TranslationDirection direction) {
-        return tags.stream()
-                .map(tag -> new AiQuestionTagOptionDTO(tag.getCode(),
-                        direction.displayText(tag.getName(), tag.getNameEn()),
-                        direction.displayText(tag.getDescription(), tag.getDescriptionEn())))
-                .toList();
     }
 
     private List<AiErrorTypeOptionDTO> localizeErrorTypes(
@@ -888,42 +857,6 @@ public class ReviewServiceImpl implements ReviewService {
         return attempt;
     }
 
-    private Question newDerivedQuestion(
-            Question base,
-            AiReviewGeneratedQuestionDTO generated,
-            LocalDateTime now
-    ) {
-        Question question = new Question();
-        question.setQuestionType(base.getQuestionType());
-        question.setSourceText(generated.sourceText().trim());
-        question.setContextText(generated.contextText().trim());
-        question.setLevel(base.getLevel());
-        question.setDifficulty(base.getDifficulty());
-        question.setGrammarPoint(generated.grammarPoint().trim());
-        question.setSpoken(base.getSpoken());
-        question.setBusiness(base.getBusiness());
-        question.setExam(base.getExam());
-        question.setSourceType(SOURCE_REVIEW_DERIVED);
-        question.setEnabled(true);
-        question.setDeleted(false);
-        question.setCreatedAt(now);
-        question.setUpdatedAt(now);
-        return question;
-    }
-
-    private QuestionAnswer newDerivedAnswer(Long questionId, AiQuestionAnswerDTO dto, LocalDateTime now) {
-        QuestionAnswer answer = new QuestionAnswer();
-        answer.setQuestionId(questionId);
-        answer.setAnswerText(dto.answerText().trim());
-        answer.setAnswerType(dto.answerType());
-        answer.setPrimaryAnswer(dto.primaryAnswer());
-        answer.setSortOrder(dto.sortOrder());
-        answer.setDeleted(false);
-        answer.setCreatedAt(now);
-        answer.setUpdatedAt(now);
-        return answer;
-    }
-
     private List<AnswerErrorAnalysisVO> toErrorAnalysisVO(
             List<AiAnswerErrorAnalysisDTO> errors,
             Map<String, AiErrorTypeOptionDTO> optionsByCode
@@ -958,6 +891,45 @@ public class ReviewServiceImpl implements ReviewService {
         return new BusinessException(ErrorCode.BUSINESS_ERROR, message);
     }
 
-    private record GeneratedQuestionIds(Long questionId, Long cycleQuestionId) {
+    private record ReviewAttemptContext(
+            User user,
+            ReviewCard card,
+            ReviewCycle cycle,
+            ReviewCycleQuestion cycleQuestion,
+            Question question,
+            List<QuestionAnswer> standardAnswers,
+            UserErrorType userErrorType,
+            ErrorType errorType,
+            List<AiErrorTypeOptionDTO> errorTypeOptions,
+            Map<String, AiErrorTypeOptionDTO> errorTypesByCode
+    ) {
+    }
+
+    private record ReviewAttemptWriteResult(
+            ReviewCard card,
+            ReviewCycle cycle,
+            UserAnswer userAnswer,
+            ReviewCycleProgressRow progress,
+            LocalDateTime nextDueAt,
+            BigDecimal totalScore,
+            boolean passed,
+            boolean completed,
+            boolean requiresDerivedQuestion
+    ) {
+    }
+
+    private record DerivedGenerationContext(
+            User user,
+            ReviewCard card,
+            ReviewCycle cycle,
+            UserErrorType userErrorType,
+            ErrorType errorType
+    ) {
+    }
+
+    private record DerivedQuestionWriteResult(
+            GeneratedQuestionIds ids,
+            ReviewCycleProgressRow progress
+    ) {
     }
 }

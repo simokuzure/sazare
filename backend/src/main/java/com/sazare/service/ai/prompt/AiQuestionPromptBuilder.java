@@ -13,8 +13,6 @@ import java.util.List;
 @Component
 public class AiQuestionPromptBuilder {
 
-    private static final String QUESTION_TYPE = "TRANSLATION_ZH_TO_JA";
-
     private static final String SYSTEM_PROMPT = """
             你是一个日语学习题目生成助手，服务对象是中文母语者。
 
@@ -66,12 +64,14 @@ public class AiQuestionPromptBuilder {
     ) {
         TranslationDirection direction = TranslationDirection.fromLearningMode(request.learningMode());
         return new AiQuestionPrompt(
-                direction.adaptPrompt(SYSTEM_PROMPT),
-                direction.adaptPrompt(buildUserPrompt(request, sceneTagOptions, functionTagOptions))
+                direction.applyPromptRules(SYSTEM_PROMPT),
+                direction.applyPromptRules(buildUserPrompt(
+                        direction, request, sceneTagOptions, functionTagOptions))
         );
     }
 
     private String buildUserPrompt(
+            TranslationDirection direction,
             AiQuestionGenerationRequest request,
             List<AiQuestionTagOptionDTO> sceneTagOptions,
             List<AiQuestionTagOptionDTO> functionTagOptions
@@ -109,9 +109,9 @@ public class AiQuestionPromptBuilder {
                 {
                   "questions": [
                     {
-                      "questionType": "TRANSLATION_ZH_TO_JA",
-                      "sourceText": "中文题目原文",
-                      "contextText": "中文语境说明",
+                      "questionType": "%s",
+                      "sourceText": "%s",
+                      "contextText": "%s",
                       "level": "%s",
                       "difficulty": %d,
                       "grammarPoint": "本题重点语法或表达",
@@ -133,7 +133,7 @@ public class AiQuestionPromptBuilder {
 
                 【字段规则】
                 1. questions 数组长度必须等于 %d。
-                2. questionType 固定为 TRANSLATION_ZH_TO_JA。
+                2. questionType 固定为 %s。
                 3. level 固定为 %s。
                 4. difficulty 固定为 %d。
                 5. tagCodes 至少包含 1 个 sceneTagOptions 中的 code。
@@ -144,16 +144,20 @@ public class AiQuestionPromptBuilder {
                 10. REFERENCE 答案的 primaryAnswer 必须是 false。
                 """.formatted(
                 request.questionCount(),
-                QUESTION_TYPE,
+                direction.shortQuestionType(),
                 request.level(),
                 request.difficulty(),
                 normalizeExtraRequirements(request.extraRequirements()),
                 toJson(sceneTagOptions),
                 toJson(functionTagOptions),
                 toJson(emptyIfNull(request.excludedSourceTexts())),
+                direction.shortQuestionType(),
+                direction.displayText("中文题目原文", "English source sentence"),
+                direction.displayText("中文语境说明", "English context description"),
                 request.level(),
                 request.difficulty(),
                 request.questionCount(),
+                direction.shortQuestionType(),
                 request.level(),
                 request.difficulty()
         );

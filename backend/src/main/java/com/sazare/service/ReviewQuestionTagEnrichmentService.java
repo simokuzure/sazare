@@ -9,6 +9,7 @@ import com.sazare.mapper.QuestionMapper;
 import com.sazare.mapper.QuestionTagMapper;
 import com.sazare.service.ai.AiQuestionPrompt;
 import com.sazare.service.ai.AiReviewQuestionClient;
+import com.sazare.service.ai.client.AiProviderHttpException;
 import com.sazare.service.ai.prompt.AiReviewTagPromptBuilder;
 import com.sazare.service.ai.validation.ReviewAiResponseValidator;
 import org.slf4j.Logger;
@@ -22,6 +23,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -103,6 +105,9 @@ public class ReviewQuestionTagEnrichmentService {
 
             List<Tag> sceneTags = secondLevelTags(dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_SCENE));
             List<Tag> functionTags = secondLevelTags(dictionaryCacheService.getEnabledTagsByType(TAG_TYPE_FUNCTION));
+            if (sceneTags.isEmpty()) {
+                throw new IllegalStateException("复习题标签补全缺少可用场景标签");
+            }
             Map<String, Tag> allowedTagsByCode = new LinkedHashMap<>();
             sceneTags.forEach(tag -> allowedTagsByCode.put(tag.getCode(), tag));
             functionTags.forEach(tag -> allowedTagsByCode.put(tag.getCode(), tag));
@@ -131,6 +136,11 @@ public class ReviewQuestionTagEnrichmentService {
     }
 
     private void handleFailure(Long questionId, int attempt, RuntimeException exception) {
+        if (!isRetryable(exception)) {
+            finish(questionId);
+            log.error("复习题标签后台补全失败，不再重试: questionId={}, attempt={}", questionId, attempt, exception);
+            return;
+        }
         if (attempt >= MAX_ATTEMPTS) {
             finish(questionId);
             log.error("复习题标签后台补全最终失败: questionId={}, attempts={}", questionId, attempt, exception);
@@ -159,6 +169,22 @@ public class ReviewQuestionTagEnrichmentService {
                     schedulingException
             );
         }
+    }
+
+    private boolean isRetryable(Throwable exception) {
+        for (Throwable current = exception; current != null; current = current.getCause()) {
+            if (current instanceof AiProviderHttpException providerException) {
+                int statusCode = providerException.getStatusCode();
+                return statusCode == 429 || statusCode >= 500 && statusCode <= 599;
+            }
+            if (current instanceof IOException) {
+                return true;
+            }
+            if (current instanceof InterruptedException) {
+                return false;
+            }
+        }
+        return false;
     }
 
     private List<AiQuestionTagOptionDTO> toTagOptions(List<Tag> tags) {

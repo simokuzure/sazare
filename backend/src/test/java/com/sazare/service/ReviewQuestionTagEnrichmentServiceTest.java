@@ -4,9 +4,12 @@ import com.sazare.dto.AiQuestionTagOptionDTO;
 import com.sazare.entity.Question;
 import com.sazare.entity.Tag;
 import com.sazare.event.ReviewQuestionTagEnrichmentRequestedEvent;
+import com.sazare.exception.BusinessException;
+import com.sazare.exception.ErrorCode;
 import com.sazare.mapper.QuestionMapper;
 import com.sazare.mapper.QuestionTagMapper;
 import com.sazare.service.ai.AiReviewQuestionClient;
+import com.sazare.service.ai.client.AiProviderHttpException;
 import com.sazare.service.ai.prompt.AiReviewTagPromptBuilder;
 import com.sazare.service.ai.validation.AiErrorAnalysisValidator;
 import com.sazare.service.ai.validation.ReviewAiResponseValidator;
@@ -19,6 +22,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import tools.jackson.databind.ObjectMapper;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
@@ -131,14 +135,15 @@ class ReviewQuestionTagEnrichmentServiceTest {
     }
 
     @Test
-    void shouldRetryAfterOneAndThreeMinutesThenStop() {
+    void shouldRetryRateLimitAfterOneAndThreeMinutesThenStop() {
         runTasksImmediately();
         when(questionMapper.selectQuestionById(500L)).thenReturn(reviewQuestion(500L));
         when(questionTagMapper.countByQuestionId(500L)).thenReturn(0);
         when(dictionaryCacheService.getEnabledTagsByType("SCENE"))
                 .thenReturn(List.of(tag(10L, "SCENE", "BANK")));
         when(dictionaryCacheService.getEnabledTagsByType("FUNCTION")).thenReturn(List.of());
-        when(questionClient.classifyTags(any(), any(), any())).thenThrow(new IllegalStateException("provider failed"));
+        when(questionClient.classifyTags(any(), any(), any()))
+                .thenThrow(new AiProviderHttpException(429, "rate limited"));
 
         Instant firstFailureAt = Instant.now();
         service.onTagEnrichmentRequested(new ReviewQuestionTagEnrichmentRequestedEvent(500L));
@@ -172,7 +177,11 @@ class ReviewQuestionTagEnrichmentServiceTest {
         when(dictionaryCacheService.getEnabledTagsByType("SCENE")).thenReturn(List.of(sceneTag));
         when(dictionaryCacheService.getEnabledTagsByType("FUNCTION")).thenReturn(List.of());
         when(questionClient.classifyTags(any(), any(), any()))
-                .thenThrow(new IllegalStateException("temporary failure"))
+                .thenThrow(new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "temporary network failure",
+                        new IOException("connection reset")
+                ))
                 .thenReturn("{\"tagCodes\":[\"BANK\"]}");
         when(tagWriter.saveIfUntagged(500L, List.of(10L))).thenReturn(true);
 
@@ -185,6 +194,37 @@ class ReviewQuestionTagEnrichmentServiceTest {
         verify(questionClient, times(2)).classifyTags(any(), any(), any());
         verify(taskScheduler).schedule(any(Runnable.class), any(Instant.class));
         verify(tagWriter).saveIfUntagged(500L, List.of(10L));
+    }
+
+    @Test
+    void shouldNotRetryPermanentProviderFailure() {
+        runTasksImmediately();
+        when(questionMapper.selectQuestionById(500L)).thenReturn(reviewQuestion(500L));
+        when(questionTagMapper.countByQuestionId(500L)).thenReturn(0);
+        when(dictionaryCacheService.getEnabledTagsByType("SCENE"))
+                .thenReturn(List.of(tag(10L, "SCENE", "BANK")));
+        when(dictionaryCacheService.getEnabledTagsByType("FUNCTION")).thenReturn(List.of());
+        when(questionClient.classifyTags(any(), any(), any()))
+                .thenThrow(new AiProviderHttpException(400, "invalid request"));
+
+        service.onTagEnrichmentRequested(new ReviewQuestionTagEnrichmentRequestedEvent(500L));
+
+        verify(questionClient).classifyTags(any(), any(), any());
+        verify(taskScheduler, never()).schedule(any(Runnable.class), any(Instant.class));
+    }
+
+    @Test
+    void shouldNotCallAiWithoutSceneTagCandidates() {
+        runTasksImmediately();
+        when(questionMapper.selectQuestionById(500L)).thenReturn(reviewQuestion(500L));
+        when(questionTagMapper.countByQuestionId(500L)).thenReturn(0);
+        when(dictionaryCacheService.getEnabledTagsByType("SCENE")).thenReturn(List.of());
+        when(dictionaryCacheService.getEnabledTagsByType("FUNCTION")).thenReturn(List.of());
+
+        service.onTagEnrichmentRequested(new ReviewQuestionTagEnrichmentRequestedEvent(500L));
+
+        verify(questionClient, never()).classifyTags(any(), any(), any());
+        verify(taskScheduler, never()).schedule(any(Runnable.class), any(Instant.class));
     }
 
     private void runTasksImmediately() {

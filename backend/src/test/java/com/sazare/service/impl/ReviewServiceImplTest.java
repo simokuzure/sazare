@@ -35,11 +35,13 @@ import com.sazare.service.ai.prompt.AiReviewQuestionPromptBuilder;
 import com.sazare.service.ai.prompt.AiReviewScoringPromptBuilder;
 import com.sazare.service.ai.validation.AiErrorAnalysisValidator;
 import com.sazare.service.ai.validation.ReviewAiResponseValidator;
+import com.sazare.service.review.ReviewDerivedQuestionService;
 import com.sazare.service.review.Sm2Scheduler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.aop.framework.ProxyFactory;
@@ -47,6 +49,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionInterceptor;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
@@ -65,6 +68,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -85,6 +89,7 @@ class ReviewServiceImplTest {
     private UserAnswerMapper userAnswerMapper;
     private AiReviewScoringClient scoringClient;
     private AiReviewQuestionClient questionClient;
+    private PlatformTransactionManager transactionManager;
     private ReviewServiceImpl service;
 
     @BeforeEach
@@ -104,17 +109,31 @@ class ReviewServiceImplTest {
         userAnswerMapper = mock(UserAnswerMapper.class);
         scoringClient = mock(AiReviewScoringClient.class);
         questionClient = mock(AiReviewQuestionClient.class);
+        transactionManager = mock(PlatformTransactionManager.class);
+        when(transactionManager.getTransaction(any())).thenReturn(mock(TransactionStatus.class));
 
         ObjectMapper objectMapper = new ObjectMapper();
         AiErrorAnalysisValidator errorValidator = new AiErrorAnalysisValidator();
+        ReviewAiResponseValidator responseValidator = new ReviewAiResponseValidator(objectMapper, errorValidator);
+        ReviewDerivedQuestionService derivedQuestionService = new ReviewDerivedQuestionService(
+                cycleQuestionMapper,
+                questionMapper,
+                answerMapper,
+                questionTagMapper,
+                dictionaryCacheService,
+                new AiReviewQuestionPromptBuilder(objectMapper),
+                questionClient,
+                responseValidator
+        );
         service = new ReviewServiceImpl(
                 cardMapper, cycleMapper, cycleQuestionMapper, attemptMapper, userMapper,
-                userErrorTypeMapper, errorTypeMapper, dictionaryCacheService, questionMapper, answerMapper, questionTagMapper,
+                userErrorTypeMapper, errorTypeMapper, dictionaryCacheService, questionMapper, answerMapper,
                 tagMapper, userAnswerMapper, new Sm2Scheduler(),
                 new AiReviewScoringPromptBuilder(objectMapper),
-                new AiReviewQuestionPromptBuilder(objectMapper),
-                scoringClient, questionClient,
-                new ReviewAiResponseValidator(objectMapper, errorValidator)
+                scoringClient,
+                responseValidator,
+                derivedQuestionService,
+                new TransactionTemplate(transactionManager)
         );
     }
 
@@ -344,6 +363,32 @@ class ReviewServiceImplTest {
         assertThat(dueAtCaptor.getValue())
                 .isEqualTo(reviewedAtCaptor.getValue().toLocalDate().plusDays(1).atTime(7, 0));
         assertThat(result.nextDueAt()).isEqualTo(dueAtCaptor.getValue());
+        InOrder order = inOrder(transactionManager, scoringClient, userAnswerMapper);
+        order.verify(transactionManager).getTransaction(any());
+        order.verify(transactionManager).commit(any());
+        order.verify(scoringClient).scoreAnswer(any());
+        order.verify(transactionManager).getTransaction(any());
+        order.verify(userAnswerMapper).insertUserAnswer(any());
+    }
+
+    @Test
+    void submitShouldRecheckAttemptVersionAfterAiScoring() {
+        stubReadyAttempt("RETRY", "ORIGINAL", 0, 4);
+        ReviewCycleQuestion initial = cycleQuestion("RETRY", "ORIGINAL", 0);
+        ReviewCycleQuestion changed = cycleQuestion("RETRY", "ORIGINAL", 1);
+        when(cycleQuestionMapper.selectByIdAndCycleId(30L, 20L)).thenReturn(initial, changed);
+        when(scoringClient.scoreAnswer(any())).thenReturn("""
+                {"review":{"quality":4,"targetErrorResolved":true,"feedback":"目标错误已解决。","scores":{"grammarVocabularyScore":88,"naturalFluencyScore":86,"scenarioAdaptationScore":90,"informationCompletenessScore":92},"errorAnalysis":[]}}
+                """);
+
+        assertThatThrownBy(() -> service.submitReviewAttempt(
+                1L, new ReviewAttemptRequest(30L, 0, "電車に間に合いました")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("版本已过期");
+
+        verify(scoringClient).scoreAnswer(any());
+        verify(userAnswerMapper, never()).insertUserAnswer(any());
+        verify(attemptMapper, never()).insertAttempt(any());
     }
 
     @Test

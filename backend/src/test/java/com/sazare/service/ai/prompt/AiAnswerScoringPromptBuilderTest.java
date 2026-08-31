@@ -143,11 +143,9 @@ class AiAnswerScoringPromptBuilderTest {
                 .contains("must remain Japanese")
                 .contains("TRANSLATION_EN_TO_JA");
         assertThat(prompt.userPrompt())
-                .contains("\"grammarComment\": \"English grammar explanation\"")
-                .contains("\"revisionSuggestions\": [\"English revision suggestion\"]")
-                .contains("\"usage\": \"English usage context\"")
-                .doesNotContain("使用简洁中文")
-                .doesNotContain("\"grammarComment\": \"中文语法说明\"")
-                .doesNotContain("\"revisionSuggestions\": [\"中文修改建议\"]");
+                .contains("feedbackLanguage: English")
+                .contains("Chinese wording in the reusable body describes shared field semantics")
+                .contains("\"grammarComment\": \"中文语法说明\"")
+                .contains("\"revisionSuggestions\": [\"中文修改建议\"]");
     }
 }

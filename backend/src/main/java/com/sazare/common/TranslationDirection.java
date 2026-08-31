@@ -25,7 +25,18 @@ public enum TranslationDirection {
     public static final String QUESTION_TYPE_PATTERN = "TRANSLATION_(ZH|EN)_TO_JA(_ARTICLE)?";
     public static final String SHORT_QUESTION_TYPE_PATTERN = "TRANSLATION_(ZH|EN)_TO_JA";
 
-    private static final String ENGLISH_OUTPUT_RULES = """
+    private static final String ENGLISH_PROMPT_RULES = """
+            [Translation direction rules]
+            learningMode: EN_TO_JA
+            task: English-to-Japanese
+            sourceLanguage: English
+            feedbackLanguage: English
+            shortQuestionType: TRANSLATION_EN_TO_JA
+            articleQuestionType: TRANSLATION_EN_TO_JA_ARTICLE
+
+            These direction rules take precedence over the reusable prompt body below.
+            Chinese wording in the reusable body describes shared field semantics or examples;
+            it must not change the source language, feedback language, or questionType above.
             The source language and all explanatory output must be English.
             In scoring, correction, and review JSON, overallComment, every comments field,
             sentenceReviews[].comment, errorAnalysis[].issue,
@@ -100,42 +111,11 @@ public enum TranslationDirection {
         return text == null ? 0 : text.replaceAll("\\s", "").length();
     }
 
-    public String adaptPrompt(String prompt) {
+    public String applyPromptRules(String prompt) {
         if (this == ZH_TO_JA) {
             return prompt;
         }
-        return ENGLISH_OUTPUT_RULES + "\n"
-                + prompt
-                .replace(ZH_TO_JA.articleQuestionType, articleQuestionType)
-                .replace(ZH_TO_JA.shortQuestionType, shortQuestionType)
-                .replace("中译日", "English-to-Japanese")
-                .replace("中文文章", "英文文章")
-                .replace("中文题目", "英文题目")
-                .replace("中文原文", "英文原文")
-                .replace("中文原句", "英文原句")
-                .replace("中文句子", "英文句子")
-                .replace("中文语境", "英文语境")
-                .replace("中文背景", "英文背景")
-                .replace("中文短语", "英文短语")
-                .replace("中文全文总评", "English overall feedback")
-                .replace("中文总评", "English overall feedback")
-                .replace("中文反馈", "English feedback")
-                .replace("中文语法与词汇说明", "English grammar and vocabulary explanation")
-                .replace("中文语法说明", "English grammar explanation")
-                .replace("中文词汇说明", "English vocabulary explanation")
-                .replace("中文自然度与篇章说明", "English naturalness and cohesion explanation")
-                .replace("中文自然度说明", "English naturalness explanation")
-                .replace("中文体裁、语域与文体说明", "English genre, register, and style explanation")
-                .replace("中文场景说明", "English context explanation")
-                .replace("中文逐句说明", "English sentence-level explanation")
-                .replace("中文问题说明", "English issue explanation")
-                .replace("中文全文修改建议", "English revision suggestion")
-                .replace("中文修改建议", "English revision suggestion")
-                .replace("中文使用场景", "English usage context")
-                .replace("使用简洁中文", "use concise English")
-                .replace("中文说明", "English explanation")
-                .replace("中文建议", "English suggestion")
-                .replace("简体中文含义", "English meaning");
+        return ENGLISH_PROMPT_RULES + "\n" + prompt;
     }
 
     public String displayText(String chinese, String english) {

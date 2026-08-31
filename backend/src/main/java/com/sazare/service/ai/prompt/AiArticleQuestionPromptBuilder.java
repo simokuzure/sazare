@@ -127,18 +127,18 @@ public class AiArticleQuestionPromptBuilder {
                     "roles": %s
                   },
                   "article": {
-                    "questionType": "TRANSLATION_ZH_TO_JA_ARTICLE",
-                    "contextText": "中文背景、体裁和语体说明",
+                    "questionType": "%s",
+                    "contextText": "%s",
                     "level": "%s",
                     "difficulty": %d,
-                    "grammarPoint": "郊外：郊外（こうがい）\\n专用名称：对应日语名称（读音）",
+                    "grammarPoint": "%s",
                     "spoken": false,
                     "business": false,
                     "exam": false,
                     "sentences": [
                       {
                         "index": 0,
-                        "chineseText": "完整中文句子。",
+                        "chineseText": "%s",
                         "japaneseReference": "対応する自然な日本語文。"
                       }
                     ]
@@ -149,10 +149,17 @@ public class AiArticleQuestionPromptBuilder {
                 retryInstructions,
                 seed,
                 toJson(responseRoleExample),
+                direction.articleQuestionType(),
+                direction.displayText("中文背景、体裁和语体说明", "English background, genre, and register"),
                 request.level(),
-                request.difficulty()
+                request.difficulty(),
+                direction.displayText(
+                        "郊外：郊外（こうがい）\\n专用名称：对应日语名称（读音）",
+                        "suburb: 郊外（こうがい）\\nproper noun: corresponding Japanese name (reading)"
+                ),
+                direction.displayText("完整中文句子。", "A complete English sentence.")
         );
-        return new AiQuestionPrompt(direction.adaptPrompt(SYSTEM_PROMPT), direction.adaptPrompt(userPrompt));
+        return new AiQuestionPrompt(direction.applyPromptRules(SYSTEM_PROMPT), direction.applyPromptRules(userPrompt));
     }
 
     private String jlptRequirement(String level) {

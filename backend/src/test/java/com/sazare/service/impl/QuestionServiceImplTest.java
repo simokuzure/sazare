@@ -33,6 +33,9 @@ import com.sazare.service.ai.AiQuestionPrompt;
 import com.sazare.service.ai.prompt.AiAnswerScoringPromptBuilder;
 import com.sazare.service.ai.prompt.AiQuestionPromptBuilder;
 import com.sazare.service.ai.validation.AiErrorAnalysisValidator;
+import com.sazare.service.ai.validation.AiAnswerScoringResponseValidator;
+import com.sazare.service.ai.validation.AiQuestionGenerationResponseValidator;
+import com.sazare.service.question.GeneratedQuestionPersistenceService;
 import com.sazare.service.question.QuestionEmbeddingService;
 import com.sazare.vo.AnswerReviewVO;
 import com.sazare.vo.PageVO;
@@ -42,6 +45,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
@@ -58,6 +65,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -76,6 +84,7 @@ class QuestionServiceImplTest {
     private AiAnswerScoringClient aiAnswerScoringClient;
     private QuestionEmbeddingService questionEmbeddingService;
     private ArticleGenerationMetadataMapper articleGenerationMetadataMapper;
+    private PlatformTransactionManager transactionManager;
     private QuestionServiceImpl questionService;
 
     @BeforeEach
@@ -92,6 +101,8 @@ class QuestionServiceImplTest {
         aiAnswerScoringClient = mock(AiAnswerScoringClient.class);
         questionEmbeddingService = mock(QuestionEmbeddingService.class);
         articleGenerationMetadataMapper = mock(ArticleGenerationMetadataMapper.class);
+        transactionManager = mock(PlatformTransactionManager.class);
+        when(transactionManager.getTransaction(any())).thenReturn(mock(TransactionStatus.class));
 
         ObjectMapper objectMapper = new ObjectMapper();
         when(dictionaryCacheService.getEnabledLeafErrorTypes()).thenReturn(List.of(errorTypeOption()));
@@ -108,20 +119,30 @@ class QuestionServiceImplTest {
                 aiQuestionClient,
                 new AiAnswerScoringPromptBuilder(objectMapper),
                 aiAnswerScoringClient,
-                new AiErrorAnalysisValidator(),
+                new AiAnswerScoringResponseValidator(objectMapper, new AiErrorAnalysisValidator()),
+                new AiQuestionGenerationResponseValidator(objectMapper),
                 questionEmbeddingService,
-                articleGenerationMetadataMapper,
+                new GeneratedQuestionPersistenceService(
+                        questionMapper,
+                        questionAnswerMapper,
+                        questionTagMapper,
+                        questionEmbeddingService,
+                        articleGenerationMetadataMapper,
+                        objectMapper
+                ),
+                new TransactionTemplate(transactionManager),
                 objectMapper
         );
     }
 
     @Test
-    void generateQuestionsByAiShouldSaveValidatedQuestions() {
+    void generateQuestionsByAiShouldSaveValidatedQuestionWithoutEmbeddingExcludedSources() {
         Tag sceneTag = tag(1L, "SCENE", "DAILY_LIFE_WEATHER", "天气");
         Tag functionTag = tag(2L, "FUNCTION", "FUNCTION_PROPOSE_PLAN", "提出计划");
         when(tagMapper.selectEnabledTagsByCodes(eq("SCENE"), anyList())).thenReturn(List.of(sceneTag));
         when(tagMapper.selectEnabledTagsByCodes(eq("FUNCTION"), anyList())).thenReturn(List.of(functionTag));
         when(aiQuestionClient.generateQuestions(any(), any(), anyList(), anyList())).thenReturn(validAiJson());
+        when(questionEmbeddingService.embedQuestion(any(), any())).thenReturn(vector());
         when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
             Question question = invocation.getArgument(0);
             question.setId(100L);
@@ -134,7 +155,7 @@ class QuestionServiceImplTest {
             return 1;
         });
 
-        List<QuestionVO> questions = questionService.generateQuestionsByAi(request());
+        List<QuestionVO> questions = questionService.generateQuestionsByAi(requestWithExcludedSourceText());
 
         assertThat(questions).hasSize(1);
         QuestionVO question = questions.getFirst();
@@ -150,7 +171,16 @@ class QuestionServiceImplTest {
         verify(questionAnswerMapper).insertQuestionAnswer(any(QuestionAnswer.class));
         verify(questionTagMapper).insertQuestionTag(100L, 1L);
         verify(questionTagMapper).insertQuestionTag(100L, 2L);
+        verify(questionEmbeddingService).embedQuestion(
+                "如果明天下雨，我们就在家学习吧。",
+                "朋友之间讨论明天的安排。"
+        );
+        verify(questionEmbeddingService).findSimilarQuestions(anyList());
         verify(questionEmbeddingService).saveEmbedding(any(Question.class), anyList());
+        InOrder order = inOrder(aiQuestionClient, transactionManager, questionMapper);
+        order.verify(aiQuestionClient).generateQuestions(any(), any(), anyList(), anyList());
+        order.verify(transactionManager).getTransaction(any());
+        order.verify(questionMapper).insertQuestion(any());
     }
 
     @Test
@@ -599,6 +629,7 @@ class QuestionServiceImplTest {
         Tag sceneTag = tag(1L, "SCENE", "FINANCE_BANK", "银行");
         Tag functionTag = tag(2L, "FUNCTION", "FUNCTION_EXPRESS_PLAN", "表达计划");
         when(tagMapper.selectEnabledTagsByAnyCodes(anyList())).thenReturn(List.of(sceneTag, functionTag));
+        when(questionEmbeddingService.embedQuestion(any(), any())).thenReturn(vector());
         when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
             Question question = invocation.getArgument(0);
             question.setId(100L);
@@ -614,7 +645,15 @@ class QuestionServiceImplTest {
 
         assertThat(question.id()).isEqualTo(100L);
         assertThat(question.sourceType()).isEqualTo("MANUAL");
-        verify(questionEmbeddingService).synchronizeEmbedding(any(Question.class));
+        verify(questionEmbeddingService).embedQuestion(
+                "我今天下午要去银行办理转账。",
+                "日常生活中说明下午的计划。"
+        );
+        verify(questionEmbeddingService).saveEmbedding(any(Question.class), any());
+        InOrder order = inOrder(questionEmbeddingService, transactionManager, questionMapper);
+        order.verify(questionEmbeddingService).embedQuestion(any(), any());
+        order.verify(transactionManager).getTransaction(any());
+        order.verify(questionMapper).insertQuestion(any());
         assertThat(question.tags()).extracting("code")
                 .containsExactly("FINANCE_BANK", "FUNCTION_EXPRESS_PLAN");
         assertThat(question.answers()).extracting("answerType")
@@ -626,6 +665,74 @@ class QuestionServiceImplTest {
         assertThat(questionCaptor.getValue().getEnabled()).isTrue();
         verify(questionTagMapper).insertQuestionTag(100L, 1L);
         verify(questionTagMapper).insertQuestionTag(100L, 2L);
+    }
+
+    @Test
+    void createQuestionShouldAcceptEnglishSourceForEnglishToJapaneseQuestion() {
+        Tag sceneTag = tag(1L, "SCENE", "FINANCE_BANK", "银行");
+        when(tagMapper.selectEnabledTagsByAnyCodes(anyList())).thenReturn(List.of(sceneTag));
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(100L);
+            return 1;
+        });
+        when(questionAnswerMapper.insertQuestionAnswer(any())).thenAnswer(invocation -> {
+            QuestionAnswer answer = invocation.getArgument(0);
+            answer.setId(200L);
+            return 1;
+        });
+
+        QuestionVO question = questionService.createQuestion(englishCreateRequest());
+
+        assertThat(question.questionType()).isEqualTo("TRANSLATION_EN_TO_JA");
+        assertThat(question.sourceText()).isEqualTo("I need to transfer money at the bank this afternoon.");
+        verify(questionMapper).insertQuestion(any());
+    }
+
+    @Test
+    void createQuestionShouldRejectJapaneseKanaInChineseSource() {
+        QuestionCreateRequest request = new QuestionCreateRequest(
+                "TRANSLATION_ZH_TO_JA",
+                "我今天要去コンビニ买东西。",
+                "日常购物场景。",
+                "N4",
+                3,
+                "予定を表す表現",
+                true,
+                false,
+                false,
+                List.of("FINANCE_BANK"),
+                List.of(new QuestionAnswerRequest(
+                        "今日はコンビニに買い物に行きます。",
+                        "STANDARD",
+                        true,
+                        0
+                ))
+        );
+
+        assertThatThrownBy(() -> questionService.createQuestion(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("日语假名");
+
+        verify(questionMapper, never()).insertQuestion(any());
+    }
+
+    @Test
+    void createArticleShouldRejectMismatchedSourceAndAnswerSegments() {
+        when(tagMapper.selectEnabledTagsByAnyCodes(anyList()))
+                .thenReturn(List.of(tag(3L, "GENRE", "NARRATIVE", "叙事文")));
+
+        QuestionCreateRequest request = articleCreateRequest(
+                "TRANSLATION_ZH_TO_JA_ARTICLE",
+                "今天我去了图书馆。\n\n回家后我读完了借来的书。",
+                "今日、図書館に行きました。"
+        );
+
+        assertThatThrownBy(() -> questionService.createQuestion(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("段落数必须一致");
+
+        verify(questionMapper, never()).insertQuestion(any());
     }
 
     @Test
@@ -775,6 +882,7 @@ class QuestionServiceImplTest {
         Tag sceneTag = tag(1L, "SCENE", "FINANCE_BANK", "银行");
         when(questionMapper.selectQuestionById(100L)).thenReturn(existingQuestion);
         when(tagMapper.selectEnabledTagsByAnyCodes(anyList())).thenReturn(List.of(sceneTag));
+        when(questionEmbeddingService.contentHash(anyString(), anyString(), anyString())).thenReturn("same-hash");
         when(questionMapper.updateQuestion(any())).thenReturn(1);
         when(questionAnswerMapper.insertQuestionAnswer(any())).thenAnswer(invocation -> {
             QuestionAnswer answer = invocation.getArgument(0);
@@ -790,6 +898,37 @@ class QuestionServiceImplTest {
         verify(questionAnswerMapper).logicalDeleteByQuestionId(100L);
         verify(questionTagMapper).deleteQuestionTagsByQuestionId(100L);
         verify(questionTagMapper).insertQuestionTag(100L, 1L);
+        verify(questionEmbeddingService, never()).embedQuestion(any(), any());
+        verify(questionEmbeddingService, never()).saveEmbedding(any(), any());
+    }
+
+    @Test
+    void updateArticleShouldAcceptShortEnglishArticleWithoutGenerationLengthTier() {
+        Question existingQuestion = articleQuestion(100L);
+        existingQuestion.setQuestionType("TRANSLATION_EN_TO_JA_ARTICLE");
+        Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
+        when(questionMapper.selectQuestionById(100L)).thenReturn(existingQuestion);
+        when(tagMapper.selectEnabledTagsByAnyCodes(anyList())).thenReturn(List.of(genreTag));
+        when(questionEmbeddingService.contentHash(anyString(), anyString(), anyString()))
+                .thenReturn("existing-hash", "updated-hash");
+        when(questionMapper.updateQuestion(any())).thenReturn(1);
+        when(questionAnswerMapper.insertQuestionAnswer(any())).thenAnswer(invocation -> {
+            QuestionAnswer answer = invocation.getArgument(0);
+            answer.setId(200L);
+            return 1;
+        });
+
+        QuestionVO question = questionService.updateQuestion(100L, englishArticleUpdateRequest());
+
+        assertThat(question.sourceText()).isEqualTo("I visited the library.\n\nThen I read a book at home.");
+        assertThat(question.answers()).singleElement()
+                .extracting("answerText")
+                .isEqualTo("図書館に行きました。\n\nその後、家で本を読みました。");
+        verify(questionMapper).updateQuestion(any());
+        verify(questionEmbeddingService).embedArticleBody(
+                "I visited the library.\n\nThen I read a book at home."
+        );
+        verify(questionEmbeddingService).saveEmbedding(any(), any());
     }
 
     @Test
@@ -853,6 +992,10 @@ class QuestionServiceImplTest {
                 any(LocalDateTime.class)
         );
         assertThat(totalScoreCaptor.getValue()).isEqualByComparingTo(new BigDecimal("81.50"));
+        InOrder order = inOrder(aiAnswerScoringClient, transactionManager, userAnswerMapper);
+        order.verify(aiAnswerScoringClient).scoreAnswer(any(), any(), any(), anyList(), anyList());
+        order.verify(transactionManager).getTransaction(any());
+        order.verify(userAnswerMapper).insertUserAnswer(any());
     }
 
     @Test
@@ -1082,6 +1225,18 @@ class QuestionServiceImplTest {
         );
     }
 
+    private AiQuestionGenerationRequest requestWithExcludedSourceText() {
+        return new AiQuestionGenerationRequest(
+                1,
+                "N4",
+                3,
+                List.of("DAILY_LIFE_WEATHER"),
+                List.of("FUNCTION_PROPOSE_PLAN"),
+                List.of("已经生成并保存的题目。"),
+                "偏口语"
+        );
+    }
+
     private QuestionCreateRequest createRequest() {
         return new QuestionCreateRequest(
                 "TRANSLATION_ZH_TO_JA",
@@ -1111,6 +1266,48 @@ class QuestionServiceImplTest {
         );
     }
 
+    private QuestionCreateRequest englishCreateRequest() {
+        return new QuestionCreateRequest(
+                "TRANSLATION_EN_TO_JA",
+                "I need to transfer money at the bank this afternoon.",
+                "Explain an afternoon plan in an everyday situation.",
+                "N4",
+                3,
+                "予定を表す表現",
+                true,
+                false,
+                false,
+                List.of("FINANCE_BANK"),
+                List.of(new QuestionAnswerRequest(
+                        "今日の午後、銀行へ振り込みに行きます。",
+                        "STANDARD",
+                        true,
+                        0
+                ))
+        );
+    }
+
+    private QuestionCreateRequest articleCreateRequest(String questionType, String sourceText, String answerText) {
+        return new QuestionCreateRequest(
+                questionType,
+                sourceText,
+                "日常生活的简短叙事文。",
+                "N4",
+                3,
+                "时态和篇章衔接",
+                false,
+                false,
+                false,
+                List.of("NARRATIVE"),
+                List.of(new QuestionAnswerRequest(
+                        answerText,
+                        "STANDARD",
+                        true,
+                        0
+                ))
+        );
+    }
+
     private QuestionUpdateRequest updateRequest() {
         return new QuestionUpdateRequest(
                 "TRANSLATION_ZH_TO_JA",
@@ -1125,6 +1322,27 @@ class QuestionServiceImplTest {
                 List.of("FINANCE_BANK"),
                 List.of(new QuestionAnswerRequest(
                         "今日の午後、銀行へ振り込みに行きます。",
+                        "STANDARD",
+                        true,
+                        0
+                ))
+        );
+    }
+
+    private QuestionUpdateRequest englishArticleUpdateRequest() {
+        return new QuestionUpdateRequest(
+                "TRANSLATION_EN_TO_JA_ARTICLE",
+                "I visited the library.\n\nThen I read a book at home.",
+                "A short narrative about reading.",
+                "N4",
+                3,
+                "時制と文章のつながり",
+                false,
+                false,
+                false,
+                List.of("NARRATIVE"),
+                List.of(new QuestionAnswerRequest(
+                        "図書館に行きました。\n\nその後、家で本を読みました。",
                         "STANDARD",
                         true,
                         0

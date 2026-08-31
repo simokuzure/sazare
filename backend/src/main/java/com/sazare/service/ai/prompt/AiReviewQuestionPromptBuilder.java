@@ -77,7 +77,7 @@ public class AiReviewQuestionPromptBuilder {
                 toJson(sceneTagOptions),
                 toJson(functionTagOptions));
         TranslationDirection direction = TranslationDirection.fromLearningMode(userErrorType.getLearningMode());
-        return new AiQuestionPrompt(direction.adaptPrompt(SYSTEM_PROMPT), direction.adaptPrompt(userPrompt));
+        return new AiQuestionPrompt(direction.applyPromptRules(SYSTEM_PROMPT), direction.applyPromptRules(userPrompt));
     }
 
     private String toJson(Object value) {

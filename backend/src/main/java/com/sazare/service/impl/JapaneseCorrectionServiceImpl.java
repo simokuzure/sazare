@@ -24,7 +24,6 @@ import com.sazare.vo.JapaneseCorrectionCommentsVO;
 import com.sazare.vo.JapaneseCorrectionErrorVO;
 import com.sazare.vo.JapaneseCorrectionReviewVO;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -67,7 +66,6 @@ public class JapaneseCorrectionServiceImpl implements JapaneseCorrectionService 
     }
 
     @Override
-    @Transactional
     public JapaneseCorrectionReviewVO correct(JapaneseCorrectionRequest request) {
         User user = userMapper.selectEnabledUserByCode(LOCAL_DEFAULT_USER_CODE);
         if (user == null) {

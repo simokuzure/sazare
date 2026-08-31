@@ -28,15 +28,16 @@ class TranslationDirectionTest {
     }
 
     @Test
-    void shouldAdaptPromptWithoutDuplicatingService() {
+    void shouldPrependStructuredRulesWithoutRewritingPromptBody() {
         String prompt = "请生成中译日题目，题型 TRANSLATION_ZH_TO_JA，用中文说明。";
 
-        assertThat(TranslationDirection.EN_TO_JA.adaptPrompt(prompt))
+        assertThat(TranslationDirection.EN_TO_JA.applyPromptRules(prompt))
                 .contains("English-to-Japanese")
                 .contains("TRANSLATION_EN_TO_JA")
                 .contains("revisionSuggestions[]")
                 .contains("must remain Japanese")
-                .contains("English");
-        assertThat(TranslationDirection.ZH_TO_JA.adaptPrompt(prompt)).isEqualTo(prompt);
+                .contains("sourceLanguage: English")
+                .endsWith(prompt);
+        assertThat(TranslationDirection.ZH_TO_JA.applyPromptRules(prompt)).isEqualTo(prompt);
     }
 }

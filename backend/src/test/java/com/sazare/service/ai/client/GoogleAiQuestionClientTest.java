@@ -147,7 +147,9 @@ class GoogleAiQuestionClientTest {
                 List.of(),
                 List.of()
         ))
-                .isInstanceOf(BusinessException.class)
+                .isInstanceOf(AiProviderHttpException.class)
+                .satisfies(exception -> assertThat(((AiProviderHttpException) exception).getStatusCode())
+                        .isEqualTo(429))
                 .hasMessage("Google AI 服务返回异常: HTTP 429 RESOURCE_EXHAUSTED - Quota exceeded for this model.");
     }
 
