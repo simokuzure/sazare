@@ -237,7 +237,6 @@ export default function ReviewPage() {
     try {
       const result = await submitReviewAttempt(selectedCardId, {
         cycleQuestionId: detail.currentQuestion.cycleQuestionId,
-        expectedAttemptCount: detail.currentQuestion.attemptCount,
         answerText: normalizedAnswer,
         earlyReview,
       })

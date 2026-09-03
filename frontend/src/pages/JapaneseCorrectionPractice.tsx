@@ -38,6 +38,14 @@ const EMPTY_SESSION: CorrectionSession = {
   confirmationNotice: null,
 }
 
+const TRANSLATION_ONLY_ERROR_TYPE_CODES = new Set([
+  'OMISSION',
+  'MISTRANSLATION',
+  'ADDITION',
+  'FALSE_FRIEND',
+  'CHINESE_CALQUE',
+])
+
 export default function JapaneseCorrectionPractice() {
   const { learningMode, text } = useLanguage()
   const [session, setSession] = useState<CorrectionSession>(EMPTY_SESSION)
@@ -89,7 +97,9 @@ export default function JapaneseCorrectionPractice() {
     setUserErrorTypesLoading(true)
     try {
       const result = await fetchUserErrorTypes({ learningMode, status: 'ACTIVE', page: 1, size: 100 })
-      setUserErrorTypes(result.items)
+      setUserErrorTypes(result.items.filter(
+        (item) => !TRANSLATION_ONLY_ERROR_TYPE_CODES.has(item.errorTypeCode),
+      ))
     } catch (fetchError: unknown) {
       setUserErrorTypes([])
       setSession((current) => ({

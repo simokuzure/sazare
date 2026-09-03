@@ -23,6 +23,7 @@ import com.sazare.mapper.ArticleGenerationMetadataMapper;
 import com.sazare.mapper.ErrorTypeMapper;
 import com.sazare.mapper.QuestionMapper;
 import com.sazare.mapper.QuestionTagMapper;
+import com.sazare.mapper.ReviewCycleQuestionMapper;
 import com.sazare.mapper.TagMapper;
 import com.sazare.mapper.UserAnswerMapper;
 import com.sazare.mapper.UserMapper;
@@ -76,6 +77,7 @@ class QuestionServiceImplTest {
     private QuestionMapper questionMapper;
     private QuestionAnswerMapper questionAnswerMapper;
     private QuestionTagMapper questionTagMapper;
+    private ReviewCycleQuestionMapper reviewCycleQuestionMapper;
     private UserMapper userMapper;
     private UserAnswerMapper userAnswerMapper;
     private ErrorTypeMapper errorTypeMapper;
@@ -93,6 +95,7 @@ class QuestionServiceImplTest {
         questionMapper = mock(QuestionMapper.class);
         questionAnswerMapper = mock(QuestionAnswerMapper.class);
         questionTagMapper = mock(QuestionTagMapper.class);
+        reviewCycleQuestionMapper = mock(ReviewCycleQuestionMapper.class);
         userMapper = mock(UserMapper.class);
         userAnswerMapper = mock(UserAnswerMapper.class);
         errorTypeMapper = mock(ErrorTypeMapper.class);
@@ -111,6 +114,7 @@ class QuestionServiceImplTest {
                 questionMapper,
                 questionAnswerMapper,
                 questionTagMapper,
+                reviewCycleQuestionMapper,
                 userMapper,
                 userAnswerMapper,
                 errorTypeMapper,
@@ -941,12 +945,34 @@ class QuestionServiceImplTest {
     }
 
     @Test
+    void updateQuestionEnabledShouldRejectQuestionInProgressReview() {
+        when(reviewCycleQuestionMapper.existsInProgressCycleByQuestionId(100L)).thenReturn(true);
+
+        assertThatThrownBy(() -> questionService.updateQuestionEnabled(100L, new QuestionEnabledRequest(false)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("正在复习周期中，不能停用");
+
+        verify(questionMapper, never()).updateEnabled(eq(100L), eq(false), any(LocalDateTime.class));
+    }
+
+    @Test
     void deleteQuestionShouldLogicalDeleteQuestion() {
         when(questionMapper.logicalDelete(eq(100L), any(LocalDateTime.class))).thenReturn(1);
 
         questionService.deleteQuestion(100L);
 
         verify(questionMapper).logicalDelete(eq(100L), any(LocalDateTime.class));
+    }
+
+    @Test
+    void deleteQuestionShouldRejectQuestionInProgressReview() {
+        when(reviewCycleQuestionMapper.existsInProgressCycleByQuestionId(100L)).thenReturn(true);
+
+        assertThatThrownBy(() -> questionService.deleteQuestion(100L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("正在复习周期中，不能删除");
+
+        verify(questionMapper, never()).logicalDelete(eq(100L), any(LocalDateTime.class));
     }
 
     @Test
@@ -1197,22 +1223,6 @@ class QuestionServiceImplTest {
                 any(), any(), any(), any(), any(), any(), any(), any());
     }
 
-    @Test
-    void submitAnswerShouldRejectReviewDerivedQuestion() {
-        Question question = question(100L);
-        question.setSourceType("REVIEW_DERIVED");
-        when(questionMapper.selectActiveQuestionById(100L)).thenReturn(question);
-
-        assertThatThrownBy(() -> questionService.submitAnswer(
-                100L,
-                new AiAnswerScoringRequest("回答")
-        ))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("必须通过复习接口");
-
-        verify(userAnswerMapper, never()).insertUserAnswer(any());
-    }
-
     private AiQuestionGenerationRequest request() {
         return new AiQuestionGenerationRequest(
                 1,
@@ -1310,7 +1320,6 @@ class QuestionServiceImplTest {
 
     private QuestionUpdateRequest updateRequest() {
         return new QuestionUpdateRequest(
-                "TRANSLATION_ZH_TO_JA",
                 "我今天下午要去银行办理转账。",
                 "日常生活中说明下午的计划。",
                 "N4",
@@ -1331,7 +1340,6 @@ class QuestionServiceImplTest {
 
     private QuestionUpdateRequest englishArticleUpdateRequest() {
         return new QuestionUpdateRequest(
-                "TRANSLATION_EN_TO_JA_ARTICLE",
                 "I visited the library.\n\nThen I read a book at home.",
                 "A short narrative about reading.",
                 "N4",

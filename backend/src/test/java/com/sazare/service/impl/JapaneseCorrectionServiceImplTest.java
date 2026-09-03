@@ -53,9 +53,7 @@ class JapaneseCorrectionServiceImplTest {
         when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
         when(dictionaryCacheService.getEnabledLeafErrorTypes()).thenReturn(List.of(
                 new AiErrorTypeOptionDTO(
-                        9L, "PARTICLE", "助词错误", "说明", "GRAMMAR_SYNTAX", "语法与句法"),
-                new AiErrorTypeOptionDTO(
-                        10L, "PUNCTUATION", "标点错误", "说明", "WRITING_FORMAT", "书写与格式")));
+                        9L, "PARTICLE", "助词错误", "说明", "GRAMMAR_SYNTAX", "语法与句法")));
         var prompt = new com.sazare.service.ai.AiQuestionPrompt("system", "user");
         when(promptBuilder.build(any(), any())).thenReturn(prompt);
         when(client.correct(eq(prompt), any())).thenReturn("{}");

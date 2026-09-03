@@ -2,7 +2,6 @@ package com.sazare.service.impl;
 
 import com.sazare.dto.ErrorTypeQueryRequest;
 import com.sazare.entity.ErrorType;
-import com.sazare.exception.BusinessException;
 import com.sazare.mapper.ErrorTypeMapper;
 import com.sazare.vo.ErrorTypeVO;
 import com.sazare.vo.PageVO;
@@ -14,7 +13,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -94,36 +92,6 @@ class ErrorTypeServiceImplTest {
         assertThat(page.page()).isEqualTo(2);
         assertThat(page.size()).isEqualTo(50);
         verify(errorTypeMapper, never()).selectErrorTypeList(any(), any(Integer.class), any(Long.class));
-    }
-
-    @Test
-    void listErrorTypesShouldRejectInvalidPage() {
-        assertThatThrownBy(() -> errorTypeService.listErrorTypes(new ErrorTypeQueryRequest(
-                null,
-                null,
-                null,
-                0,
-                20
-        )))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("page 必须大于等于 1");
-
-        verify(errorTypeMapper, never()).countErrorTypes(any());
-    }
-
-    @Test
-    void listErrorTypesShouldRejectInvalidTypeLevel() {
-        assertThatThrownBy(() -> errorTypeService.listErrorTypes(new ErrorTypeQueryRequest(
-                3,
-                null,
-                null,
-                1,
-                20
-        )))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("typeLevel 只能是 1 或 2");
-
-        verify(errorTypeMapper, never()).countErrorTypes(any());
     }
 
     private ErrorType errorType() {

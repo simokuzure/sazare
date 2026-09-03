@@ -108,3 +108,5 @@ export type QuestionPayload = {
     sortOrder: number
   }[]
 }
+
+export type QuestionUpdatePayload = Omit<QuestionPayload, 'questionType'>

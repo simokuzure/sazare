@@ -217,8 +217,7 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     public ReviewAttemptVO submitReviewAttempt(Long cardId, ReviewAttemptRequest request) {
-        ReviewAttemptContext context = transactionTemplate.execute(
-                status -> loadReviewAttemptContext(cardId, request));
+        ReviewAttemptContext context = loadReviewAttemptContext(cardId, request);
 
         AiReviewDTO review;
         try {
@@ -274,12 +273,15 @@ public class ReviewServiceImpl implements ReviewService {
 
     private ReviewAttemptContext loadReviewAttemptContext(Long cardId, ReviewAttemptRequest request) {
         User user = requireLocalUser();
-        ReviewCard card = requireCard(reviewCardMapper.selectForUpdateByIdAndUserId(cardId, user.getId()));
+        ReviewCard card = requireCard(reviewCardMapper.selectByIdAndUserId(cardId, user.getId()));
         requireReadyCard(card, LocalDateTime.now(), request.earlyReview());
-        ReviewCycle cycle = requireCurrentCycle(card.getId());
+        ReviewCycle cycle = reviewCycleMapper.selectCurrentByCardId(card.getId());
+        if (cycle == null) {
+            throw business("复习卡片没有进行中的周期");
+        }
         ReviewCycleQuestion cycleQuestion = reviewCycleQuestionMapper
                 .selectByIdAndCycleId(request.cycleQuestionId(), cycle.getId());
-        validateAttemptVersionAndEligibility(cycle, cycleQuestion, request.expectedAttemptCount());
+        validateAttemptEligibility(cycle, cycleQuestion);
         Question question = requireQuestion(cycleQuestion.getQuestionId());
         List<QuestionAnswer> standardAnswers = requireAnswers(question.getId());
         UserErrorType userErrorType = requireUserErrorType(card, user.getId());
@@ -300,17 +302,9 @@ public class ReviewServiceImpl implements ReviewService {
             AiReviewDTO review
     ) {
         LocalDateTime now = LocalDateTime.now();
-        ReviewCard card = requireCard(reviewCardMapper.selectForUpdateByIdAndUserId(
-                context.card().getId(), context.user().getId()));
-        requireReadyCard(card, now, request.earlyReview());
-        ReviewCycle cycle = requireCurrentCycle(card.getId());
-        ReviewCycleQuestion cycleQuestion = reviewCycleQuestionMapper
-                .selectByIdAndCycleId(request.cycleQuestionId(), cycle.getId());
-        validateAttemptVersionAndEligibility(cycle, cycleQuestion, request.expectedAttemptCount());
-        if (!cycle.getId().equals(context.cycle().getId())
-                || !cycleQuestion.getQuestionId().equals(context.question().getId())) {
-            throw business("复习题版本已过期，请刷新后重试");
-        }
+        ReviewCard card = context.card();
+        ReviewCycle cycle = context.cycle();
+        ReviewCycleQuestion cycleQuestion = context.cycleQuestion();
 
         BigDecimal totalScore = calculateTotalScore(review);
         UserAnswer userAnswer = createSubmittedAnswer(
@@ -451,22 +445,21 @@ public class ReviewServiceImpl implements ReviewService {
             return;
         }
         distinctQuestionIds.forEach(this::requireQuestion);
-        recordPracticeError(
+        ReviewCard card = recordPracticeError(
                 userId,
                 userAnswerId,
                 distinctQuestionIds.getFirst(),
                 userErrorTypeId,
                 occurredAt
         );
-        if (distinctQuestionIds.size() == 1) {
-            return;
-        }
-
-        ReviewCard card = reviewCardMapper.selectForUpdateByUserErrorTypeId(userErrorTypeId);
         ReviewCycle cycle = requireCurrentCycle(card.getId());
-        for (Long questionId : distinctQuestionIds.subList(1, distinctQuestionIds.size())) {
+        int insertedCount = 0;
+        for (Long questionId : distinctQuestionIds) {
             ReviewCycleQuestion cycleQuestion = newOriginalRetryQuestion(cycle.getId(), questionId, occurredAt);
-            reviewCycleQuestionMapper.insertQuestionIfAbsent(cycleQuestion);
+            insertedCount += reviewCycleQuestionMapper.insertQuestionIfAbsent(cycleQuestion);
+        }
+        if (insertedCount == 0) {
+            return;
         }
         reviewCycleMapper.updateProgress(
                 cycle.getId(),
@@ -589,16 +582,12 @@ public class ReviewServiceImpl implements ReviewService {
         return cycle.getSuccessfulReviewCount() - cycle.getFailedReviewCount();
     }
 
-    private void validateAttemptVersionAndEligibility(
+    private void validateAttemptEligibility(
             ReviewCycle cycle,
-            ReviewCycleQuestion requested,
-            int expectedAttemptCount
+            ReviewCycleQuestion requested
     ) {
         if (requested == null || STATUS_PASSED.equals(requested.getReviewStatus())) {
             throw business("复习题不存在或当前不可作答");
-        }
-        if (requested.getAttemptCount() != expectedAttemptCount) {
-            throw business("复习题版本已过期，请刷新后重试");
         }
         ReviewCycleQuestion retry = reviewCycleQuestionMapper.selectLatestRetry(cycle.getId());
         if (retry != null && !retry.getId().equals(requested.getId())) {

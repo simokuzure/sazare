@@ -49,7 +49,6 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 @Service
@@ -65,9 +64,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     private static final int DEFAULT_CORRECTION_REVIEW_DIFFICULTY = 3;
     private static final String CUSTOM_REVIEW_ERROR_TYPE_CODE = "UNNATURAL_EXPRESSION";
     private static final String CUSTOM_REVIEW_TYPE_DESCRIPTION = "用户自定义复习重点。";
-    private static final Set<String> TRANSLATION_ONLY_ERROR_CODES = Set.of(
-            "OMISSION", "MISTRANSLATION", "ADDITION", "FALSE_FRIEND", "CHINESE_CALQUE"
-    );
     private static final Pattern JAPANESE_KANA_PATTERN = Pattern.compile("[\\p{IsHiragana}\\p{IsKatakana}]");
     private static final Pattern HAN_PATTERN = Pattern.compile("\\p{IsHan}");
 
@@ -278,9 +274,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             ReviewCardCreateRequest request
     ) {
         if (question == null) {
-            if (request.sourceSegmentIndex() != null) {
-                throw new BusinessException(ErrorCode.PARAM_ERROR, "纯日语纠错不能提交中文原句索引");
-            }
             String sourceText = requireText(request.reviewSourceText(), "纯日语纠错必须填写复习题中文");
             TranslationDirection direction = TranslationDirection.fromLearningMode(learningMode);
             boolean invalidLanguage = direction == TranslationDirection.ZH_TO_JA
@@ -296,9 +289,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             return sourceText;
         }
 
-        if (request.reviewSourceText() != null) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "有题目作答不能提交复习题中文");
-        }
         TranslationDirection direction = TranslationDirection.fromQuestionType(question.getQuestionType());
         if (direction.isArticle(question.getQuestionType())) {
             if (request.sourceSegmentIndex() == null) {
@@ -313,9 +303,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         }
         if (!direction.shortQuestionType().equals(question.getQuestionType())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前题型不支持自定义复习卡片");
-        }
-        if (request.sourceSegmentIndex() != null) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "短句复习卡片不能提交 sourceSegmentIndex");
         }
         return requireText(question.getSourceText(), "题目中文原文不能为空");
     }
@@ -389,11 +376,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     ) {
         ResolvedUserErrorType resolvedType = resolveUserErrorType(
                 user.getId(), userAnswer.getLearningMode(), request, now);
-        ErrorType errorType = errorTypeMapper.selectEnabledLeafById(resolvedType.errorTypeId());
-        if (errorType == null || TRANSLATION_ONLY_ERROR_CODES.contains(errorType.getCode())) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "该错误类型不适用于纯日语纠错");
-        }
-        validateCorrectionErrorSource(userAnswer, request);
 
         UserAnswerError error = new UserAnswerError();
         error.setUserAnswerId(userAnswer.getId());
@@ -410,28 +392,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         error.setUpdatedAt(now);
         userAnswerErrorMapper.insertUserAnswerError(error);
         return new SavedCorrectionError(toUserAnswerErrorVO(error), request.reviewSourceText().trim());
-    }
-
-    private void validateCorrectionErrorSource(
-            UserAnswer userAnswer,
-            UserAnswerErrorConfirmItemRequest request
-    ) {
-        String original = request.originalText().trim();
-        if (!userAnswer.getAnswerText().contains(original)) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "originalText 必须属于本次纠错原文");
-        }
-        String suggestion = request.suggestion().trim();
-        if (userAnswer.getAiRevisedText() == null || !userAnswer.getAiRevisedText().contains(suggestion)) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "suggestion 必须属于本次完整纠正文稿");
-        }
-        String reviewSourceText = requireText(
-                request.reviewSourceText(),
-                "日语纠错错误的 reviewSourceText 不能为空"
-        );
-        if (reviewSourceText.length() > 1000
-                || JAPANESE_KANA_PATTERN.matcher(reviewSourceText).find()) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "reviewSourceText 必须是不超过 1000 字符的中英文文本");
-        }
     }
 
     private void recordCorrectionReviewQuestions(
@@ -544,8 +504,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
     ) {
         ResolvedUserErrorType resolvedType = resolveUserErrorType(
                 user.getId(), userAnswer.getLearningMode(), request, now);
-        ErrorType errorType = errorTypeMapper.selectEnabledLeafById(resolvedType.errorTypeId());
-        validateConfirmedOriginal(question, userAnswer, errorType, request.originalText());
         UserAnswerError error = new UserAnswerError();
         error.setUserAnswerId(userAnswer.getId());
         error.setUserId(user.getId());
@@ -561,25 +519,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         error.setUpdatedAt(now);
         userAnswerErrorMapper.insertUserAnswerError(error);
         return toUserAnswerErrorVO(error);
-    }
-
-    private void validateConfirmedOriginal(
-            Question question,
-            UserAnswer userAnswer,
-            ErrorType errorType,
-            String originalText
-    ) {
-        String original = originalText.trim();
-        if (TranslationDirection.fromQuestionType(question.getQuestionType()).isArticle(question.getQuestionType())
-                && "OMISSION".equals(errorType.getCode())) {
-            if (!splitSegments(question.getSourceText()).contains(original)) {
-                throw new BusinessException(ErrorCode.PARAM_ERROR, "漏译错误的 originalText 必须是文章中文原句");
-            }
-            return;
-        }
-        if (!userAnswer.getAnswerText().contains(original)) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "originalText 必须属于本次作答");
-        }
     }
 
     private void recordArticleReviewQuestions(
@@ -604,9 +543,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         for (UserAnswerErrorVO error : savedErrors) {
             String referenceText = error.suggestion().trim();
             int segmentIndex = referenceSegments.indexOf(referenceText);
-            if (segmentIndex < 0) {
-                throw new BusinessException(ErrorCode.PARAM_ERROR, "文章错误 suggestion 必须是完整日文参考句");
-            }
             Long extractedQuestionId = extractedQuestionIds.computeIfAbsent(
                     referenceText,
                     ignored -> createArticleSentenceQuestion(
@@ -713,7 +649,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             if (userErrorType == null) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "用户错误类型不存在或已归档");
             }
-            validateEnabledLeafErrorType(userErrorType.getErrorTypeId());
             return new ResolvedUserErrorType(userErrorType.getErrorTypeId(), userErrorType.getId());
         }
 
@@ -728,8 +663,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
                 request.userErrorTypeDescription(),
                 "新建用户错误类型时 userErrorTypeDescription 不能为空"
         );
-        validateEnabledLeafErrorType(request.errorTypeId());
-
         UserErrorType existing = userErrorTypeMapper.selectActiveByUserIdAndErrorTypeIdAndName(
                 userId,
                 request.errorTypeId(),
@@ -754,13 +687,6 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         userErrorType.setUpdatedAt(now);
         userErrorTypeMapper.insertUserErrorType(userErrorType);
         return new ResolvedUserErrorType(userErrorType.getErrorTypeId(), userErrorType.getId());
-    }
-
-    private void validateEnabledLeafErrorType(Long errorTypeId) {
-        ErrorType errorType = errorTypeMapper.selectEnabledLeafById(errorTypeId);
-        if (errorType == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "错误类型不存在、未启用或不是二级分类");
-        }
     }
 
     private String requireText(String value, String message) {

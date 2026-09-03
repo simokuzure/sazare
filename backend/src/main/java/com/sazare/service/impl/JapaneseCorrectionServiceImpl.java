@@ -39,7 +39,7 @@ public class JapaneseCorrectionServiceImpl implements JapaneseCorrectionService 
 
     private static final String LOCAL_DEFAULT_USER_CODE = "LOCAL_DEFAULT";
     private static final Set<String> UNSUPPORTED_ERROR_CODES = Set.of(
-            "OMISSION", "MISTRANSLATION", "ADDITION", "FALSE_FRIEND", "CHINESE_CALQUE", "PUNCTUATION"
+            "OMISSION", "MISTRANSLATION", "ADDITION", "FALSE_FRIEND", "CHINESE_CALQUE"
     );
 
     private final UserMapper userMapper;
@@ -73,13 +73,6 @@ public class JapaneseCorrectionServiceImpl implements JapaneseCorrectionService 
         }
 
         String originalText = normalizeText(request.japaneseText());
-        if (originalText.isBlank()) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "japaneseText 不能为空");
-        }
-        if (originalText.length() > 5000) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "japaneseText 长度不能超过 5000");
-        }
-
         TranslationDirection direction = TranslationDirection.fromLearningMode(request.learningMode());
         List<AiErrorTypeOptionDTO> errorTypeOptions = dictionaryCacheService.getEnabledLeafErrorTypes().stream()
                 .filter(option -> !UNSUPPORTED_ERROR_CODES.contains(option.code()))

@@ -177,7 +177,6 @@ export type ReviewCardDetail = {
 
 export type ReviewAttemptPayload = {
   cycleQuestionId: number
-  expectedAttemptCount: number
   answerText: string
   earlyReview?: boolean
 }

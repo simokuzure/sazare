@@ -1,7 +1,7 @@
 import { readApiResponse } from './client'
 import type { PageData } from '../types/api'
 import type { AnswerReview } from '../types/review'
-import type { AiArticleGenerationPayload, AiQuestionGenerationPayload, Question, QuestionFilterState, QuestionPayload, RandomQuestionFilter } from '../types/question'
+import type { AiArticleGenerationPayload, AiQuestionGenerationPayload, Question, QuestionFilterState, QuestionPayload, QuestionUpdatePayload, RandomQuestionFilter } from '../types/question'
 
 export function parseCodeList(value: string) {
   return value
@@ -105,10 +105,16 @@ export async function saveQuestion(payload: QuestionPayload, questionId?: number
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(questionId ? toQuestionUpdatePayload(payload) : payload),
   })
   const result = await readApiResponse<Question>(response)
   return result.data
+}
+
+function toQuestionUpdatePayload(
+  { questionType: _questionType, ...payload }: QuestionPayload,
+): QuestionUpdatePayload {
+  return payload
 }
 
 export async function toggleQuestionEnabled(question: Question): Promise<void> {

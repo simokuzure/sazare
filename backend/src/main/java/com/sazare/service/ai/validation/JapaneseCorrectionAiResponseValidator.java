@@ -26,7 +26,6 @@ import java.util.regex.Pattern;
 public class JapaneseCorrectionAiResponseValidator {
 
     private static final int MAX_TEXT_LENGTH = 5000;
-    private static final String PUNCTUATION_ERROR_CODE = "PUNCTUATION";
     private static final Set<String> VALID_FORMALITIES = Set.of("CASUAL", "NEUTRAL", "POLITE", "BUSINESS");
     private static final Pattern JAPANESE_KANA_PATTERN = Pattern.compile("[\\p{IsHiragana}\\p{IsKatakana}]");
     private static final Pattern HAN_PATTERN = Pattern.compile("\\p{IsHan}");
@@ -134,8 +133,7 @@ public class JapaneseCorrectionAiResponseValidator {
 
         Map<String, AiJapaneseCorrectionErrorDTO> candidatesByKey = new LinkedHashMap<>();
         for (AiJapaneseCorrectionErrorDTO error : errors) {
-            if (error == null || PUNCTUATION_ERROR_CODE.equals(error.errorTypeCode())
-                    || !hasCorrectionFields(error, correctedText)) {
+            if (error == null || !hasCorrectionFields(error, correctedText)) {
                 continue;
             }
             String key = error.errorTypeCode() + "\u0000" + error.original().trim();

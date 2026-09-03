@@ -1,7 +1,5 @@
 package com.sazare.dto;
 
-import com.sazare.common.TranslationDirection;
-
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -14,13 +12,6 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 public record QuestionUpdateRequest(
-        @NotBlank(message = "questionType 不能为空")
-        @Pattern(
-                regexp = TranslationDirection.QUESTION_TYPE_PATTERN,
-                message = "questionType 不合法"
-        )
-        String questionType,
-
         @NotBlank(message = "sourceText 不能为空")
         String sourceText,
 

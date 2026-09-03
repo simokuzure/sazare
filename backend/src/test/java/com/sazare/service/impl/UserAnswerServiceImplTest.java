@@ -280,10 +280,8 @@ class UserAnswerServiceImplTest {
     void confirmUserAnswerErrorsShouldCreateUserErrorTypeAndErrorRecord() {
         User user = localUser();
         UserAnswer answer = reviewedUserAnswer();
-        ErrorType errorType = enabledLeafErrorType(9L);
         when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
         when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
-        when(errorTypeMapper.selectEnabledLeafById(9L)).thenReturn(errorType);
         when(userErrorTypeMapper.insertUserErrorType(any())).thenAnswer(invocation -> {
             UserErrorType userErrorType = invocation.getArgument(0);
             userErrorType.setId(20L);
@@ -335,7 +333,6 @@ class UserAnswerServiceImplTest {
         when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
         when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
         when(userErrorTypeMapper.selectActiveByIdAndUserId(20L, 1L)).thenReturn(userErrorType);
-        when(errorTypeMapper.selectEnabledLeafById(9L)).thenReturn(enabledLeafErrorType(9L));
         when(userAnswerErrorMapper.insertUserAnswerError(any())).thenReturn(1);
 
         userAnswerService.confirmUserAnswerErrors(
@@ -398,13 +395,10 @@ class UserAnswerServiceImplTest {
         userErrorType.setErrorTypeId(9L);
         userErrorType.setName("文章关键信息漏译");
         userErrorType.setStatus("ACTIVE");
-        ErrorType omission = enabledLeafErrorType(9L);
-        omission.setCode("OMISSION");
         when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
         when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
         when(questionMapper.selectQuestionById(100L)).thenReturn(article);
         when(userErrorTypeMapper.selectActiveByIdAndUserId(20L, 1L)).thenReturn(userErrorType);
-        when(errorTypeMapper.selectEnabledLeafById(9L)).thenReturn(omission);
         when(questionAnswerMapper.selectActiveAnswersByQuestionId(100L)).thenReturn(List.of(questionAnswer(
                 200L,
                 "STANDARD",
@@ -464,7 +458,6 @@ class UserAnswerServiceImplTest {
         when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
         when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(correction);
         when(userErrorTypeMapper.selectActiveByIdAndUserId(20L, 1L)).thenReturn(userErrorType);
-        when(errorTypeMapper.selectEnabledLeafById(9L)).thenReturn(enabledLeafErrorType(9L));
         when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
             Question question = invocation.getArgument(0);
             question.setId(500L);
@@ -702,22 +695,6 @@ class UserAnswerServiceImplTest {
                 new ReviewCardCreateRequest("练习自然表达", "自然な表現です。", null, null)
         )).isInstanceOf(BusinessException.class)
                 .hasMessageContaining("必须选择中文原句");
-
-        verify(userErrorTypeMapper, never()).insertUserErrorType(any());
-    }
-
-    @Test
-    void createReviewCardShouldRejectFieldsThatDoNotApplyToShortQuestion() {
-        User user = localUser();
-        UserAnswer answer = reviewedUserAnswer();
-        when(userMapper.selectEnabledUserByCode("LOCAL_DEFAULT")).thenReturn(user);
-        when(userAnswerMapper.selectActiveUserAnswerById(1L, 10L)).thenReturn(answer);
-
-        assertThatThrownBy(() -> userAnswerService.createReviewCard(
-                10L,
-                new ReviewCardCreateRequest("练习自然表达", "自然な表現です。", null, "额外中文题面")
-        )).isInstanceOf(BusinessException.class)
-                .hasMessageContaining("有题目作答不能提交复习题中文");
 
         verify(userErrorTypeMapper, never()).insertUserErrorType(any());
     }

@@ -26,7 +26,7 @@ class JavaAiProviderHttpClientTest {
     void postRequestShouldUseConfiguredTimeout() {
         Duration requestTimeout = Duration.ofSeconds(240);
         JavaAiProviderHttpClient client = new JavaAiProviderHttpClient(
-                HttpClient.newHttpClient(),
+                mock(HttpClient.class),
                 requestTimeout
         );
 
@@ -42,7 +42,7 @@ class JavaAiProviderHttpClientTest {
 
     @Test
     void constructorShouldRejectNonPositiveTimeout() {
-        HttpClient httpClient = HttpClient.newHttpClient();
+        HttpClient httpClient = mock(HttpClient.class);
 
         assertThatThrownBy(() -> new JavaAiProviderHttpClient(httpClient, Duration.ZERO))
                 .isInstanceOf(IllegalArgumentException.class)

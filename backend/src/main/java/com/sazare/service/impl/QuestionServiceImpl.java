@@ -32,6 +32,7 @@ import com.sazare.mapper.QuestionAnswerMapper;
 import com.sazare.mapper.ErrorTypeMapper;
 import com.sazare.mapper.QuestionMapper;
 import com.sazare.mapper.QuestionTagMapper;
+import com.sazare.mapper.ReviewCycleQuestionMapper;
 import com.sazare.mapper.TagMapper;
 import com.sazare.mapper.UserAnswerMapper;
 import com.sazare.mapper.UserMapper;
@@ -108,6 +109,7 @@ public class QuestionServiceImpl implements QuestionService {
     private final QuestionMapper questionMapper;
     private final QuestionAnswerMapper questionAnswerMapper;
     private final QuestionTagMapper questionTagMapper;
+    private final ReviewCycleQuestionMapper reviewCycleQuestionMapper;
     private final UserMapper userMapper;
     private final UserAnswerMapper userAnswerMapper;
     private final ErrorTypeMapper errorTypeMapper;
@@ -128,6 +130,7 @@ public class QuestionServiceImpl implements QuestionService {
             QuestionMapper questionMapper,
             QuestionAnswerMapper questionAnswerMapper,
             QuestionTagMapper questionTagMapper,
+            ReviewCycleQuestionMapper reviewCycleQuestionMapper,
             UserMapper userMapper,
             UserAnswerMapper userAnswerMapper,
             ErrorTypeMapper errorTypeMapper,
@@ -147,6 +150,7 @@ public class QuestionServiceImpl implements QuestionService {
         this.questionMapper = questionMapper;
         this.questionAnswerMapper = questionAnswerMapper;
         this.questionTagMapper = questionTagMapper;
+        this.reviewCycleQuestionMapper = reviewCycleQuestionMapper;
         this.userMapper = userMapper;
         this.userAnswerMapper = userAnswerMapper;
         this.errorTypeMapper = errorTypeMapper;
@@ -284,9 +288,7 @@ public class QuestionServiceImpl implements QuestionService {
     public QuestionVO createQuestion(QuestionCreateRequest request) {
         validateQuestionContent(
                 request.questionType(),
-                request.sourceText(),
-                request.contextText(),
-                request.grammarPoint()
+                request.sourceText()
         );
         List<Tag> tags = loadQuestionTags(request.tagCodes());
         validateSelectedTags(request.questionType(), tags);
@@ -412,20 +414,15 @@ public class QuestionServiceImpl implements QuestionService {
     @Override
     public QuestionVO updateQuestion(Long id, QuestionUpdateRequest request) {
         Question existingQuestion = loadExistingQuestion(id);
-        if (!existingQuestion.getQuestionType().equals(request.questionType())) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "编辑时不能修改 questionType");
-        }
         validateQuestionContent(
-                request.questionType(),
-                request.sourceText(),
-                request.contextText(),
-                request.grammarPoint()
+                existingQuestion.getQuestionType(),
+                request.sourceText()
         );
         List<Tag> tags = loadQuestionTags(request.tagCodes());
-        validateSelectedTags(request.questionType(), tags);
+        validateSelectedTags(existingQuestion.getQuestionType(), tags);
         List<AiQuestionAnswerDTO> answers = toAnswerDTOs(request.answers());
         generationResponseValidator.validateAnswers(answers, "题目");
-        validateArticleContentIfNeeded(request.questionType(), request.sourceText(), answers);
+        validateArticleContentIfNeeded(existingQuestion.getQuestionType(), request.sourceText(), answers);
 
         Question question = new Question();
         question.setId(id);
@@ -445,21 +442,15 @@ public class QuestionServiceImpl implements QuestionService {
         List<Float> embedding = requiresEmbeddingUpdate(existingQuestion, question)
                 ? embedQuestion(question)
                 : null;
-        return transactionTemplate.execute(status -> updateQuestion(
-                existingQuestion, question, tags, answers, embedding));
+        return transactionTemplate.execute(status -> updateQuestion(question, tags, answers, embedding));
     }
 
     private QuestionVO updateQuestion(
-            Question originalQuestion,
             Question question,
             List<Tag> tags,
             List<AiQuestionAnswerDTO> answers,
             List<Float> embedding
     ) {
-        Question currentQuestion = loadExistingQuestion(question.getId());
-        if (!Objects.equals(currentQuestion.getUpdatedAt(), originalQuestion.getUpdatedAt())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目已被修改，请刷新后重试");
-        }
         question.setUpdatedAt(LocalDateTime.now());
         if (questionMapper.updateQuestion(question) == 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或已删除");
@@ -502,6 +493,9 @@ public class QuestionServiceImpl implements QuestionService {
     @Override
     @Transactional
     public void updateQuestionEnabled(Long id, QuestionEnabledRequest request) {
+        if (!request.enabled()) {
+            ensureNotInProgressReview(id, "停用");
+        }
         int updatedRows = questionMapper.updateEnabled(id, request.enabled(), LocalDateTime.now());
         if (updatedRows == 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或已删除");
@@ -511,9 +505,19 @@ public class QuestionServiceImpl implements QuestionService {
     @Override
     @Transactional
     public void deleteQuestion(Long id) {
+        ensureNotInProgressReview(id, "删除");
         int updatedRows = questionMapper.logicalDelete(id, LocalDateTime.now());
         if (updatedRows == 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或已删除");
+        }
+    }
+
+    private void ensureNotInProgressReview(Long questionId, String action) {
+        if (reviewCycleQuestionMapper.existsInProgressCycleByQuestionId(questionId)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "题目正在复习周期中，不能" + action
+            );
         }
     }
 
@@ -523,10 +527,6 @@ public class QuestionServiceImpl implements QuestionService {
         if (question == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目不存在或不可用");
         }
-        if (SOURCE_TYPE_REVIEW_DERIVED.equals(question.getSourceType())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "复习衍生题必须通过复习接口作答");
-        }
-
         List<QuestionAnswer> standardAnswers = questionAnswerMapper.selectActiveAnswersByQuestionId(questionId);
         if (standardAnswers.isEmpty()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "题目没有可用标准答案");
@@ -549,9 +549,6 @@ public class QuestionServiceImpl implements QuestionService {
                 .collect(Collectors.toMap(AiErrorTypeOptionDTO::code, option -> option));
         String answerText = normalizeText(request.answerText());
         int maxAnswerLength = direction.isArticle(question.getQuestionType()) ? 5000 : 2000;
-        if (answerText.isBlank()) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "答案不能为空");
-        }
         if (answerText.length() > maxAnswerLength) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "答案长度不能超过 " + maxAnswerLength + " 个字符");
         }
@@ -669,15 +666,10 @@ public class QuestionServiceImpl implements QuestionService {
 
     private void validateQuestionContent(
             String questionType,
-            String sourceText,
-            String contextText,
-            String grammarPoint
+            String sourceText
     ) {
         TranslationDirection direction = TranslationDirection.fromQuestionType(questionType);
-        validateRequiredText(sourceText, "sourceText 不能为空");
         validateSourceLanguage(direction, sourceText);
-        validateRequiredText(contextText, "contextText 不能为空");
-        validateRequiredText(grammarPoint, "grammarPoint 不能为空");
     }
 
     private void validateSourceLanguage(TranslationDirection direction, String sourceText) {
@@ -938,12 +930,6 @@ public class QuestionServiceImpl implements QuestionService {
 
     private List<String> emptyIfNull(List<String> values) {
         return values == null ? List.of() : values;
-    }
-
-    private void validateRequiredText(String value, String message) {
-        if (value == null || value.isBlank()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, message);
-        }
     }
 
     private QuestionVO saveQuestion(PreparedGeneratedQuestion preparedQuestion) {

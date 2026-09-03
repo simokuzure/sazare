@@ -30,6 +30,8 @@ public interface ReviewCycleQuestionMapper {
 
     List<ReviewCycleQuestion> selectAllByCycleId(@Param("reviewCycleId") Long reviewCycleId);
 
+    boolean existsInProgressCycleByQuestionId(@Param("questionId") Long questionId);
+
     ReviewCycleProgressRow selectProgress(@Param("reviewCycleId") Long reviewCycleId,
                                           @Param("verificationRequiredAfter") LocalDateTime verificationRequiredAfter);
 

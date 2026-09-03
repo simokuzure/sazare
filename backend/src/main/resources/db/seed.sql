@@ -559,8 +559,7 @@ from (
         ('WRITING_FORMAT', 'KANA', '假名错误', '平假名、片假名或假名拼写错误', 'Kana error', 'Hiragana, katakana, or kana spelling is incorrect.', 5010),
         ('WRITING_FORMAT', 'KANJI', '汉字错误', '汉字选择、写法或读写对应错误', 'Kanji error', 'The kanji choice, written form, or reading is incorrect.', 5020),
         ('WRITING_FORMAT', 'ORTHOGRAPHY', '表记错误', '长音、促音、送假名等表记错误', 'Orthographic error', 'A long vowel, small tsu, okurigana, or other written form is incorrect.', 5030),
-        ('WRITING_FORMAT', 'PUNCTUATION', '标点错误', '标点符号或断句方式不恰当', 'Punctuation error', 'Punctuation or sentence breaks are inappropriate.', 5040),
-        ('WRITING_FORMAT', 'INCOMPLETE_INPUT', '输入残缺', '答案存在缺字、截断或未完成输入', 'Incomplete input', 'The answer is missing characters, truncated, or unfinished.', 5050)
+        ('WRITING_FORMAT', 'INCOMPLETE_INPUT', '输入残缺', '答案存在缺字、截断或未完成输入', 'Incomplete input', 'The answer is missing characters, truncated, or unfinished.', 5040)
 ) as seed(parent_code, code, name, description, name_en, description_en, sort_order)
 inner join error_types parent
     on parent.code = seed.parent_code

@@ -100,6 +100,17 @@
         order by sort_order, id
     </select>
 
+    <select id="existsInProgressCycleByQuestionId" resultType="boolean">
+        select exists (
+            select 1
+            from review_cycle_questions cycle_question
+            inner join review_cycles cycle
+                on cycle.id = cycle_question.review_cycle_id
+               and cycle.status = 'IN_PROGRESS'
+            where cycle_question.question_id = #{questionId}
+        )
+    </select>
+
     <select id="selectProgress" resultType="com.sazare.dto.ReviewCycleProgressRow">
         select
             count(*) filter (where question_role = 'ORIGINAL')::integer as original_question_count,

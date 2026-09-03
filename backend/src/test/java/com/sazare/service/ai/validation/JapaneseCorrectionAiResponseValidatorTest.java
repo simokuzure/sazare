@@ -106,49 +106,6 @@ class JapaneseCorrectionAiResponseValidatorTest {
         assertThat(review.errorAnalysis()).isEmpty();
     }
 
-    @Test
-    void shouldDropPunctuationErrorsEvenWhenTheTypeIsAvailable() {
-        String response = """
-                {
-                  "review": {
-                    "scores": {
-                      "grammarVocabularyScore": 100,
-                      "naturalFluencyScore": 100,
-                      "scenarioAdaptationScore": 100,
-                      "informationCompletenessScore": 100
-                    },
-                    "totalScore": 100,
-                    "correctedText": "今日は晴れです。",
-                    "overallComment": "文本自然。",
-                    "comments": {
-                      "grammarVocabularyComment": "正确。",
-                      "naturalFluencyComment": "自然。",
-                      "styleConsistencyComment": "一致。",
-                      "writingCompletenessComment": "表记与输入内容完整。"
-                    },
-                    "errorAnalysis": [{
-                      "errorTypeCode": "PUNCTUATION",
-                      "original": "今日は晴れです",
-                      "issue": "句末缺少句号。",
-                      "suggestion": "今日は晴れです。",
-                      "reviewSourceText": "今天是晴天。",
-                      "severity": "LOW",
-                      "suggestedUserErrorTypeName": "句末缺少句号",
-                      "suggestedUserErrorTypeDescription": "句末应添加句号。"
-                    }],
-                    "revisionSuggestions": [],
-                    "recommendedExpressions": []
-                  }
-                }
-                """;
-
-        var review = validator.validate(response, "今日は晴れです", Map.of(
-                "PUNCTUATION", option("PUNCTUATION", "标点错误")
-        ));
-
-        assertThat(review.errorAnalysis()).isEmpty();
-    }
-
     private AiErrorTypeOptionDTO option(String code, String name) {
         return new AiErrorTypeOptionDTO(1L, code, name, "说明", "GRAMMAR_SYNTAX", "语法与句法");
     }
