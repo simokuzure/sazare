@@ -34,7 +34,11 @@ class AiQuestionPromptBuilderTest {
 
         AiQuestionPrompt prompt = promptBuilder.build(request, sceneTagOptions, functionTagOptions);
 
-        assertThat(prompt.systemPrompt()).contains("TRANSLATION_ZH_TO_JA");
+        assertThat(prompt.systemPrompt())
+                .contains("TRANSLATION_ZH_TO_JA")
+                .contains("不得按源语言的表面结构逐词翻译")
+                .contains("不得把“我/你”或“I/you”机械翻成「わたし」「あなた」")
+                .contains("只有为避免歧义或表达对比、强调时才显式使用人称");
         assertThat(prompt.userPrompt())
                 .contains("题目数量：2")
                 .contains("JLPT 等级：N4")

@@ -41,14 +41,15 @@ public class AiQuestionPromptBuilder {
             19. answers 必须是数组，至少包含 1 个 STANDARD 标准答案。
             20. 每道题必须有且只有 1 个答案同时满足 answerType = STANDARD 且 primaryAnswer = true。
             21. 可以额外提供 0 到 2 个 REFERENCE 参考答案。
-            22. answerText 必须是自然、正确、符合语境的日语表达。
-            23. STANDARD 答案应优先选择最自然、最适合学习者掌握的表达。
-            24. REFERENCE 答案可以提供语义相近的自然表达，但不能明显偏离 sourceText。
-            25. sortOrder 从 0 开始，主标准答案必须为 0。
-            26. 如果用户提供 excludedSourceTexts，不要生成与其中任何一句语义高度相似的题目。
-            27. 如果用户提供 extraRequirements，必须在不违反以上规则的前提下满足。
-            28. 如果标签候选不足以准确覆盖题目，只能从已有候选中选择最接近的 code，不能编造。
-            29. 输出前自行检查 JSON 是否可解析、字段是否完整、枚举值是否合法。
+            22. answerText 必须是自然、正确、符合语境的日语表达；应忠实传达语义、人物关系和语气，不得按源语言的表面结构逐词翻译。
+            23. 日常口语中，主语、话题、已知宾语能从上下文明确推断时，应自然省略；不得把“我/你”或“I/you”机械翻成「わたし」「あなた」。尤其不得默认用「あなた」直接称呼对方，应根据人物关系和语境选择省略、姓名、职务或关系称呼。只有为避免歧义或表达对比、强调时才显式使用人称。
+            24. STANDARD 答案应优先选择最自然、最适合学习者掌握的表达。
+            25. REFERENCE 答案可以提供语义相近的自然表达，但不能明显偏离 sourceText。
+            26. sortOrder 从 0 开始，主标准答案必须为 0。
+            27. 如果用户提供 excludedSourceTexts，不要生成与其中任何一句语义高度相似的题目。
+            28. 如果用户提供 extraRequirements，必须在不违反以上规则的前提下满足。
+            29. 如果标签候选不足以准确覆盖题目，只能从已有候选中选择最接近的 code，不能编造。
+            30. 输出前自行检查 JSON 是否可解析、字段是否完整、枚举值是否合法。
             """;
 
     private final ObjectMapper objectMapper;

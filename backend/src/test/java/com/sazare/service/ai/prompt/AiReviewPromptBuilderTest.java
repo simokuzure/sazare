@@ -38,7 +38,10 @@ class AiReviewPromptBuilderTest {
 
         assertThat(prompt.systemPrompt())
                 .contains("复习重点", "一道", "1到10个答案", "二级标签")
-                .contains("contextText只能客观说明", "不得包含考查意图", "语法或词汇要求只写入grammarPoint");
+                .contains("contextText只能客观说明", "不得包含考查意图", "语法或词汇要求只写入grammarPoint")
+                .contains("不得按源语言的表面结构逐词翻译")
+                .contains("不得把“我/你”或“I/you”机械翻成「わたし」「あなた」")
+                .contains("只有省略会造成歧义");
         assertThat(prompt.userPrompt()).contains(
                 "请翻译", "電車に間に合いました", "DAILY_TRAVEL", "FUNCTION_CONFIRM", "tagCodes");
     }

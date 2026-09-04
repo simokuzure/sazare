@@ -585,7 +585,7 @@ function ReviewCycleSummary({ detail, progress, dueAt }: { detail: ReviewCardDet
       <div><span>{text('原题通过', 'Originals passed')}</span><strong>{progress.originalPassedCount} / {progress.originalQuestionCount}</strong></div>
       <div><span>{text('待处理', 'Pending')}</span><strong>{progress.retryQuestionCount + progress.pendingQuestionCount}</strong></div>
     </div>
-    {detail ? <dl className="review-cycle-schedule"><div><dt>{text('难度', 'Ease')}</dt><dd>{detail.easeFactor.toFixed(4)}</dd></div><div><dt>{text('连续', 'Streak')}</dt><dd>{detail.repetitionCount}</dd></div><div><dt>{text('间隔', 'Interval')}</dt><dd>{text(`${detail.intervalDays} 天`, `${detail.intervalDays} days`)}</dd></div><div><dt>{text('未通过', 'Failures')}</dt><dd>{detail.lapseCount}</dd></div><div><dt>{text('下次到期', 'Next due')}</dt><dd>{formatDateTime(dueAt === undefined ? detail.dueAt : dueAt)}</dd></div></dl> : null}
+    {detail ? <dl className="review-cycle-schedule"><div><dt>{text('难度', 'Ease')}</dt><dd>{detail.easeFactor.toFixed(4)}</dd></div><div><dt>{text('连续通过', 'Pass streak')}</dt><dd>{detail.repetitionCount}</dd></div><div><dt>{text('间隔', 'Interval')}</dt><dd>{text(`${detail.intervalDays} 天`, `${detail.intervalDays} days`)}</dd></div><div><dt>{text('累计未通过', 'Total failures')}</dt><dd>{detail.lapseCount}</dd></div><div><dt>{text('下次到期', 'Next due')}</dt><dd>{formatDateTime(dueAt === undefined ? detail.dueAt : dueAt)}</dd></div></dl> : null}
   </section>
 }
 

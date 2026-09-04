@@ -38,6 +38,9 @@ class AiArticleQuestionPromptBuilderTest {
                 .contains("不得连续套用“姓名＋动作＋说/问/回答/反驳＋台词”的整齐句式")
                 .contains("不要为了显得生动而给每句话装饰")
                 .contains("人物可以说得含糊、说错、改口或只说半句")
+                .contains("不得按源语言的表面结构逐词翻译")
+                .contains("不得把“我/你”或“I/you”机械翻成「わたし」「あなた」")
+                .contains("只有省略会造成歧义")
                 .contains("允许开放状态、未解决冲突和非圆满结尾");
         assertThat(prompt.userPrompt())
                 .contains("123e4567-e89b-12d3-a456-426614174000")
