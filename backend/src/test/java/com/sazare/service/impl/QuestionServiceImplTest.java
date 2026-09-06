@@ -146,7 +146,7 @@ class QuestionServiceImplTest {
         when(tagMapper.selectEnabledTagsByCodes(eq("SCENE"), anyList())).thenReturn(List.of(sceneTag));
         when(tagMapper.selectEnabledTagsByCodes(eq("FUNCTION"), anyList())).thenReturn(List.of(functionTag));
         when(aiQuestionClient.generateQuestions(any(), any(), anyList(), anyList())).thenReturn(validAiJson());
-        when(questionEmbeddingService.embedQuestion(any(), any())).thenReturn(vector());
+        when(questionEmbeddingService.embedQuestion(any())).thenReturn(vector());
         when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
             Question question = invocation.getArgument(0);
             question.setId(100L);
@@ -175,10 +175,7 @@ class QuestionServiceImplTest {
         verify(questionAnswerMapper).insertQuestionAnswer(any(QuestionAnswer.class));
         verify(questionTagMapper).insertQuestionTag(100L, 1L);
         verify(questionTagMapper).insertQuestionTag(100L, 2L);
-        verify(questionEmbeddingService).embedQuestion(
-                "如果明天下雨，我们就在家学习吧。",
-                "朋友之间讨论明天的安排。"
-        );
+        verify(questionEmbeddingService).embedQuestion("如果明天下雨，我们就在家学习吧。");
         verify(questionEmbeddingService).findSimilarQuestions(anyList());
         verify(questionEmbeddingService).saveEmbedding(any(Question.class), anyList());
         InOrder order = inOrder(aiQuestionClient, transactionManager, questionMapper);
@@ -469,7 +466,7 @@ class QuestionServiceImplTest {
         when(tagMapper.selectEnabledTagsByCodes(eq("SCENE"), anyList())).thenReturn(List.of(sceneTag));
         when(tagMapper.selectEnabledTagsByCodes(eq("FUNCTION"), anyList())).thenReturn(List.of(functionTag));
         when(aiQuestionClient.generateQuestions(any(), any(), anyList(), anyList())).thenReturn(validAiJson());
-        when(questionEmbeddingService.embedQuestion(any(), any())).thenReturn(vector());
+        when(questionEmbeddingService.embedQuestion(any())).thenReturn(vector());
         when(questionEmbeddingService.findSimilarQuestions(anyList()))
                 .thenReturn(List.of(new QuestionEmbeddingMatch(99L, "历史短句", 0.95d)));
 
@@ -633,7 +630,7 @@ class QuestionServiceImplTest {
         Tag sceneTag = tag(1L, "SCENE", "FINANCE_BANK", "银行");
         Tag functionTag = tag(2L, "FUNCTION", "FUNCTION_EXPRESS_PLAN", "表达计划");
         when(tagMapper.selectEnabledTagsByAnyCodes(anyList())).thenReturn(List.of(sceneTag, functionTag));
-        when(questionEmbeddingService.embedQuestion(any(), any())).thenReturn(vector());
+        when(questionEmbeddingService.embedQuestion(any())).thenReturn(vector());
         when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
             Question question = invocation.getArgument(0);
             question.setId(100L);
@@ -649,13 +646,10 @@ class QuestionServiceImplTest {
 
         assertThat(question.id()).isEqualTo(100L);
         assertThat(question.sourceType()).isEqualTo("MANUAL");
-        verify(questionEmbeddingService).embedQuestion(
-                "我今天下午要去银行办理转账。",
-                "日常生活中说明下午的计划。"
-        );
+        verify(questionEmbeddingService).embedQuestion("我今天下午要去银行办理转账。");
         verify(questionEmbeddingService).saveEmbedding(any(Question.class), any());
         InOrder order = inOrder(questionEmbeddingService, transactionManager, questionMapper);
-        order.verify(questionEmbeddingService).embedQuestion(any(), any());
+        order.verify(questionEmbeddingService).embedQuestion(any());
         order.verify(transactionManager).getTransaction(any());
         order.verify(questionMapper).insertQuestion(any());
         assertThat(question.tags()).extracting("code")
@@ -791,16 +785,24 @@ class QuestionServiceImplTest {
     }
 
     @Test
-    void getRandomQuestionShouldReturnQuestionWithTagsAndAnswers() {
-        Question question = question(100L);
-        QuestionAnswer answer = answer(200L, "今日の午後、銀行へ振り込みに行きます。");
-        QuestionTagRow tag = tagRow(100L, 1L, "SCENE", "FINANCE_BANK", "银行");
-        when(questionMapper.selectRandomQuestionId(any())).thenReturn(100L);
-        when(questionMapper.selectQuestionsByIds(List.of(100L))).thenReturn(List.of(question));
-        when(tagMapper.selectEnabledTagsByQuestionIds(List.of(100L))).thenReturn(List.of(tag));
-        when(questionAnswerMapper.selectActiveAnswersByQuestionIds(List.of(100L))).thenReturn(List.of(answer));
+    void getRandomQuestionsShouldReturnAllAvailableQuestionsWhenFewerThanRequested() {
+        Question firstQuestion = question(100L);
+        Question secondQuestion = question(101L);
+        secondQuestion.setSourceText("明天下午去邮局寄包裹。");
+        QuestionAnswer firstAnswer = answer(200L, "今日の午後、銀行へ振り込みに行きます。");
+        QuestionAnswer secondAnswer = answer(201L, "明日の午後、郵便局へ荷物を出しに行きます。");
+        secondAnswer.setQuestionId(101L);
+        QuestionTagRow firstTag = tagRow(100L, 1L, "SCENE", "FINANCE_BANK", "银行");
+        QuestionTagRow secondTag = tagRow(101L, 2L, "SCENE", "DAILY_LIFE_POST_OFFICE", "邮局");
+        when(questionMapper.selectRandomQuestionIds(any(), eq(5))).thenReturn(List.of(100L, 101L));
+        when(questionMapper.selectQuestionsByIds(List.of(100L, 101L)))
+                .thenReturn(List.of(firstQuestion, secondQuestion));
+        when(tagMapper.selectEnabledTagsByQuestionIds(List.of(100L, 101L)))
+                .thenReturn(List.of(firstTag, secondTag));
+        when(questionAnswerMapper.selectActiveAnswersByQuestionIds(List.of(100L, 101L)))
+                .thenReturn(List.of(firstAnswer, secondAnswer));
 
-        QuestionVO result = questionService.getRandomQuestion(new QuestionQueryRequest(
+        List<QuestionVO> result = questionService.getRandomQuestions(new QuestionQueryRequest(
                 null,
                 "N4",
                 null,
@@ -812,16 +814,18 @@ class QuestionServiceImplTest {
                 null,
                 null,
                 null
-        ));
+        ), 5);
 
-        assertThat(result).isNotNull();
-        assertThat(result.id()).isEqualTo(100L);
-        assertThat(result.tags()).extracting("code").containsExactly("FINANCE_BANK");
-        assertThat(result.answers()).extracting("answerText")
+        assertThat(result).extracting("id").containsExactly(100L, 101L);
+        assertThat(result.getFirst().tags()).extracting("code").containsExactly("FINANCE_BANK");
+        assertThat(result.getFirst().answers()).extracting("answerText")
                 .containsExactly("今日の午後、銀行へ振り込みに行きます。");
+        assertThat(result.get(1).tags()).extracting("code").containsExactly("DAILY_LIFE_POST_OFFICE");
+        assertThat(result.get(1).answers()).extracting("answerText")
+                .containsExactly("明日の午後、郵便局へ荷物を出しに行きます。");
 
         ArgumentCaptor<QuestionQueryRequest> requestCaptor = ArgumentCaptor.forClass(QuestionQueryRequest.class);
-        verify(questionMapper).selectRandomQuestionId(requestCaptor.capture());
+        verify(questionMapper).selectRandomQuestionIds(requestCaptor.capture(), eq(5));
         assertThat(requestCaptor.getValue().tagCodes())
                 .containsExactly("FINANCE_BANK", "FUNCTION_EXPRESS_PLAN");
     }
@@ -831,12 +835,12 @@ class QuestionServiceImplTest {
         Question question = articleQuestion(100L);
         QuestionAnswer answer = answer(200L, "先週、友人と京都へ旅行しました。\n\n天気はよくありませんでしたが、楽しく過ごしました。");
         QuestionTagRow tag = tagRow(100L, 3L, "GENRE", "NARRATIVE", "叙事文");
-        when(questionMapper.selectRandomQuestionId(any())).thenReturn(100L);
+        when(questionMapper.selectRandomQuestionIds(any(), eq(1))).thenReturn(List.of(100L));
         when(questionMapper.selectQuestionsByIds(List.of(100L))).thenReturn(List.of(question));
         when(tagMapper.selectEnabledTagsByQuestionIds(List.of(100L))).thenReturn(List.of(tag));
         when(questionAnswerMapper.selectActiveAnswersByQuestionIds(List.of(100L))).thenReturn(List.of(answer));
 
-        QuestionVO result = questionService.getRandomQuestion(new QuestionQueryRequest(
+        List<QuestionVO> result = questionService.getRandomQuestions(new QuestionQueryRequest(
                 "TRANSLATION_ZH_TO_JA_ARTICLE",
                 null,
                 null,
@@ -848,18 +852,19 @@ class QuestionServiceImplTest {
                 null,
                 null,
                 null
-        ));
+        ), 1);
 
-        assertThat(result).isNotNull();
-        assertThat(result.questionType()).isEqualTo("TRANSLATION_ZH_TO_JA_ARTICLE");
-        assertThat(result.answers()).isEmpty();
+        assertThat(result).singleElement().satisfies(questionVO -> {
+            assertThat(questionVO.questionType()).isEqualTo("TRANSLATION_ZH_TO_JA_ARTICLE");
+            assertThat(questionVO.answers()).isEmpty();
+        });
     }
 
     @Test
-    void getRandomQuestionShouldReturnNullWhenNoQuestionMatched() {
-        when(questionMapper.selectRandomQuestionId(any())).thenReturn(null);
+    void getRandomQuestionsShouldReturnEmptyListWhenNoQuestionMatched() {
+        when(questionMapper.selectRandomQuestionIds(any(), eq(5))).thenReturn(List.of());
 
-        QuestionVO result = questionService.getRandomQuestion(new QuestionQueryRequest(
+        List<QuestionVO> result = questionService.getRandomQuestions(new QuestionQueryRequest(
                 null,
                 "N1",
                 5,
@@ -871,22 +876,22 @@ class QuestionServiceImplTest {
                 null,
                 null,
                 null
-        ));
+        ), 5);
 
-        assertThat(result).isNull();
+        assertThat(result).isEmpty();
         verify(questionMapper, never()).selectQuestionsByIds(anyList());
         verify(tagMapper, never()).selectEnabledTagsByQuestionIds(anyList());
         verify(questionAnswerMapper, never()).selectActiveAnswersByQuestionIds(anyList());
     }
 
     @Test
-    void updateQuestionShouldReplaceAnswersAndTags() {
+    void updateQuestionShouldReplaceAnswersAndTagsWithoutReembeddingWhenOnlyContextChanges() {
         Question existingQuestion = question(100L);
         existingQuestion.setSourceType("AI");
         Tag sceneTag = tag(1L, "SCENE", "FINANCE_BANK", "银行");
         when(questionMapper.selectQuestionById(100L)).thenReturn(existingQuestion);
         when(tagMapper.selectEnabledTagsByAnyCodes(anyList())).thenReturn(List.of(sceneTag));
-        when(questionEmbeddingService.contentHash(anyString(), anyString(), anyString())).thenReturn("same-hash");
+        when(questionEmbeddingService.contentHash(anyString(), anyString())).thenReturn("same-hash");
         when(questionMapper.updateQuestion(any())).thenReturn(1);
         when(questionAnswerMapper.insertQuestionAnswer(any())).thenAnswer(invocation -> {
             QuestionAnswer answer = invocation.getArgument(0);
@@ -898,11 +903,12 @@ class QuestionServiceImplTest {
 
         assertThat(question.id()).isEqualTo(100L);
         assertThat(question.sourceType()).isEqualTo("AI");
+        assertThat(question.contextText()).isEqualTo("更新后的语境。");
         assertThat(question.tags()).extracting("code").containsExactly("FINANCE_BANK");
         verify(questionAnswerMapper).logicalDeleteByQuestionId(100L);
         verify(questionTagMapper).deleteQuestionTagsByQuestionId(100L);
         verify(questionTagMapper).insertQuestionTag(100L, 1L);
-        verify(questionEmbeddingService, never()).embedQuestion(any(), any());
+        verify(questionEmbeddingService, never()).embedQuestion(any());
         verify(questionEmbeddingService, never()).saveEmbedding(any(), any());
     }
 
@@ -913,7 +919,7 @@ class QuestionServiceImplTest {
         Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
         when(questionMapper.selectQuestionById(100L)).thenReturn(existingQuestion);
         when(tagMapper.selectEnabledTagsByAnyCodes(anyList())).thenReturn(List.of(genreTag));
-        when(questionEmbeddingService.contentHash(anyString(), anyString(), anyString()))
+        when(questionEmbeddingService.contentHash(anyString(), anyString()))
                 .thenReturn("existing-hash", "updated-hash");
         when(questionMapper.updateQuestion(any())).thenReturn(1);
         when(questionAnswerMapper.insertQuestionAnswer(any())).thenAnswer(invocation -> {
@@ -1321,7 +1327,7 @@ class QuestionServiceImplTest {
     private QuestionUpdateRequest updateRequest() {
         return new QuestionUpdateRequest(
                 "我今天下午要去银行办理转账。",
-                "日常生活中说明下午的计划。",
+                "更新后的语境。",
                 "N4",
                 3,
                 "予定を表す表現",

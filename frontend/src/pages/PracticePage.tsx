@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getErrorMessage } from '../api/client'
 import { confirmUserAnswerErrors, fetchUserErrorTypes } from '../api/userErrorApi'
-import { fetchRandomQuestion, generateQuestions, submitQuestionAnswer } from '../api/questionApi'
+import { fetchRandomQuestions, generateQuestions, submitQuestionAnswer } from '../api/questionApi'
 import { fetchAllTags } from '../api/tagApi'
 import ErrorConfirmationModal from '../components/ErrorConfirmationModal'
 import PageHeader from '../components/PageHeader'
@@ -248,14 +248,29 @@ function ShortSentencePractice() {
     setQuestionRandomizing(true)
     setPracticeNotice(null)
     try {
-      const question = await fetchRandomQuestion(filters)
-      setGeneratedQuestions(question ? [question] : [])
+      const questions = await fetchRandomQuestions(filters)
+      setGeneratedQuestions(questions)
       setSelectedQuestionIndex(0)
       setAnswerSessions({})
+      const requestedCount = Number(questionCount)
+      const hasQuestions = questions.length > 0
+      const isInsufficient = hasQuestions && questions.length < requestedCount
+      let message = text('当前筛选条件下没有可用题目。', 'No questions match the current filters.')
+      if (isInsufficient) {
+        message = text(
+          `请求 ${requestedCount} 道题目，当前筛选条件下仅有 ${questions.length} 道可用题目，已全部抽取。`,
+          `Requested ${requestedCount} questions, but only ${questions.length} match the current filters. All available questions were selected.`,
+        )
+      } else if (hasQuestions) {
+        message = text(
+          `已随机抽取 ${questions.length} 道题目。`,
+          `Randomly selected ${questions.length} question(s).`,
+        )
+      }
       setPracticeNotice({
         kind: 'info',
-        title: question ? text('题目已抽取', 'Question selected') : text('未找到题目', 'No question found'),
-        message: question ? text(`已随机抽取题目 #${question.id}。`, `Randomly selected question #${question.id}.`) : text('当前筛选条件下没有可用题目。', 'No questions match the current filters.'),
+        title: hasQuestions ? text('题目已抽取', 'Questions selected') : text('未找到题目', 'No question found'),
+        message,
       })
     } catch (fetchError: unknown) {
       setGeneratedQuestions([])
@@ -463,6 +478,7 @@ function ShortSentencePractice() {
       level,
       difficulty,
       tagCodes: buildRandomQuestionTagCodes(),
+      count: Number(questionCount),
     }
   }
 

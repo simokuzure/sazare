@@ -137,13 +137,13 @@
         offset #{offset}
     </select>
 
-    <select id="selectRandomQuestionId" resultType="long">
+    <select id="selectRandomQuestionIds" resultType="long">
         select q.id
         from questions q
         <include refid="questionFilterClause" />
           and q.source_type &lt;&gt; 'REVIEW_DERIVED'
         order by random()
-        limit 1
+        limit #{limit}
     </select>
 
     <select id="selectQuestionsByIds" resultType="com.sazare.entity.Question">

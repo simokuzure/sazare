@@ -27,7 +27,10 @@ public interface QuestionMapper {
             @Param("offset") long offset
     );
 
-    Long selectRandomQuestionId(@Param("request") QuestionQueryRequest request);
+    List<Long> selectRandomQuestionIds(
+            @Param("request") QuestionQueryRequest request,
+            @Param("limit") int limit
+    );
 
     List<Question> selectQuestionsByIds(@Param("ids") List<Long> ids);
 

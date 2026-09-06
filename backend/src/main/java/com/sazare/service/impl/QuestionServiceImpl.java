@@ -197,8 +197,7 @@ public class QuestionServiceImpl implements QuestionService {
 
             for (ValidatedQuestion validatedQuestion : validatedQuestions) {
                 List<Float> embedding = questionEmbeddingService.embedQuestion(
-                        validatedQuestion.question().sourceText(),
-                        validatedQuestion.question().contextText()
+                        validatedQuestion.question().sourceText()
                 );
                 if (isDuplicate(embedding, acceptedQuestions,
                         validatedQuestion.question().questionType())) {
@@ -341,18 +340,19 @@ public class QuestionServiceImpl implements QuestionService {
     }
 
     @Override
-    public QuestionVO getRandomQuestion(QuestionQueryRequest request) {
+    public List<QuestionVO> getRandomQuestions(QuestionQueryRequest request, int count) {
         QuestionQueryRequest normalizedRequest = normalizeQueryRequest(request);
-        Long questionId = questionMapper.selectRandomQuestionId(normalizedRequest);
-        if (questionId == null) {
-            return null;
+        List<Long> questionIds = questionMapper.selectRandomQuestionIds(normalizedRequest, count);
+        if (questionIds.isEmpty()) {
+            return List.of();
         }
 
-        List<QuestionVO> questions = loadQuestionVOs(List.of(questionId));
-        if (questions.isEmpty()) {
-            return null;
-        }
-        QuestionVO question = questions.getFirst();
+        return loadQuestionVOs(questionIds).stream()
+                .map(this::hideArticleAnswers)
+                .toList();
+    }
+
+    private QuestionVO hideArticleAnswers(QuestionVO question) {
         if (!TranslationDirection.fromQuestionType(question.questionType()).isArticle(question.questionType())) {
             return question;
         }
@@ -470,7 +470,7 @@ public class QuestionServiceImpl implements QuestionService {
         TranslationDirection direction = TranslationDirection.fromQuestionType(question.getQuestionType());
         return direction.isArticle(question.getQuestionType())
                 ? questionEmbeddingService.embedArticleBody(question.getSourceText())
-                : questionEmbeddingService.embedQuestion(question.getSourceText(), question.getContextText());
+                : questionEmbeddingService.embedQuestion(question.getSourceText());
     }
 
     private boolean requiresEmbeddingUpdate(Question existingQuestion, Question updatedQuestion) {
@@ -479,13 +479,11 @@ public class QuestionServiceImpl implements QuestionService {
         }
         String existingHash = questionEmbeddingService.contentHash(
                 existingQuestion.getQuestionType(),
-                existingQuestion.getSourceText(),
-                existingQuestion.getContextText()
+                existingQuestion.getSourceText()
         );
         String updatedHash = questionEmbeddingService.contentHash(
                 updatedQuestion.getQuestionType(),
-                updatedQuestion.getSourceText(),
-                updatedQuestion.getContextText()
+                updatedQuestion.getSourceText()
         );
         return !Objects.equals(existingHash, updatedHash);
     }

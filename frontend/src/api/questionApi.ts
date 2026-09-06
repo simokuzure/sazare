@@ -74,9 +74,10 @@ export async function fetchQuestions(filters: QuestionFilterState, signal?: Abor
   return result.data ?? { items: [], page: filters.page, size: filters.size, total: 0 }
 }
 
-export async function fetchRandomQuestion(filters: RandomQuestionFilter): Promise<Question | null> {
+export async function fetchRandomQuestions(filters: RandomQuestionFilter): Promise<Question[]> {
   const searchParams = new URLSearchParams({
     questionType: filters.questionType,
+    count: String(filters.count ?? 1),
   })
   if (filters.level) {
     searchParams.set('level', filters.level)
@@ -89,8 +90,13 @@ export async function fetchRandomQuestion(filters: RandomQuestionFilter): Promis
   }
 
   const response = await fetch(`/api/questions/random?${searchParams.toString()}`)
-  const result = await readApiResponse<Question>(response)
-  return result.data
+  const result = await readApiResponse<Question[]>(response)
+  return result.data ?? []
+}
+
+export async function fetchRandomQuestion(filters: RandomQuestionFilter): Promise<Question | null> {
+  const questions = await fetchRandomQuestions({ ...filters, count: 1 })
+  return questions[0] ?? null
 }
 
 export async function fetchQuestion(questionId: number): Promise<Question | null> {

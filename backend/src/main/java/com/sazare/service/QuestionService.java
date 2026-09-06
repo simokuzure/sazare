@@ -27,7 +27,7 @@ public interface QuestionService {
 
     PageVO<QuestionVO> listQuestions(QuestionQueryRequest request);
 
-    QuestionVO getRandomQuestion(QuestionQueryRequest request);
+    List<QuestionVO> getRandomQuestions(QuestionQueryRequest request, int count);
 
     QuestionVO getQuestion(Long id);
 

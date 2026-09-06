@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class QuestionMapperSqlTest {
 
     @Test
-    void randomQuestionSqlShouldExcludeReviewDerivedQuestions() throws Exception {
+    void randomQuestionSqlShouldExcludeReviewDerivedQuestionsAndUseRequestedLimit() throws Exception {
         Configuration configuration = new Configuration();
         try (InputStream input = Resources.getResourceAsStream("mapper/QuestionMapper.xml")) {
             new XMLMapperBuilder(input, configuration, "mapper/QuestionMapper.xml", configuration.getSqlFragments())
@@ -24,9 +24,12 @@ class QuestionMapperSqlTest {
         QuestionQueryRequest request = new QuestionQueryRequest(
                 null, null, null, null, null, null, null, null, true, 1, 1);
         BoundSql boundSql = configuration
-                .getMappedStatement("com.sazare.mapper.QuestionMapper.selectRandomQuestionId")
-                .getBoundSql(Map.of("request", request));
+                .getMappedStatement("com.sazare.mapper.QuestionMapper.selectRandomQuestionIds")
+                .getBoundSql(Map.of("request", request, "limit", 3));
 
-        assertThat(boundSql.getSql()).contains("q.source_type <> 'REVIEW_DERIVED'");
+        assertThat(boundSql.getSql())
+                .contains("q.source_type <> 'REVIEW_DERIVED'")
+                .contains("limit ?");
+        assertThat(boundSql.getParameterMappings()).extracting("property").contains("limit");
     }
 }

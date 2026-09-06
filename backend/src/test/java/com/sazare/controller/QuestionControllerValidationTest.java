@@ -18,15 +18,15 @@ class QuestionControllerValidationTest {
 
     private static ValidatorFactory validatorFactory;
     private static ExecutableValidator executableValidator;
-    private static Method getRandomQuestionMethod;
+    private static Method getRandomQuestionsMethod;
     private static QuestionController questionController;
 
     @BeforeAll
     static void setUpValidator() throws NoSuchMethodException {
         validatorFactory = Validation.buildDefaultValidatorFactory();
         executableValidator = validatorFactory.getValidator().forExecutables();
-        getRandomQuestionMethod = QuestionController.class.getMethod(
-                "getRandomQuestion",
+        getRandomQuestionsMethod = QuestionController.class.getMethod(
+                "getRandomQuestions",
                 String.class,
                 String.class,
                 Integer.class,
@@ -35,7 +35,8 @@ class QuestionControllerValidationTest {
                 Boolean.class,
                 Boolean.class,
                 String.class,
-                Boolean.class
+                Boolean.class,
+                Integer.class
         );
         questionController = new QuestionController(null);
     }
@@ -46,7 +47,7 @@ class QuestionControllerValidationTest {
     }
 
     @Test
-    void getRandomQuestionShouldReturnChineseMessageForInvalidQuestionType() {
+    void getRandomQuestionsShouldReturnChineseMessageForInvalidQuestionType() {
         assertValidationMessage(
                 randomQuestionParameters("INVALID", null, null),
                 "questionType 不合法"
@@ -54,7 +55,7 @@ class QuestionControllerValidationTest {
     }
 
     @Test
-    void getRandomQuestionShouldReturnChineseMessageForInvalidLevel() {
+    void getRandomQuestionsShouldReturnChineseMessageForInvalidLevel() {
         assertValidationMessage(
                 randomQuestionParameters("TRANSLATION_ZH_TO_JA", "N6", null),
                 "level 只能是 N5、N4、N3、N2、N1"
@@ -62,7 +63,7 @@ class QuestionControllerValidationTest {
     }
 
     @Test
-    void getRandomQuestionShouldReturnChineseMessageForDifficultyBelowRange() {
+    void getRandomQuestionsShouldReturnChineseMessageForDifficultyBelowRange() {
         assertValidationMessage(
                 randomQuestionParameters("TRANSLATION_ZH_TO_JA", null, 0),
                 "difficulty 必须在 1 到 5 之间"
@@ -70,21 +71,46 @@ class QuestionControllerValidationTest {
     }
 
     @Test
-    void getRandomQuestionShouldReturnChineseMessageForDifficultyAboveRange() {
+    void getRandomQuestionsShouldReturnChineseMessageForDifficultyAboveRange() {
         assertValidationMessage(
                 randomQuestionParameters("TRANSLATION_ZH_TO_JA", null, 6),
                 "difficulty 必须在 1 到 5 之间"
         );
     }
 
+    @Test
+    void getRandomQuestionsShouldReturnChineseMessageForCountBelowRange() {
+        assertValidationMessage(
+                randomQuestionParameters("TRANSLATION_ZH_TO_JA", null, null, 0),
+                "count 必须在 1 到 5 之间"
+        );
+    }
+
+    @Test
+    void getRandomQuestionsShouldReturnChineseMessageForCountAboveRange() {
+        assertValidationMessage(
+                randomQuestionParameters("TRANSLATION_ZH_TO_JA", null, null, 6),
+                "count 必须在 1 到 5 之间"
+        );
+    }
+
     private static Object[] randomQuestionParameters(String questionType, String level, Integer difficulty) {
-        return new Object[]{questionType, level, difficulty, null, null, null, null, null, true};
+        return randomQuestionParameters(questionType, level, difficulty, 1);
+    }
+
+    private static Object[] randomQuestionParameters(
+            String questionType,
+            String level,
+            Integer difficulty,
+            Integer count
+    ) {
+        return new Object[]{questionType, level, difficulty, null, null, null, null, null, true, count};
     }
 
     private static void assertValidationMessage(Object[] parameters, String expectedMessage) {
         Set<ConstraintViolation<QuestionController>> violations = executableValidator.validateParameters(
                 questionController,
-                getRandomQuestionMethod,
+                getRandomQuestionsMethod,
                 parameters
         );
 

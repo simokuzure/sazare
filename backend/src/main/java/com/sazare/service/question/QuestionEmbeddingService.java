@@ -16,12 +16,16 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class QuestionEmbeddingService {
 
     public static final double SIMILARITY_THRESHOLD = 0.80d;
-    private static final String ARTICLE_QUESTION_TYPE = "TRANSLATION_ZH_TO_JA_ARTICLE";
+    private static final Set<String> ARTICLE_QUESTION_TYPES = Set.of(
+            "TRANSLATION_ZH_TO_JA_ARTICLE",
+            "TRANSLATION_EN_TO_JA_ARTICLE"
+    );
     private static final int DIMENSION = 768;
 
     private final QuestionEmbeddingMapper questionEmbeddingMapper;
@@ -35,8 +39,8 @@ public class QuestionEmbeddingService {
         this.aiEmbeddingClient = aiEmbeddingClient;
     }
 
-    public List<Float> embedQuestion(String sourceText, String contextText) {
-        List<Float> embedding = aiEmbeddingClient.embed(buildContent(sourceText, contextText));
+    public List<Float> embedQuestion(String sourceText) {
+        List<Float> embedding = aiEmbeddingClient.embed(buildShortQuestionContent(sourceText));
         validateEmbedding(embedding);
         return embedding;
     }
@@ -84,7 +88,7 @@ public class QuestionEmbeddingService {
         questionEmbeddingMapper.upsertQuestionEmbedding(
                 question.getId(),
                 toVectorLiteral(embedding),
-                contentHash(question.getQuestionType(), question.getSourceText(), question.getContextText()),
+                contentHash(question.getQuestionType(), question.getSourceText()),
                 aiEmbeddingClient.modelName(),
                 LocalDateTime.now()
         );
@@ -93,7 +97,7 @@ public class QuestionEmbeddingService {
     public void synchronizeEmbedding(Question question) {
         List<Float> embedding = isArticle(question.getQuestionType())
                 ? embedArticleBody(question.getSourceText())
-                : embedQuestion(question.getSourceText(), question.getContextText());
+                : embedQuestion(question.getSourceText());
         saveEmbedding(question, embedding);
     }
 
@@ -113,14 +117,10 @@ public class QuestionEmbeddingService {
         return new QuestionEmbeddingBackfillVO(batch.size(), staleCandidates.size() - batch.size());
     }
 
-    public String contentHash(String sourceText, String contextText) {
-        return hash(buildContent(sourceText, contextText));
-    }
-
-    public String contentHash(String questionType, String sourceText, String contextText) {
+    public String contentHash(String questionType, String sourceText) {
         String content = isArticle(questionType)
                 ? buildArticleContent(sourceText)
-                : buildContent(sourceText, contextText);
+                : buildShortQuestionContent(sourceText);
         return hash(content);
     }
 
@@ -142,14 +142,13 @@ public class QuestionEmbeddingService {
         return candidate.getContentHash() == null
                 || !candidate.getContentHash().equals(contentHash(
                         candidate.getQuestionType(),
-                        candidate.getSourceText(),
-                        candidate.getContextText()
+                        candidate.getSourceText()
                 ))
                 || !aiEmbeddingClient.modelName().equals(candidate.getModelName());
     }
 
-    private String buildContent(String sourceText, String contextText) {
-        return "题目原文：" + normalizeText(sourceText) + "\n语境：" + normalizeText(contextText);
+    private String buildShortQuestionContent(String sourceText) {
+        return normalizeText(sourceText);
     }
 
     private String buildArticleContent(String sourceText) {
@@ -157,7 +156,7 @@ public class QuestionEmbeddingService {
     }
 
     private boolean isArticle(String questionType) {
-        return ARTICLE_QUESTION_TYPE.equals(questionType);
+        return ARTICLE_QUESTION_TYPES.contains(questionType);
     }
 
     private String normalizeText(String value) {

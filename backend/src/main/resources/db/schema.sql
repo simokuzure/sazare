@@ -118,7 +118,7 @@ create table if not exists question_embeddings (
 comment on table question_embeddings is '题目语义向量表，仅用于常规题生成去重';
 comment on column question_embeddings.question_id is '题目ID';
 comment on column question_embeddings.embedding is '768维语义向量';
-comment on column question_embeddings.content_hash is '向量输入内容哈希，文章仅使用正文，短句使用原文和语境';
+comment on column question_embeddings.content_hash is '向量输入内容哈希，文章使用正文，短句仅使用原文';
 comment on column question_embeddings.model_name is '嵌入模型名称';
 
 create index if not exists idx_question_embeddings_embedding_hnsw

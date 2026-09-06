@@ -65,6 +65,7 @@ export type RandomQuestionFilter = {
   level: string
   difficulty: string
   tagCodes: string[]
+  count?: number
 }
 
 export type AiQuestionGenerationPayload = {

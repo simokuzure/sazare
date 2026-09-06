@@ -114,7 +114,7 @@ public class QuestionController {
     }
 
     @GetMapping("/random")
-    public ApiResponse<QuestionVO> getRandomQuestion(
+    public ApiResponse<List<QuestionVO>> getRandomQuestions(
             @Pattern(regexp = TranslationDirection.QUESTION_TYPE_PATTERN,
                     message = "questionType 不合法")
             @RequestParam(defaultValue = "TRANSLATION_ZH_TO_JA") String questionType,
@@ -129,7 +129,10 @@ public class QuestionController {
             @RequestParam(required = false) Boolean exam,
             @Pattern(regexp = "AI|MANUAL", message = "sourceType 只能是 AI 或 MANUAL")
             @RequestParam(required = false) String sourceType,
-            @RequestParam(defaultValue = "true") Boolean enabled
+            @RequestParam(defaultValue = "true") Boolean enabled,
+            @Min(value = 1, message = "count 必须在 1 到 5 之间")
+            @Max(value = 5, message = "count 必须在 1 到 5 之间")
+            @RequestParam(defaultValue = "1") Integer count
     ) {
         QuestionQueryRequest request = new QuestionQueryRequest(
                 questionType,
@@ -144,7 +147,7 @@ public class QuestionController {
                 1,
                 1
         );
-        return ApiResponse.success(questionService.getRandomQuestion(request));
+        return ApiResponse.success(questionService.getRandomQuestions(request, count));
     }
 
     @GetMapping("/{id}")

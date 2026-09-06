@@ -6,6 +6,8 @@ import com.sazare.mapper.QuestionEmbeddingMapper;
 import com.sazare.service.ai.AiEmbeddingClient;
 import com.sazare.vo.QuestionEmbeddingBackfillVO;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 import java.util.List;
@@ -13,6 +15,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -31,7 +34,7 @@ class QuestionEmbeddingServiceTest {
         QuestionEmbeddingCandidate stale = candidate(100L, null, null);
         QuestionEmbeddingCandidate current = candidate(
                 101L,
-                service.contentHash("请告诉我车站在哪里。", "问路场景。"),
+                service.contentHash("TRANSLATION_ZH_TO_JA", "请告诉我车站在哪里。"),
                 "gemini-embedding-001"
         );
         when(mapper.selectRegularQuestionEmbeddingCandidates()).thenReturn(List.of(stale, current));
@@ -44,6 +47,38 @@ class QuestionEmbeddingServiceTest {
     }
 
     @Test
+    void synchronizeEmbeddingShouldUseOnlyShortQuestionSourceText() {
+        QuestionEmbeddingMapper mapper = mock(QuestionEmbeddingMapper.class);
+        AiEmbeddingClient client = mock(AiEmbeddingClient.class);
+        when(client.modelName()).thenReturn("gemini-embedding-001");
+        when(client.embed(anyString())).thenReturn(vector(0.25f));
+        QuestionEmbeddingService service = new QuestionEmbeddingService(mapper, client);
+        Question question = new Question();
+        question.setId(199L);
+        question.setQuestionType("TRANSLATION_ZH_TO_JA");
+        question.setSourceText("  请告诉我车站\n在哪里。  ");
+        question.setContextText("不应进入短句向量的语境。");
+
+        service.synchronizeEmbedding(question);
+
+        ArgumentCaptor<String> contentCaptor = ArgumentCaptor.forClass(String.class);
+        verify(client).embed(contentCaptor.capture());
+        assertThat(contentCaptor.getValue())
+                .isEqualTo("请告诉我车站 在哪里。")
+                .doesNotContain("题目原文", "语境");
+        verify(mapper).upsertQuestionEmbedding(
+                any(),
+                anyString(),
+                eq(service.contentHash(
+                        "TRANSLATION_ZH_TO_JA",
+                        question.getSourceText()
+                )),
+                anyString(),
+                any()
+        );
+    }
+
+    @Test
     void isSimilarShouldUseCosineThreshold() {
         QuestionEmbeddingService service = new QuestionEmbeddingService(mock(QuestionEmbeddingMapper.class), mock(AiEmbeddingClient.class));
 
@@ -53,8 +88,9 @@ class QuestionEmbeddingServiceTest {
         assertThat(service.isSimilar(vector(1f), vectorAt(1, 1f))).isFalse();
     }
 
-    @Test
-    void synchronizeEmbeddingShouldUseOnlyArticleBody() {
+    @ParameterizedTest
+    @ValueSource(strings = {"TRANSLATION_ZH_TO_JA_ARTICLE", "TRANSLATION_EN_TO_JA_ARTICLE"})
+    void synchronizeEmbeddingShouldUseOnlyArticleBody(String questionType) {
         QuestionEmbeddingMapper mapper = mock(QuestionEmbeddingMapper.class);
         AiEmbeddingClient client = mock(AiEmbeddingClient.class);
         when(client.modelName()).thenReturn("gemini-embedding-001");
@@ -62,7 +98,7 @@ class QuestionEmbeddingServiceTest {
         QuestionEmbeddingService service = new QuestionEmbeddingService(mapper, client);
         Question article = new Question();
         article.setId(200L);
-        article.setQuestionType("TRANSLATION_ZH_TO_JA_ARTICLE");
+        article.setQuestionType(questionType);
         article.setSourceText("文章正文。\n\n第二句正文。");
         article.setContextText("不应进入文章向量的语境。");
 
@@ -84,7 +120,7 @@ class QuestionEmbeddingServiceTest {
         QuestionEmbeddingService service = new QuestionEmbeddingService(mapper, client);
         QuestionEmbeddingCandidate article = candidate(
                 201L,
-                service.contentHash("文章正文。", "旧语境。"),
+                "legacy-content-hash",
                 "gemini-embedding-001"
         );
         article.setQuestionType("TRANSLATION_ZH_TO_JA_ARTICLE");
