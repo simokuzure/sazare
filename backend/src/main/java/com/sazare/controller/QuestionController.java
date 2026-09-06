@@ -76,9 +76,12 @@ public class QuestionController {
 
     @GetMapping
     public ApiResponse<PageVO<QuestionVO>> listQuestions(
+            @Pattern(regexp = TranslationDirection.LEARNING_MODE_PATTERN,
+                    message = "learningMode 只能是 ZH_TO_JA 或 EN_TO_JA")
+            @RequestParam(defaultValue = "ZH_TO_JA") String learningMode,
             @Pattern(regexp = TranslationDirection.QUESTION_TYPE_PATTERN,
                     message = "questionType 不合法")
-            @RequestParam(defaultValue = "TRANSLATION_ZH_TO_JA") String questionType,
+            @RequestParam(required = false) String questionType,
             @Pattern(regexp = "N5|N4|N3|N2|N1", message = "level 只能是 N5、N4、N3、N2、N1")
             @RequestParam(required = false) String level,
             @Min(value = 1, message = "difficulty 必须在 1 到 5 之间")
@@ -98,6 +101,7 @@ public class QuestionController {
             @RequestParam(defaultValue = "20") Integer size
     ) {
         QuestionQueryRequest request = new QuestionQueryRequest(
+                learningMode,
                 questionType,
                 level,
                 difficulty,
@@ -135,6 +139,7 @@ public class QuestionController {
             @RequestParam(defaultValue = "1") Integer count
     ) {
         QuestionQueryRequest request = new QuestionQueryRequest(
+                null,
                 questionType,
                 level,
                 difficulty,

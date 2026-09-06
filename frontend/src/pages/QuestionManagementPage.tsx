@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { getErrorMessage } from '../api/client'
 import { fetchAllTags } from '../api/tagApi'
 import { deleteQuestion, fetchQuestion, fetchQuestions as queryQuestions, parseCodeList, saveQuestion, toggleQuestionEnabled } from '../api/questionApi'
@@ -11,6 +11,10 @@ import { useLanguage } from '../i18n/LanguageContext'
 import { getTagDisplayName } from '../utils/tag'
 
 type QuestionViewMode = 'list' | 'detail' | 'create' | 'edit'
+
+type QuestionManagementPageProps = {
+  initialQuestionId?: number | null
+}
 
 const EMPTY_QUESTION_FORM: QuestionFormState = {
   sourceText: '',
@@ -27,7 +31,8 @@ const EMPTY_QUESTION_FORM: QuestionFormState = {
 }
 
 const INITIAL_QUESTION_FILTERS: QuestionFilterState = {
-  questionType: 'TRANSLATION_ZH_TO_JA',
+  learningMode: 'ZH_TO_JA',
+  questionType: '',
   level: '',
   difficulty: '',
   tagCodes: '',
@@ -37,11 +42,11 @@ const INITIAL_QUESTION_FILTERS: QuestionFilterState = {
   size: 20,
 }
 
-export default function QuestionManagementPage() {
-  const { english, shortQuestionType, articleQuestionType, text } = useLanguage()
+export default function QuestionManagementPage({ initialQuestionId = null }: QuestionManagementPageProps) {
+  const { english, learningMode, shortQuestionType, articleQuestionType, text } = useLanguage()
   const [questions, setQuestions] = useState<Question[]>([])
   const [questionTotal, setQuestionTotal] = useState(0)
-  const [questionFilters, setQuestionFilters] = useState<QuestionFilterState>({ ...INITIAL_QUESTION_FILTERS, questionType: shortQuestionType })
+  const [questionFilters, setQuestionFilters] = useState<QuestionFilterState>({ ...INITIAL_QUESTION_FILTERS, learningMode })
   const [questionLoading, setQuestionLoading] = useState(false)
   const [questionError, setQuestionError] = useState<string | null>(null)
   const [questionNotice, setQuestionNotice] = useState<PracticeNotice | null>(null)
@@ -142,7 +147,7 @@ export default function QuestionManagementPage() {
     setQuestionFilters((current) => ({ ...current }))
   }
 
-  async function handleSelectManagedQuestion(questionId: number) {
+  const handleSelectManagedQuestion = useCallback(async (questionId: number) => {
     setQuestionActionId(questionId)
     setQuestionNotice(null)
 
@@ -160,7 +165,13 @@ export default function QuestionManagementPage() {
     } finally {
       setQuestionActionId(null)
     }
-  }
+  }, [text])
+
+  useEffect(() => {
+    if (initialQuestionId != null) {
+      void handleSelectManagedQuestion(initialQuestionId)
+    }
+  }, [handleSelectManagedQuestion, initialQuestionId])
 
   function handleBackToQuestionList() {
     setViewMode('list')
@@ -438,6 +449,7 @@ export default function QuestionManagementPage() {
                 <label>
                   <span>{text('题型', 'Question type')}</span>
                   <select value={questionFilters.questionType} onChange={(event) => updateQuestionFilters({ questionType: event.target.value as QuestionFilterState['questionType'] })}>
+                    <option value="">{text('全部', 'All')}</option>
                     <option value={shortQuestionType}>{text('短句翻译', 'Sentence')}</option>
                     <option value={articleQuestionType}>{text('文章翻译', 'Article')}</option>
                   </select>
@@ -597,10 +609,10 @@ export default function QuestionManagementPage() {
             ) : null}
 
             {viewMode === 'detail' ? (
-              <section className="surface question-detail-panel" aria-label="question detail">
+              <>
                 <PageHeader
-                  eyebrow={text('详情', 'Details')}
                   title={detailQuestion ? text(`题目 #${detailQuestion.id}`, `Question #${detailQuestion.id}`) : text('题目详情', 'Question details')}
+                  description={text('查看题目内容、学习属性与参考答案。', 'Review the question content, learning attributes, and reference answers.')}
                   actions={<>
                     <button type="button" onClick={handleBackToQuestionList}>{text('返回列表', 'Back to list')}</button>
                     {detailQuestion ? (
@@ -628,60 +640,18 @@ export default function QuestionManagementPage() {
                   </>}
                 />
 
-                {detailQuestion ? (
-                  <dl className="question-details">
-                    <div>
-                      <dt>{text('题型', 'Type')}</dt>
-                      <dd>{formatQuestionType(detailQuestion.questionType, english)}</dd>
-                    </div>
-                    <div>
-                      <dt>{text('中文原文', 'English source')}</dt>
-                      <dd>{detailQuestion.questionType.endsWith('_ARTICLE')
-                        ? <ArticleSegments text={detailQuestion.sourceText} />
-                        : detailQuestion.sourceText}</dd>
-                    </div>
-                    <div>
-                      <dt>{text('语境', 'Context')}</dt>
-                      <dd>{detailQuestion.contextText}</dd>
-                    </div>
-                    <div>
-                      <dt>{detailQuestion.questionType.endsWith('_ARTICLE') ? text('生词提示', 'Vocabulary hints') : text('语法点', 'Grammar point')}</dt>
-                      <dd className={detailQuestion.questionType.endsWith('_ARTICLE') ? 'pre-wrap-text' : undefined}>{detailQuestion.grammarPoint}</dd>
-                    </div>
-                    <div>
-                      <dt>{text('属性', 'Properties')}</dt>
-                      <dd>{formatQuestionFlags(detailQuestion, english)}</dd>
-                    </div>
-                    <div>
-                      <dt>{text('标签', 'Tags')}</dt>
-                      <dd>
-                        <span className="tag-chip-row">
-                          {detailQuestion.tags.map((tag) => (
-                            <span key={tag.id}>{getTagDisplayName(tag, english)}</span>
-                          ))}
-                        </span>
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{text('答案', 'Answers')}</dt>
-                      <dd>
-                        <ol className="compact-answer-list">
-                          {detailQuestion.answers.map((answer) => (
-                            <li key={answer.id}>
-                              <span>{answer.answerType === 'STANDARD' ? text('标准', 'Standard') : text('参考', 'Reference')}</span>
-                              <strong>{detailQuestion.questionType.endsWith('_ARTICLE')
-                                ? <ArticleSegments text={answer.answerText} />
-                                : answer.answerText}</strong>
-                            </li>
-                          ))}
-                        </ol>
-                      </dd>
-                    </div>
-                  </dl>
-                ) : (
-                  <p className="empty-state" role="status">{text('从列表中选择题目，即可在此查看完整内容。', 'Select a question from the list to view its full details here.')}</p>
-                )}
-              </section>
+                <section className="question-detail-panel" aria-label="question detail">
+                  {detailQuestion ? (
+                    detailQuestion.questionType.endsWith('_ARTICLE') ? (
+                      <ArticleQuestionDetail question={detailQuestion} english={english} text={text} />
+                    ) : (
+                      <ShortQuestionDetail question={detailQuestion} english={english} text={text} />
+                    )
+                  ) : (
+                    <p className="empty-state" role="status">{text('从列表中选择题目，即可在此查看完整内容。', 'Select a question from the list to view its full details here.')}</p>
+                  )}
+                </section>
+              </>
             ) : null}
 
             {viewMode === 'create' || viewMode === 'edit' ? (
@@ -930,7 +900,7 @@ function formatQuestionFlags(question: Question, english: boolean) {
     question.exam ? (english ? 'Exam' : '考试') : null,
   ].filter(Boolean)
 
-  return `${question.level} / ${english ? 'Difficulty' : '难度'} ${question.difficulty} / ${question.sourceType} / ${question.enabled ? (english ? 'Enabled' : '启用') : (english ? 'Disabled' : '停用')}${flags.length > 0 ? ` / ${flags.join(english ? ', ' : '、')}` : ''}`
+  return flags.join(english ? ', ' : '、') || '-'
 }
 
 function formatQuestionSourceType(sourceType: Question['sourceType'], english: boolean) {
@@ -949,10 +919,137 @@ function splitArticleSegments(text: string) {
   return normalized.split(/\n\s*\n/).map((segment) => segment.trim()).filter(Boolean)
 }
 
-function ArticleSegments({ text }: { text: string }) {
+type QuestionDetailProps = {
+  question: Question
+  english: boolean
+  text: (chinese: string, english: string) => string
+}
+
+function QuestionMetaStrip({ question, english, text }: QuestionDetailProps) {
   return (
-    <ol className="article-segment-list compact">
-      {splitArticleSegments(text).map((segment, index) => <li key={`${index}-${segment}`}>{segment}</li>)}
-    </ol>
+    <dl className="question-meta-strip" aria-label={text('题目信息', 'Question information')}>
+      <div>
+        <dt>{text('题型', 'Type')}</dt>
+        <dd>{formatQuestionType(question.questionType, english)}</dd>
+      </div>
+      <div>
+        <dt>{text('等级/难度', 'Level / difficulty')}</dt>
+        <dd>{question.level} / {question.difficulty}</dd>
+      </div>
+      <div>
+        <dt>{text('来源', 'Source')}</dt>
+        <dd><span className={question.sourceType === 'AI' ? 'data-badge is-brand' : 'data-badge'}>{formatQuestionSourceType(question.sourceType, english)}</span></dd>
+      </div>
+      <div>
+        <dt>{text('状态', 'Status')}</dt>
+        <dd><span className={question.enabled ? 'data-badge is-success' : 'data-badge'}>{question.enabled ? text('启用', 'Enabled') : text('停用', 'Disabled')}</span></dd>
+      </div>
+      <div>
+        <dt>{text('属性', 'Properties')}</dt>
+        <dd>{formatQuestionFlags(question, english)}</dd>
+      </div>
+      <div className="question-meta-tags">
+        <dt>{text('标签', 'Tags')}</dt>
+        <dd>
+          <span className="tag-chip-row">
+            {question.tags.map((tag) => (
+              <span key={tag.id}>{getTagDisplayName(tag, english)}</span>
+            ))}
+          </span>
+        </dd>
+      </div>
+    </dl>
+  )
+}
+
+function ShortQuestionDetail({ question, english, text }: QuestionDetailProps) {
+  const standardAnswer = question.answers.find((answer) => answer.answerType === 'STANDARD') ?? question.answers[0]
+  const additionalAnswers = question.answers.filter((answer) => answer.id !== standardAnswer?.id)
+
+  return (
+    <div className="short-question-detail">
+      <QuestionMetaStrip question={question} english={english} text={text} />
+
+      <dl className="question-detail-notes">
+        <div>
+          <dt>{text('语境', 'Context')}</dt>
+          <dd>{question.contextText}</dd>
+        </div>
+        <div>
+          <dt>{text('语法点', 'Grammar point')}</dt>
+          <dd>{question.grammarPoint}</dd>
+        </div>
+      </dl>
+
+      <section className="short-question-comparison" aria-label={text('原文与答案对照', 'Source and answer comparison')}>
+        <div className="short-question-comparison-header" aria-hidden="true">
+          <span>{text('中文原文', 'English source')}</span>
+          <span>{text('标准答案', 'Standard answer')}</span>
+        </div>
+        <div className="short-question-comparison-row">
+          <div className="short-question-text">
+            <span className="short-question-mobile-label">{text('中文原文', 'English source')}</span>
+            <p>{question.sourceText}</p>
+          </div>
+          <div className="short-question-answer-stack">
+            <div className="short-question-text">
+              <span className="short-question-mobile-label">{text('标准答案', 'Standard answer')}</span>
+              <p>{standardAnswer?.answerText ?? '-'}</p>
+            </div>
+            {additionalAnswers.map((answer) => (
+              <div className="short-question-additional-answer" key={answer.id}>
+                <p>{answer.answerText}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function ArticleQuestionDetail({ question, english, text }: QuestionDetailProps) {
+  const standardAnswer = question.answers.find((answer) => answer.answerType === 'STANDARD')
+  const sourceSegments = splitArticleSegments(question.sourceText)
+  const answerSegments = splitArticleSegments(standardAnswer?.answerText ?? '')
+  const segmentCount = Math.max(sourceSegments.length, answerSegments.length)
+
+  return (
+    <div className="article-question-detail">
+      <QuestionMetaStrip question={question} english={english} text={text} />
+
+      <dl className="question-detail-notes">
+        <div>
+          <dt>{text('语境', 'Context')}</dt>
+          <dd>{question.contextText}</dd>
+        </div>
+        <div>
+          <dt>{text('生词提示', 'Vocabulary hints')}</dt>
+          <dd className="pre-wrap-text">{question.grammarPoint}</dd>
+        </div>
+      </dl>
+
+      <section className="article-question-comparison" aria-label={text('原文与标准答案逐句对照', 'Sentence-aligned source and standard answer')}>
+        <div className="article-question-comparison-header" aria-hidden="true">
+          <span>{text('中文原文', 'English source')}</span>
+          <span>{text('标准答案', 'Standard answer')}</span>
+        </div>
+        <ol className="article-question-segment-list">
+          {Array.from({ length: segmentCount }, (_, index) => (
+            <li key={`${index}-${sourceSegments[index] ?? answerSegments[index]}`}>
+              <span className="article-question-segment-number" aria-hidden="true">{index + 1}</span>
+              <div className="article-question-segment-text">
+                <span className="article-question-mobile-label">{text('中文原文', 'English source')}</span>
+                <p>{sourceSegments[index] ?? '-'}</p>
+              </div>
+              <div className="article-question-segment-text">
+                <span className="article-question-mobile-label">{text('标准答案', 'Standard answer')}</span>
+                <p>{answerSegments[index] ?? '-'}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+    </div>
   )
 }

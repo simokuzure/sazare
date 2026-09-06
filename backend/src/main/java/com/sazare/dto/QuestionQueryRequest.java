@@ -10,6 +10,12 @@ import java.util.List;
 
 public record QuestionQueryRequest(
         @Pattern(
+                regexp = TranslationDirection.LEARNING_MODE_PATTERN,
+                message = "learningMode 只能是 ZH_TO_JA 或 EN_TO_JA"
+        )
+        String learningMode,
+
+        @Pattern(
                 regexp = TranslationDirection.QUESTION_TYPE_PATTERN,
                 message = "questionType 不合法"
         )
@@ -43,9 +49,8 @@ public record QuestionQueryRequest(
         Integer size
 ) {
     public QuestionQueryRequest {
-        questionType = questionType == null || questionType.isBlank()
-                ? "TRANSLATION_ZH_TO_JA"
-                : questionType.trim();
+        learningMode = learningMode == null || learningMode.isBlank() ? null : learningMode.trim();
+        questionType = questionType == null || questionType.isBlank() ? null : questionType.trim();
         level = level == null || level.isBlank() ? null : level.trim();
         sourceType = sourceType == null || sourceType.isBlank() ? null : sourceType.trim();
         enabled = enabled == null ? true : enabled;
@@ -53,8 +58,23 @@ public record QuestionQueryRequest(
         size = size == null ? 20 : size;
     }
 
+    public String getLearningMode() {
+        return learningMode;
+    }
+
     public String getQuestionType() {
         return questionType;
+    }
+
+    public List<String> getQuestionTypes() {
+        if (questionType != null) {
+            return List.of(questionType);
+        }
+        if (learningMode == null) {
+            return List.of();
+        }
+        TranslationDirection direction = TranslationDirection.fromLearningMode(learningMode);
+        return List.of(direction.shortQuestionType(), direction.articleQuestionType());
     }
 
     public String getLevel() {

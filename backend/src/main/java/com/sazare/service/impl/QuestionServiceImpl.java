@@ -623,6 +623,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     private QuestionQueryRequest normalizeQueryRequest(QuestionQueryRequest request) {
         return new QuestionQueryRequest(
+                request.learningMode(),
                 request.questionType(),
                 request.level(),
                 request.difficulty(),

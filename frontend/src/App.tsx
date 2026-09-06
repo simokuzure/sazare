@@ -14,6 +14,7 @@ type PageKey = 'practice' | 'answerRecords' | 'statistics' | 'tags' | 'questions
 function App() {
   const { english, learningMode, setLearningMode, t } = useLanguage()
   const [activePage, setActivePage] = useState<PageKey>('practice')
+  const [questionDetailTarget, setQuestionDetailTarget] = useState<number | null>(null)
   const navItems: { key: PageKey; label: string }[] = [
     { key: 'practice', label: t('practice') },
     { key: 'reviews', label: t('reviewCards') },
@@ -21,6 +22,16 @@ function App() {
     { key: 'questions', label: t('questionManagement') },
     { key: 'statistics', label: t('learningAnalytics') },
   ]
+
+  function handleNavigate(page: PageKey) {
+    setQuestionDetailTarget(null)
+    setActivePage(page)
+  }
+
+  function handleOpenQuestion(questionId: number) {
+    setQuestionDetailTarget(questionId)
+    setActivePage('questions')
+  }
 
   return (
     <div className="app-shell">
@@ -30,7 +41,7 @@ function App() {
       <header className="app-header">
         <div className="app-header-inner">
           <div className="title-group">
-            <button type="button" className="brand-link" onClick={() => setActivePage('practice')} aria-label={t('backToPractice')}>
+            <button type="button" className="brand-link" onClick={() => handleNavigate('practice')} aria-label={t('backToPractice')}>
               <span className="brand-logo-image" aria-hidden="true" />
               <span className="brand-copy">
                 <h1>{t('appTitle')}</h1>
@@ -62,7 +73,7 @@ function App() {
                   type="button"
                   className={activePage === item.key ? 'nav-button is-active' : 'nav-button'}
                   aria-current={activePage === item.key ? 'page' : undefined}
-                  onClick={() => setActivePage(item.key)}
+                  onClick={() => handleNavigate(item.key)}
                 >
                   {item.label}
                 </button>
@@ -76,10 +87,10 @@ function App() {
         <div hidden={activePage !== 'practice'}>
           <PracticePage key={learningMode} />
         </div>
-        {activePage === 'answerRecords' ? <AnswerRecordsPage key={learningMode} /> : null}
+        {activePage === 'answerRecords' ? <AnswerRecordsPage key={learningMode} onOpenQuestion={handleOpenQuestion} /> : null}
         {activePage === 'statistics' ? <LearningStatisticsPage key={learningMode} /> : null}
         {activePage === 'tags' ? <TagManagementPage key={learningMode} /> : null}
-        {activePage === 'questions' ? <QuestionManagementPage key={learningMode} /> : null}
+        {activePage === 'questions' ? <QuestionManagementPage key={learningMode} initialQuestionId={questionDetailTarget} /> : null}
         {activePage === 'errorTypes' ? <ErrorTypeManagementPage key={learningMode} /> : null}
         {activePage === 'reviews' ? <ReviewPage key={learningMode} /> : null}
       </main>

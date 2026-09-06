@@ -48,10 +48,13 @@ export async function submitQuestionAnswer(questionId: number, answerText: strin
 
 export async function fetchQuestions(filters: QuestionFilterState, signal?: AbortSignal): Promise<PageData<Question>> {
   const searchParams = new URLSearchParams({
-    questionType: filters.questionType,
+    learningMode: filters.learningMode,
     page: String(filters.page),
     size: String(filters.size),
   })
+  if (filters.questionType) {
+    searchParams.set('questionType', filters.questionType)
+  }
   if (filters.level) {
     searchParams.set('level', filters.level)
   }

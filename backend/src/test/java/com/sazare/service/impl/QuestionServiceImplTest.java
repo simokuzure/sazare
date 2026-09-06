@@ -757,6 +757,7 @@ class QuestionServiceImplTest {
         when(questionAnswerMapper.selectActiveAnswersByQuestionIds(List.of(100L))).thenReturn(List.of(answer));
 
         PageVO<QuestionVO> page = questionService.listQuestions(new QuestionQueryRequest(
+                "ZH_TO_JA",
                 null,
                 "N4",
                 null,
@@ -782,6 +783,7 @@ class QuestionServiceImplTest {
         verify(questionMapper).countQuestions(requestCaptor.capture());
         assertThat(requestCaptor.getValue().tagCodes())
                 .containsExactly("FINANCE_BANK", "FUNCTION_EXPRESS_PLAN");
+        assertThat(requestCaptor.getValue().learningMode()).isEqualTo("ZH_TO_JA");
     }
 
     @Test
@@ -803,6 +805,7 @@ class QuestionServiceImplTest {
                 .thenReturn(List.of(firstAnswer, secondAnswer));
 
         List<QuestionVO> result = questionService.getRandomQuestions(new QuestionQueryRequest(
+                null,
                 null,
                 "N4",
                 null,
@@ -841,6 +844,7 @@ class QuestionServiceImplTest {
         when(questionAnswerMapper.selectActiveAnswersByQuestionIds(List.of(100L))).thenReturn(List.of(answer));
 
         List<QuestionVO> result = questionService.getRandomQuestions(new QuestionQueryRequest(
+                null,
                 "TRANSLATION_ZH_TO_JA_ARTICLE",
                 null,
                 null,
@@ -865,6 +869,7 @@ class QuestionServiceImplTest {
         when(questionMapper.selectRandomQuestionIds(any(), eq(5))).thenReturn(List.of());
 
         List<QuestionVO> result = questionService.getRandomQuestions(new QuestionQueryRequest(
+                null,
                 null,
                 "N1",
                 5,

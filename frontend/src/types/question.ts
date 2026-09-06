@@ -50,7 +50,8 @@ export type QuestionFormState = {
 }
 
 export type QuestionFilterState = {
-  questionType: QuestionType
+  learningMode: 'ZH_TO_JA' | 'EN_TO_JA'
+  questionType: QuestionType | ''
   level: string
   difficulty: string
   tagCodes: string

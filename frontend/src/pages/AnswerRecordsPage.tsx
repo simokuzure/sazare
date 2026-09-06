@@ -10,6 +10,10 @@ import { getTagDisplayName } from '../utils/tag'
 
 type AnswerRecordViewMode = 'list' | 'detail'
 
+type AnswerRecordsPageProps = {
+  onOpenQuestion: (questionId: number) => void
+}
+
 const INITIAL_FILTERS: UserAnswerFilterState = {
   answerStatus: '',
   questionType: '',
@@ -27,7 +31,7 @@ const STATUS_LABELS: Record<Exclude<AnswerStatus, ''>, string> = {
   FAILED: '评测失败',
 }
 
-export default function AnswerRecordsPage() {
+export default function AnswerRecordsPage({ onOpenQuestion }: AnswerRecordsPageProps) {
   const { english, learningMode, shortQuestionType, articleQuestionType, text } = useLanguage()
   const [records, setRecords] = useState<UserAnswerRecord[]>([])
   const [total, setTotal] = useState(0)
@@ -311,7 +315,7 @@ export default function AnswerRecordsPage() {
             <section className="answer-record-detail-workspace">
               <dl className="answer-record-meta-strip" aria-label={text('答题记录摘要', 'Answer summary')}>
                 <div><dt>{text('题型', 'Type')}</dt><dd>{detail.questionId == null ? text('日语纠错', 'Proofreading') : text(formatQuestionType(detail.questionType), isArticleQuestion(detail.questionType) ? 'Article' : 'Sentence')}</dd></div>
-                {detail.questionId == null ? null : <div><dt>{text('题目', 'Question')}</dt><dd>#{detail.questionId}</dd></div>}
+                {detail.questionId == null ? null : <div><dt>{text('题目', 'Question')}</dt><dd><button type="button" className="answer-record-question-link" aria-label={text(`查看题目 #${detail.questionId} 详情`, `View question #${detail.questionId}`)} onClick={() => onOpenQuestion(detail.questionId!)}>#{detail.questionId}</button></dd></div>}
                 {detail.questionId == null ? null : <div><dt>{text('等级/难度', 'Level / difficulty')}</dt><dd>{formatLevelDifficulty(detail)}</dd></div>}
                 {detail.tags.length > 0 ? <div className="answer-record-meta-tags"><dt>{text('标签', 'Tags')}</dt><dd><span className="tag-chip-row">{detail.tags.map((tag) => <span key={tag.id}>{getTagDisplayName(tag, english)}</span>)}</span></dd></div> : null}
                 <div><dt>{text('提交时间', 'Submitted')}</dt><dd>{formatDateTime(detail.createdAt)}</dd></div>
