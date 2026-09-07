@@ -1,0 +1,82 @@
+/* Compact filter and generator controls share one desktop rhythm. */
+.practice-grid .generator-panel {
+  border-top: 1px solid var(--border);
+  padding: 14px 18px;
+}
+
+@media (min-width: 861px) {
+  .practice-grid .generator-panel {
+    height: 107px;
+  }
+}
+
+.generator-panel .form-grid,
+.generator-panel .article-generator-form {
+  gap: 10px 12px;
+}
+
+.generator-panel .form-grid label,
+.generator-panel .article-generator-form label,
+.filter-bar label,
+.answer-record-filter-bar label,
+.error-type-filter-bar label,
+.question-filter-bar label {
+  gap: 4px;
+}
+
+.generator-panel select,
+.generator-panel input,
+.generator-panel .form-grid > button,
+.filter-bar select,
+.filter-bar input,
+.answer-record-filter-bar select,
+.answer-record-filter-bar input,
+.error-type-filter-bar select,
+.error-type-filter-bar input,
+.question-filter-bar select,
+.question-filter-bar input {
+  min-height: 36px;
+  height: 36px;
+  padding-block: 5px;
+}
+
+.target-list-panel > form,
+.question-page .question-filter-bar,
+.answer-records-page .answer-record-filter-bar {
+  gap: 10px 12px;
+  padding: 14px 16px;
+}
+
+.review-early-notice {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 10px 12px;
+}
+
+.review-early-notice strong {
+  flex: 0 0 auto;
+}
+
+.review-early-notice p {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .generator-panel select,
+  .generator-panel input,
+  .generator-panel .form-grid > button,
+  .filter-bar select,
+  .filter-bar input,
+  .answer-record-filter-bar select,
+  .answer-record-filter-bar input,
+  .error-type-filter-bar select,
+  .error-type-filter-bar input,
+  .question-filter-bar select,
+  .question-filter-bar input {
+    min-height: 44px;
+    height: auto;
+  }
+}
+

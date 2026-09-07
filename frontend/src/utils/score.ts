@@ -11,3 +11,7 @@ export function getScoreTone(score: number | null | undefined): ScoreTone {
 export function scoreToneClassName(score: number | null | undefined, className?: string) {
   return [className, 'score-value', `is-${getScoreTone(score)}`].filter(Boolean).join(' ')
 }
+
+export function formatScore(score: number) {
+  return score.toFixed(2)
+}

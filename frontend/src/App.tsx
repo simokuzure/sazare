@@ -1,15 +1,15 @@
-import { useState } from 'react'
-import AnswerRecordsPage from './pages/AnswerRecordsPage'
-import ErrorTypeManagementPage from './pages/ErrorTypeManagementPage'
-import LearningStatisticsPage from './pages/LearningStatisticsPage'
+import { lazy, Suspense, useState } from 'react'
 import PracticePage from './pages/PracticePage'
-import QuestionManagementPage from './pages/QuestionManagementPage'
-import ReviewPage from './pages/ReviewPage'
-import TagManagementPage from './pages/TagManagementPage'
+import AppErrorBoundary from './components/AppErrorBoundary'
 import './App.css'
 import { useLanguage } from './i18n/LanguageContext'
 
-type PageKey = 'practice' | 'answerRecords' | 'statistics' | 'tags' | 'questions' | 'errorTypes' | 'reviews'
+const AnswerRecordsPage = lazy(() => import('./pages/AnswerRecordsPage'))
+const LearningStatisticsPage = lazy(() => import('./pages/LearningStatisticsPage'))
+const QuestionManagementPage = lazy(() => import('./pages/QuestionManagementPage'))
+const ReviewPage = lazy(() => import('./pages/ReviewPage'))
+
+type PageKey = 'practice' | 'answerRecords' | 'statistics' | 'questions' | 'reviews'
 
 function App() {
   const { english, learningMode, setLearningMode, t } = useLanguage()
@@ -87,12 +87,14 @@ function App() {
         <div hidden={activePage !== 'practice'}>
           <PracticePage key={learningMode} />
         </div>
-        {activePage === 'answerRecords' ? <AnswerRecordsPage key={learningMode} onOpenQuestion={handleOpenQuestion} /> : null}
-        {activePage === 'statistics' ? <LearningStatisticsPage key={learningMode} /> : null}
-        {activePage === 'tags' ? <TagManagementPage key={learningMode} /> : null}
-        {activePage === 'questions' ? <QuestionManagementPage key={learningMode} initialQuestionId={questionDetailTarget} /> : null}
-        {activePage === 'errorTypes' ? <ErrorTypeManagementPage key={learningMode} /> : null}
-        {activePage === 'reviews' ? <ReviewPage key={learningMode} /> : null}
+        <AppErrorBoundary key={`${activePage}-${learningMode}`} scope="module">
+          <Suspense fallback={<div className="surface" role="status">{english ? 'Loading page…' : '页面加载中…'}</div>}>
+            {activePage === 'answerRecords' ? <AnswerRecordsPage key={learningMode} onOpenQuestion={handleOpenQuestion} /> : null}
+            {activePage === 'statistics' ? <LearningStatisticsPage key={learningMode} /> : null}
+            {activePage === 'questions' ? <QuestionManagementPage key={learningMode} initialQuestionId={questionDetailTarget} /> : null}
+            {activePage === 'reviews' ? <ReviewPage key={learningMode} /> : null}
+          </Suspense>
+        </AppErrorBoundary>
       </main>
     </div>
   )

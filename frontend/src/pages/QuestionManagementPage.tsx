@@ -4,10 +4,16 @@ import { fetchAllTags } from '../api/tagApi'
 import { deleteQuestion, fetchQuestion, fetchQuestions as queryQuestions, parseCodeList, saveQuestion, toggleQuestionEnabled } from '../api/questionApi'
 import PageHeader from '../components/PageHeader'
 import TagCascadeSelect from '../components/TagCascadeSelect'
+import {
+  ArticleQuestionDetail,
+  ShortQuestionDetail,
+} from '../components/question/QuestionDetails'
+import { formatQuestionSourceType, formatQuestionType, toQuestionForm } from '../components/question/questionPresentation'
 import type { PracticeNotice } from '../types/api'
 import type { Tag } from '../types/tag'
 import type { Question, QuestionFilterState, QuestionFormState, QuestionPayload } from '../types/question'
 import { useLanguage } from '../i18n/LanguageContext'
+import { splitArticleParagraphs } from '../utils/article'
 import { getTagDisplayName } from '../utils/tag'
 
 type QuestionViewMode = 'list' | 'detail' | 'create' | 'edit'
@@ -313,8 +319,8 @@ export default function QuestionManagementPage({ initialQuestionId = null }: Que
     }
 
     if (questionType.endsWith('_ARTICLE')) {
-      const sourceSegments = splitArticleSegments(form.sourceText)
-      const answerSegments = splitArticleSegments(standardAnswer)
+      const sourceSegments = splitArticleParagraphs(form.sourceText)
+      const answerSegments = splitArticleParagraphs(standardAnswer)
       const genreCodes = tagCodes.filter((code) => genreTagOptions.some((tag) => tag.code === code))
       const sourceLength = english
         ? form.sourceText.trim().split(/\s+/).filter(Boolean).length
@@ -867,189 +873,5 @@ export default function QuestionManagementPage({ initialQuestionId = null }: Que
               </section>
             ) : null}
           </section>
-  )
-}
-
-
-function toQuestionForm(question: Question): QuestionFormState {
-  const standardAnswer = question.answers.find((answer) => answer.answerType === 'STANDARD' && answer.primaryAnswer)
-  const referenceAnswers = question.answers
-    .filter((answer) => answer.answerType === 'REFERENCE')
-    .map((answer) => answer.answerText)
-    .join('\n')
-
-  return {
-    sourceText: question.sourceText,
-    contextText: question.contextText,
-    level: question.level,
-    difficulty: String(question.difficulty),
-    grammarPoint: question.grammarPoint,
-    spoken: question.spoken,
-    business: question.business,
-    exam: question.exam,
-    tagCodes: question.tags.map((tag) => tag.code).join(', '),
-    standardAnswer: standardAnswer?.answerText ?? '',
-    referenceAnswers,
-  }
-}
-
-function formatQuestionFlags(question: Question, english: boolean) {
-  const flags = [
-    question.spoken ? (english ? 'Spoken' : '口语') : null,
-    question.business ? (english ? 'Business' : '商务') : null,
-    question.exam ? (english ? 'Exam' : '考试') : null,
-  ].filter(Boolean)
-
-  return flags.join(english ? ', ' : '、') || '-'
-}
-
-function formatQuestionSourceType(sourceType: Question['sourceType'], english: boolean) {
-  if (sourceType === 'AI') return 'AI'
-  if (sourceType === 'REVIEW_DERIVED') return english ? 'Review-derived' : '复习衍生'
-  return english ? 'Manual' : '人工'
-}
-
-function formatQuestionType(questionType: Question['questionType'], english: boolean) {
-  return questionType.endsWith('_ARTICLE') ? (english ? 'Article' : '文章翻译') : (english ? 'Sentence' : '短句翻译')
-}
-
-function splitArticleSegments(text: string) {
-  const normalized = text.replace(/\r\n?/g, '\n').trim()
-  if (!normalized) return []
-  return normalized.split(/\n\s*\n/).map((segment) => segment.trim()).filter(Boolean)
-}
-
-type QuestionDetailProps = {
-  question: Question
-  english: boolean
-  text: (chinese: string, english: string) => string
-}
-
-function QuestionMetaStrip({ question, english, text }: QuestionDetailProps) {
-  return (
-    <dl className="question-meta-strip" aria-label={text('题目信息', 'Question information')}>
-      <div>
-        <dt>{text('题型', 'Type')}</dt>
-        <dd>{formatQuestionType(question.questionType, english)}</dd>
-      </div>
-      <div>
-        <dt>{text('等级/难度', 'Level / difficulty')}</dt>
-        <dd>{question.level} / {question.difficulty}</dd>
-      </div>
-      <div>
-        <dt>{text('来源', 'Source')}</dt>
-        <dd><span className={question.sourceType === 'AI' ? 'data-badge is-brand' : 'data-badge'}>{formatQuestionSourceType(question.sourceType, english)}</span></dd>
-      </div>
-      <div>
-        <dt>{text('状态', 'Status')}</dt>
-        <dd><span className={question.enabled ? 'data-badge is-success' : 'data-badge'}>{question.enabled ? text('启用', 'Enabled') : text('停用', 'Disabled')}</span></dd>
-      </div>
-      <div>
-        <dt>{text('属性', 'Properties')}</dt>
-        <dd>{formatQuestionFlags(question, english)}</dd>
-      </div>
-      <div className="question-meta-tags">
-        <dt>{text('标签', 'Tags')}</dt>
-        <dd>
-          <span className="tag-chip-row">
-            {question.tags.map((tag) => (
-              <span key={tag.id}>{getTagDisplayName(tag, english)}</span>
-            ))}
-          </span>
-        </dd>
-      </div>
-    </dl>
-  )
-}
-
-function ShortQuestionDetail({ question, english, text }: QuestionDetailProps) {
-  const standardAnswer = question.answers.find((answer) => answer.answerType === 'STANDARD') ?? question.answers[0]
-  const additionalAnswers = question.answers.filter((answer) => answer.id !== standardAnswer?.id)
-
-  return (
-    <div className="short-question-detail">
-      <QuestionMetaStrip question={question} english={english} text={text} />
-
-      <dl className="question-detail-notes">
-        <div>
-          <dt>{text('语境', 'Context')}</dt>
-          <dd>{question.contextText}</dd>
-        </div>
-        <div>
-          <dt>{text('语法点', 'Grammar point')}</dt>
-          <dd>{question.grammarPoint}</dd>
-        </div>
-      </dl>
-
-      <section className="short-question-comparison" aria-label={text('原文与答案对照', 'Source and answer comparison')}>
-        <div className="short-question-comparison-header" aria-hidden="true">
-          <span>{text('中文原文', 'English source')}</span>
-          <span>{text('标准答案', 'Standard answer')}</span>
-        </div>
-        <div className="short-question-comparison-row">
-          <div className="short-question-text">
-            <span className="short-question-mobile-label">{text('中文原文', 'English source')}</span>
-            <p>{question.sourceText}</p>
-          </div>
-          <div className="short-question-answer-stack">
-            <div className="short-question-text">
-              <span className="short-question-mobile-label">{text('标准答案', 'Standard answer')}</span>
-              <p>{standardAnswer?.answerText ?? '-'}</p>
-            </div>
-            {additionalAnswers.map((answer) => (
-              <div className="short-question-additional-answer" key={answer.id}>
-                <p>{answer.answerText}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    </div>
-  )
-}
-
-function ArticleQuestionDetail({ question, english, text }: QuestionDetailProps) {
-  const standardAnswer = question.answers.find((answer) => answer.answerType === 'STANDARD')
-  const sourceSegments = splitArticleSegments(question.sourceText)
-  const answerSegments = splitArticleSegments(standardAnswer?.answerText ?? '')
-  const segmentCount = Math.max(sourceSegments.length, answerSegments.length)
-
-  return (
-    <div className="article-question-detail">
-      <QuestionMetaStrip question={question} english={english} text={text} />
-
-      <dl className="question-detail-notes">
-        <div>
-          <dt>{text('语境', 'Context')}</dt>
-          <dd>{question.contextText}</dd>
-        </div>
-        <div>
-          <dt>{text('生词提示', 'Vocabulary hints')}</dt>
-          <dd className="pre-wrap-text">{question.grammarPoint}</dd>
-        </div>
-      </dl>
-
-      <section className="article-question-comparison" aria-label={text('原文与标准答案逐句对照', 'Sentence-aligned source and standard answer')}>
-        <div className="article-question-comparison-header" aria-hidden="true">
-          <span>{text('中文原文', 'English source')}</span>
-          <span>{text('标准答案', 'Standard answer')}</span>
-        </div>
-        <ol className="article-question-segment-list">
-          {Array.from({ length: segmentCount }, (_, index) => (
-            <li key={`${index}-${sourceSegments[index] ?? answerSegments[index]}`}>
-              <span className="article-question-segment-number" aria-hidden="true">{index + 1}</span>
-              <div className="article-question-segment-text">
-                <span className="article-question-mobile-label">{text('中文原文', 'English source')}</span>
-                <p>{sourceSegments[index] ?? '-'}</p>
-              </div>
-              <div className="article-question-segment-text">
-                <span className="article-question-mobile-label">{text('标准答案', 'Standard answer')}</span>
-                <p>{answerSegments[index] ?? '-'}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </section>
-    </div>
   )
 }

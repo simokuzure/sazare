@@ -3,18 +3,18 @@ import { getErrorMessage } from '../api/client'
 import { correctJapanese } from '../api/japaneseCorrectionApi'
 import { confirmUserAnswerErrors, fetchUserErrorTypes } from '../api/userErrorApi'
 import ErrorConfirmationModal from '../components/ErrorConfirmationModal'
+import StatusNotice from '../components/StatusNotice'
 import {
+  buildErrorConfirmations,
   type ErrorCandidateState,
   toErrorCandidateState,
-  toExistingErrorConfirmation,
-  toNewErrorConfirmation,
 } from '../components/errorConfirmation'
 import ReviewList from '../components/ReviewList'
 import type { PracticeNotice } from '../types/api'
 import type { JapaneseCorrectionReview } from '../types/review'
-import type { UserAnswerErrorConfirmation, UserErrorType } from '../types/userError'
+import type { UserErrorType } from '../types/userError'
 import { useLanguage } from '../i18n/LanguageContext'
-import { scoreToneClassName } from '../utils/score'
+import { formatScore, scoreToneClassName } from '../utils/score'
 
 type CorrectionSession = {
   text: string
@@ -113,45 +113,30 @@ export default function JapaneseCorrectionPractice() {
 
   async function handleConfirmErrors() {
     if (!session.review) return false
-    const selectedItems = session.review.errorAnalysis
-      .map((analysis, index) => ({ analysis, candidate: session.candidates[index], index }))
-      .filter(({ candidate }) => candidate?.selected && !candidate.saved)
-    if (selectedItems.length === 0) return false
-
-    const payload: UserAnswerErrorConfirmation[] = []
-    for (const { analysis, candidate, index } of selectedItems) {
-      if (candidate.mode === 'NEW_USER_ERROR_TYPE') {
-        if (!candidate.userErrorTypeName.trim() || !candidate.userErrorTypeDescription.trim()) {
-          setSession((current) => ({
-            ...current,
-            confirmationNotice: { kind: 'error', title: text('请补充复习卡片', 'Complete the review card'), message: text('新建复习卡片需要名称和说明。', 'A new review card requires a name and description.') },
-          }))
-          return false
-        }
-        payload.push(toNewErrorConfirmation(analysis, candidate, index))
-      } else {
-        if (!candidate.userErrorTypeId) {
-          setSession((current) => ({
-            ...current,
-            confirmationNotice: { kind: 'error', title: text('请选择已有复习卡片', 'Select a review card'), message: text('添加记录前请选择对应的复习卡片。', 'Select the review card before adding this item.') },
-          }))
-          return false
-        }
-        payload.push(toExistingErrorConfirmation(analysis, candidate, index))
-      }
+    const confirmation = buildErrorConfirmations(session.review.errorAnalysis, session.candidates)
+    if (confirmation.ok === false) {
+      const missingNewCard = confirmation.reason === 'MISSING_NEW_CARD_DETAILS'
+      setSession((current) => ({
+        ...current,
+        confirmationNotice: missingNewCard
+          ? { kind: 'error', title: text('请补充复习卡片', 'Complete the review card'), message: text('新建复习卡片需要名称和说明。', 'A new review card requires a name and description.') }
+          : { kind: 'error', title: text('请选择已有复习卡片', 'Select a review card'), message: text('添加记录前请选择对应的复习卡片。', 'Select the review card before adding this item.') },
+      }))
+      return false
     }
+    if (confirmation.selectedIndexes.length === 0) return false
 
     setErrorConfirming(true)
     setSession((current) => ({ ...current, confirmationNotice: null }))
     try {
-      await confirmUserAnswerErrors(session.review.userAnswerId, { errors: payload })
-      const confirmedIndexes = new Set(selectedItems.map(({ index }) => index))
+      await confirmUserAnswerErrors(session.review.userAnswerId, { errors: confirmation.payload })
+      const confirmedIndexes = new Set(confirmation.selectedIndexes)
       setSession((current) => ({
         ...current,
         candidates: current.candidates.map((item, index) => (
           confirmedIndexes.has(index) ? { ...item, selected: false, saved: true } : item
         )),
-        confirmationNotice: { kind: 'info', title: text('复习卡片已更新', 'Review cards updated'), message: text(`已添加 ${selectedItems.length} 项复习内容。`, `Added ${selectedItems.length} review item(s).`) },
+        confirmationNotice: { kind: 'info', title: text('复习卡片已更新', 'Review cards updated'), message: text(`已添加 ${confirmation.selectedIndexes.length} 项复习内容。`, `Added ${confirmation.selectedIndexes.length} review item(s).`) },
       }))
       void loadActiveUserErrorTypes()
       return true
@@ -191,7 +176,7 @@ export default function JapaneseCorrectionPractice() {
 
         {!session.submitted ? (
           <>
-            {session.notice ? <Notice notice={session.notice} /> : null}
+            {session.notice ? <StatusNotice notice={session.notice} /> : null}
             <textarea
               aria-label={text('需要检查的日语文本', 'Japanese text to check')}
               className="article-answer-input"
@@ -211,7 +196,7 @@ export default function JapaneseCorrectionPractice() {
           </>
         ) : (
           <div className="answer-result">
-            {session.notice && (!session.review || session.notice.kind === 'error') ? <Notice notice={session.notice} /> : null}
+            {session.notice && (!session.review || session.notice.kind === 'error') ? <StatusNotice notice={session.notice} /> : null}
             {session.correcting ? <div className="notice" role="status" aria-live="polite"><strong>{text('纠错中', 'Checking')}</strong><p>{text('正在检查日语文本并生成修订稿。', 'Checking the Japanese text and preparing a revision.')}</p></div> : null}
             <section className="submitted-answer pre-wrap-text"><span className="label">{text('你的日语原文', 'Your Japanese text')}</span><p>{session.text}</p></section>
             {session.review ? <CorrectionResult
@@ -310,12 +295,4 @@ function CorrectionResult(props: CorrectionResultProps) {
       /> : null}
     </>
   )
-}
-
-function Notice({ notice }: { notice: PracticeNotice }) {
-  return <div className={notice.kind === 'error' ? 'notice is-error' : 'notice'} role={notice.kind === 'error' ? 'alert' : 'status'}><strong>{notice.title}</strong><p>{notice.message}</p></div>
-}
-
-function formatScore(score: number) {
-  return score.toFixed(2)
 }

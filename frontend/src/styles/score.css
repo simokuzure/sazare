@@ -1,0 +1,26 @@
+/* Shared score hierarchy: exact values remain primary; color is supplementary. */
+.score-value {
+  color: var(--score-value-color, var(--score-muted)) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-value.is-perfect {
+  --score-value-color: var(--score-perfect);
+  font-weight: 750;
+}
+
+.score-value.is-excellent {
+  --score-value-color: var(--score-excellent);
+}
+
+.score-value.is-good {
+  --score-value-color: var(--score-good);
+}
+
+.score-value.is-danger {
+  --score-value-color: var(--score-danger);
+}
+
+.score-value.is-muted {
+  --score-value-color: var(--score-muted);
+}

@@ -4,20 +4,21 @@ import { fetchRandomQuestion, generateArticle, submitQuestionAnswer } from '../a
 import { fetchTags } from '../api/tagApi'
 import { confirmUserAnswerErrors, fetchUserErrorTypes } from '../api/userErrorApi'
 import ErrorConfirmationModal from '../components/ErrorConfirmationModal'
+import StatusNotice from '../components/StatusNotice'
 import {
+  buildErrorConfirmations,
   type ErrorCandidateState,
   toErrorCandidateState,
-  toExistingErrorConfirmation,
-  toNewErrorConfirmation,
 } from '../components/errorConfirmation'
 import ReviewList from '../components/ReviewList'
 import type { PracticeNotice } from '../types/api'
 import type { AiArticleGenerationPayload, AiArticleLengthTier, Question } from '../types/question'
 import type { AnswerReview } from '../types/review'
 import type { Tag } from '../types/tag'
-import type { UserAnswerErrorConfirmation, UserErrorType } from '../types/userError'
+import type { UserErrorType } from '../types/userError'
 import { useLanguage } from '../i18n/LanguageContext'
-import { scoreToneClassName } from '../utils/score'
+import { splitArticleParagraphs } from '../utils/article'
+import { formatScore, scoreToneClassName } from '../utils/score'
 import { getTagDisplayName } from '../utils/tag'
 
 type ArticleAnswerSession = {
@@ -88,7 +89,7 @@ export default function ArticlePractice() {
     return () => controller.abort()
   }, [])
 
-  const sourceSegments = useMemo(() => splitArticleSegments(question?.sourceText ?? ''), [question?.sourceText])
+  const sourceSegments = useMemo(() => splitArticleParagraphs(question?.sourceText ?? ''), [question?.sourceText])
   const selectedErrorCount = session.errorCandidates.filter((candidate) => candidate.selected && !candidate.saved).length
   const questionLoading = questionGenerating || questionRandomizing
   const answerInputNotice = session.answerNotice ?? practiceNotice
@@ -209,45 +210,30 @@ export default function ArticlePractice() {
   async function handleConfirmErrors() {
     const answerReview = session.answerReview
     if (!answerReview) return false
-    const selectedItems = answerReview.errorAnalysis
-      .map((analysis, index) => ({ analysis, candidate: session.errorCandidates[index], index }))
-      .filter(({ candidate }) => candidate?.selected && !candidate.saved)
-    if (selectedItems.length === 0) return false
-
-    const payload: UserAnswerErrorConfirmation[] = []
-    for (const { analysis, candidate, index } of selectedItems) {
-      if (candidate.mode === 'NEW_USER_ERROR_TYPE') {
-        if (!candidate.userErrorTypeName.trim() || !candidate.userErrorTypeDescription.trim()) {
-          setSession((current) => ({
-            ...current,
-            errorConfirmationNotice: { kind: 'error', title: text('请补充复习卡片', 'Complete the review card'), message: text('新建复习卡片需要名称和说明。', 'A new review card requires a name and description.') },
-          }))
-          return false
-        }
-        payload.push(toNewErrorConfirmation(analysis, candidate, index))
-      } else {
-        if (!candidate.userErrorTypeId) {
-          setSession((current) => ({
-            ...current,
-            errorConfirmationNotice: { kind: 'error', title: text('请选择已有复习卡片', 'Select a review card'), message: text('添加记录前请选择对应的复习卡片。', 'Select the review card before adding this item.') },
-          }))
-          return false
-        }
-        payload.push(toExistingErrorConfirmation(analysis, candidate, index))
-      }
+    const confirmation = buildErrorConfirmations(answerReview.errorAnalysis, session.errorCandidates)
+    if (confirmation.ok === false) {
+      const missingNewCard = confirmation.reason === 'MISSING_NEW_CARD_DETAILS'
+      setSession((current) => ({
+        ...current,
+        errorConfirmationNotice: missingNewCard
+          ? { kind: 'error', title: text('请补充复习卡片', 'Complete the review card'), message: text('新建复习卡片需要名称和说明。', 'A new review card requires a name and description.') }
+          : { kind: 'error', title: text('请选择已有复习卡片', 'Select a review card'), message: text('添加记录前请选择对应的复习卡片。', 'Select the review card before adding this item.') },
+      }))
+      return false
     }
+    if (confirmation.selectedIndexes.length === 0) return false
 
     setErrorConfirming(true)
     setSession((current) => ({ ...current, errorConfirmationNotice: null }))
     try {
-      await confirmUserAnswerErrors(answerReview.userAnswerId, { errors: payload })
-      const confirmedIndexes = new Set(selectedItems.map(({ index }) => index))
+      await confirmUserAnswerErrors(answerReview.userAnswerId, { errors: confirmation.payload })
+      const confirmedIndexes = new Set(confirmation.selectedIndexes)
       setSession((current) => ({
         ...current,
         errorCandidates: current.errorCandidates.map((item, index) => (
           confirmedIndexes.has(index) ? { ...item, selected: false, saved: true } : item
         )),
-        errorConfirmationNotice: { kind: 'info', title: text('复习卡片已更新', 'Review cards updated'), message: text(`已添加 ${selectedItems.length} 项复习内容。`, `Added ${selectedItems.length} review item(s).`) },
+        errorConfirmationNotice: { kind: 'info', title: text('复习卡片已更新', 'Review cards updated'), message: text(`已添加 ${confirmation.selectedIndexes.length} 项复习内容。`, `Added ${confirmation.selectedIndexes.length} review item(s).`) },
       }))
       void loadActiveUserErrorTypes()
       return true
@@ -317,13 +303,13 @@ export default function ArticlePractice() {
         <div className="section-title"><span className="label">{session.answerSubmitted ? text('评分结果', 'Result') : text('作答', 'Answer')}</span><strong>{session.answerSubmitted ? text('本次文章翻译结果', 'Your article translation result') : text('输入完整日语译文', 'Enter the complete Japanese translation')}</strong></div>
         {!session.answerSubmitted ? (
           <>
-            {answerInputNotice && (answerInputNotice.kind === 'error' || !question) ? <Notice notice={answerInputNotice} /> : null}
+            {answerInputNotice && (answerInputNotice.kind === 'error' || !question) ? <StatusNotice notice={answerInputNotice} /> : null}
             <textarea aria-label={text('完整日语译文', 'Complete Japanese translation')} className="article-answer-input" value={session.answerText} maxLength={5000} disabled={!question} placeholder={question ? text('请输入完整日语译文；可以合并、拆分或调整句序', 'Enter the complete Japanese translation; you may merge, split, or reorder sentences.') : text('生成或随机抽取文章后即可作答', 'Generate or select an article to begin.')} onChange={(event) => setSession((current) => ({ ...current, answerText: event.target.value }))} />
             <div className="answer-input-footer"><div className="action-row"><button type="button" className="primary-button" disabled={!question || session.answerScoring} onClick={handleSubmitAnswer}>{session.answerScoring ? text('评分中', 'Scoring') : text('提交答案', 'Submit answer')}</button><button type="button" disabled={!question && !session.answerText} onClick={() => { setSession(EMPTY_ARTICLE_SESSION); setPracticeNotice(null) }}>{text('清空', 'Clear')}</button></div></div>
           </>
         ) : (
           <div className="answer-result">
-            {session.answerNotice && (!session.answerReview || session.answerNotice.kind === 'error') ? <Notice notice={session.answerNotice} /> : null}
+            {session.answerNotice && (!session.answerReview || session.answerNotice.kind === 'error') ? <StatusNotice notice={session.answerNotice} /> : null}
             {session.answerScoring ? <div className="notice" role="status" aria-live="polite"><strong>{text('评分中', 'Scoring')}</strong><p>{text('正在按中文原句分析完整译文。', 'Analyzing the complete translation against the English source.')}</p></div> : null}
             <section className="submitted-answer pre-wrap-text"><span className="label">{text('你的完整译文', 'Your complete translation')}</span><p>{session.answerText}</p></section>
             {session.answerReview ? <ArticleReviewResult
@@ -421,18 +407,4 @@ function ArticleReviewResult(props: ArticleReviewResultProps) {
       /> : null}
     </>
   )
-}
-
-function splitArticleSegments(text: string) {
-  const normalized = text.replace(/\r\n?/g, '\n').trim()
-  if (!normalized) return []
-  return normalized.split(/\n\s*\n/).map((segment) => segment.trim()).filter(Boolean)
-}
-
-function Notice({ notice }: { notice: PracticeNotice }) {
-  return <div className={notice.kind === 'error' ? 'notice is-error' : 'notice'} role={notice.kind === 'error' ? 'alert' : 'status'}><strong>{notice.title}</strong><p>{notice.message}</p></div>
-}
-
-function formatScore(score: number) {
-  return score.toFixed(2)
 }
