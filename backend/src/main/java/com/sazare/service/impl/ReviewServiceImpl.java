@@ -463,7 +463,7 @@ public class ReviewServiceImpl implements ReviewService {
         }
         reviewCycleMapper.updateProgress(
                 cycle.getId(),
-                4,
+                resolveTargetSuccessCount(card, userAnswerId),
                 cycle.getSuccessfulReviewCount(),
                 cycle.getFailedReviewCount(),
                 occurredAt,
@@ -483,7 +483,7 @@ public class ReviewServiceImpl implements ReviewService {
         cycle.setReviewCardId(card.getId());
         cycle.setCycleNo(cycleNo);
         cycle.setStatus(CYCLE_IN_PROGRESS);
-        cycle.setTargetSuccessCount(4);
+        cycle.setTargetSuccessCount(resolveTargetSuccessCount(card, userAnswerId));
         cycle.setSuccessfulReviewCount(0);
         cycle.setFailedReviewCount(initialFailureCount);
         cycle.setVerificationRequiredAfter(occurredAt);
@@ -517,9 +517,10 @@ public class ReviewServiceImpl implements ReviewService {
             cycleQuestion.setAttemptCount(cycleQuestion.getAttemptCount() + 1);
         }
         int failedCount = cycle.getFailedReviewCount() + 1;
+        int targetSuccessCount = resolveTargetSuccessCount(card, userAnswerId);
         reviewCycleMapper.updateProgress(
-                cycle.getId(), 4, cycle.getSuccessfulReviewCount(), failedCount, occurredAt, occurredAt);
-        cycle.setTargetSuccessCount(4);
+                cycle.getId(), targetSuccessCount, cycle.getSuccessfulReviewCount(), failedCount, occurredAt, occurredAt);
+        cycle.setTargetSuccessCount(targetSuccessCount);
         cycle.setFailedReviewCount(failedCount);
         cycle.setVerificationRequiredAfter(occurredAt);
         applyPracticeFailureSchedule(card, cycle, cycleQuestion, userAnswerId, occurredAt);
@@ -576,6 +577,18 @@ public class ReviewServiceImpl implements ReviewService {
                 && progress.getOriginalQuestionCount().equals(progress.getOriginalPassedCount())
                 && netSuccessCount(cycle) >= cycle.getTargetSuccessCount()
                 && progress.getActiveQuestionCount() == 0;
+    }
+
+    private int resolveTargetSuccessCount(ReviewCard card, Long userAnswerId) {
+        return reviewCardMapper.selectConfirmedSeverities(
+                        card.getUserId(), userAnswerId, card.getUserErrorTypeId()).stream()
+                .mapToInt(severity -> switch (severity) {
+                    case "LOW" -> 3;
+                    case "HIGH" -> 5;
+                    default -> 4;
+                })
+                .max()
+                .orElse(4);
     }
 
     private int netSuccessCount(ReviewCycle cycle) {

@@ -464,7 +464,7 @@ create table if not exists review_cycles (
     constraint uq_review_cycles_card_cycle_no unique (review_card_id, cycle_no),
     constraint ck_review_cycles_cycle_no check (cycle_no >= 1),
     constraint ck_review_cycles_status check (status in ('IN_PROGRESS', 'COMPLETED')),
-    constraint ck_review_cycles_target_success_count check (target_success_count = 4),
+    constraint ck_review_cycles_target_success_count check (target_success_count in (3, 4, 5)),
     constraint ck_review_cycles_successful_review_count check (successful_review_count >= 0),
     constraint ck_review_cycles_failed_review_count check (failed_review_count >= 0),
     constraint ck_review_cycles_status_time check (
@@ -478,7 +478,7 @@ comment on column review_cycles.id is '复习周期主键ID';
 comment on column review_cycles.review_card_id is '所属复习卡片ID，对应 review_cards.id，由代码维护有效性';
 comment on column review_cycles.cycle_no is '卡片周期序号，从1开始递增';
 comment on column review_cycles.status is '周期状态：IN_PROGRESS=进行中，COMPLETED=已完成';
-comment on column review_cycles.target_success_count is '本周期目标净成功次数，固定为4';
+comment on column review_cycles.target_success_count is '本周期目标净成功次数：低3、中4、高5';
 comment on column review_cycles.successful_review_count is '本周期累计成功作答次数，失败时不清零';
 comment on column review_cycles.failed_review_count is '本周期累计失败次数，不包含创建新卡片的首次错误';
 comment on column review_cycles.verification_required_after is '兼容字段，记录最近新增或再次答错原题的时间';

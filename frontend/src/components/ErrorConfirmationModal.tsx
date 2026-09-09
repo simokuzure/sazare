@@ -34,6 +34,8 @@ export default function ErrorConfirmationModal({ analyses, candidates, userError
   const [customSaving, setCustomSaving] = useState(false)
   const [savingAll, setSavingAll] = useState(false)
   const [customName, setCustomName] = useState('')
+  const [customSeverity, setCustomSeverity] = useState<AnswerErrorAnalysis['severity']>('MEDIUM')
+  const severityOptions = <><option value="LOW">{text('低', 'Low')}</option><option value="MEDIUM">{text('中', 'Medium')}</option><option value="HIGH">{text('高', 'High')}</option></>
   const [targetExpression, setTargetExpression] = useState('')
   const [sourceSegmentIndex, setSourceSegmentIndex] = useState('')
   const [reviewSourceText, setReviewSourceText] = useState('')
@@ -92,6 +94,7 @@ export default function ErrorConfirmationModal({ analyses, candidates, userError
 
   function resetCustomForm() {
     setCustomName('')
+    setCustomSeverity('MEDIUM')
     setTargetExpression('')
     setSourceSegmentIndex('')
     setReviewSourceText('')
@@ -128,6 +131,7 @@ export default function ErrorConfirmationModal({ analyses, candidates, userError
     try {
       const card = await createReviewCard(userAnswerId, {
         name: customName.trim(),
+        severity: customSeverity,
         targetExpression: targetExpression.trim(),
         ...(reviewCardSource.kind === 'ARTICLE' ? { sourceSegmentIndex: Number(sourceSegmentIndex) } : {}),
         ...(reviewCardSource.kind === 'CORRECTION' ? { reviewSourceText: reviewSourceText.trim() } : {}),
@@ -170,7 +174,7 @@ export default function ErrorConfirmationModal({ analyses, candidates, userError
             const candidate = candidates[index]
             if (!candidate) return null
             return <article key={`${analysis.errorTypeCode}-${index}`} className={candidate.selected ? 'candidate-error-item is-selected' : 'candidate-error-item'}>
-              <div className="candidate-error-header"><label className="candidate-select"><input type="checkbox" checked={candidate.selected || candidate.saved} disabled={candidate.saved || busy} onChange={(event) => onUpdate(index, { selected: event.target.checked })} /><span>{candidate.saved ? text('已添加', 'Added') : text('添加此项', 'Add item')}</span></label><span>{analysis.errorTypeName} / {analysis.severity}</span></div>
+              <div className="candidate-error-header"><label className="candidate-select"><input type="checkbox" checked={candidate.selected || candidate.saved} disabled={candidate.saved || busy} onChange={(event) => onUpdate(index, { selected: event.target.checked })} /><span>{candidate.saved ? text('已添加', 'Added') : text('添加此项', 'Add item')}</span></label><div className="candidate-severity"><span>{analysis.errorTypeName}</span><label><span className="sr-only">{text('错误级别', 'Error severity')}</span><select className="review-severity-select" value={candidate.severity} disabled={candidate.saved || busy} onChange={(event) => onUpdate(index, { severity: event.target.value as AnswerErrorAnalysis['severity'] })}>{severityOptions}</select></label></div></div>
               <div className="candidate-error-content"><strong>{analysis.original}</strong><p>{analysis.issue}</p><p>{analysis.suggestion}</p></div>
               {candidate.selected && !candidate.saved ? <div className="candidate-error-controls">
                 <div className="choice-grid" role="radiogroup" aria-label={text('添加方式', 'Add method')}><label><input type="radio" name={`mode-${index}`} checked={candidate.mode === 'NEW_USER_ERROR_TYPE'} onChange={() => onUpdate(index, { mode: 'NEW_USER_ERROR_TYPE' })} />{text('新建复习卡片', 'Create review card')}</label><label><input type="radio" name={`mode-${index}`} disabled={userErrorTypes.length === 0 || userErrorTypesLoading} checked={candidate.mode === 'EXISTING_USER_ERROR_TYPE'} onChange={() => onUpdate(index, { mode: 'EXISTING_USER_ERROR_TYPE', userErrorTypeId: '' })} />{text('加入已有复习卡片', 'Add to existing card')}</label></div>
@@ -183,7 +187,10 @@ export default function ErrorConfirmationModal({ analyses, candidates, userError
         <section className="custom-review-card-section">
           {customNotice ? <div className={customNotice.kind === 'error' ? 'notice is-error' : 'notice'} role={customNotice.kind === 'error' ? 'alert' : 'status'}><strong>{customNotice.title}</strong><p>{customNotice.message}</p></div> : null}
           {!customEditing ? <button type="button" className="primary-button" disabled={busy} onClick={() => { setCustomEditing(true); setCustomNotice(null) }}>{analyses.length > 0 ? text('添加自定义复习卡片', 'Add custom review card') : text('添加复习卡片', 'Add review card')}</button> : <div className="custom-review-card-form">
-            <div className="section-title"><span className="label">{text('自定义', 'Custom')}</span><strong>{text('添加自定义复习卡片', 'Add custom review card')}</strong></div>
+            <div className="custom-review-card-header">
+              <div className="section-title"><span className="label">{text('自定义', 'Custom')}</span><strong>{text('添加自定义复习卡片', 'Add custom review card')}</strong></div>
+              <label className="custom-review-card-severity"><span>{text('级别', 'Severity')}</span><select className="review-severity-select" value={customSeverity} disabled={busy} onChange={(event) => setCustomSeverity(event.target.value as AnswerErrorAnalysis['severity'])}>{severityOptions}</select></label>
+            </div>
             <label><span>{text('复习重点', 'Review focus')}</span><input value={customName} maxLength={128} disabled={busy} onChange={(event) => setCustomName(event.target.value)} /></label>
             {reviewCardSource.kind === 'FIXED' ? <label><span>{text('复习题中文', 'Review source')}</span><textarea value={reviewCardSource.sourceText} readOnly /></label> : null}
             {reviewCardSource.kind === 'ARTICLE' ? <label><span>{text('选择中文原句', 'Select an English source sentence')}</span><select value={sourceSegmentIndex} disabled={busy} onChange={(event) => setSourceSegmentIndex(event.target.value)}><option value="">{text('请选择', 'Select')}</option>{reviewCardSource.segments.map((segment) => <option key={segment.index} value={segment.index}>{text(`第 ${segment.index + 1} 句：`, `Sentence ${segment.index + 1}: `)}{segment.text}</option>)}</select></label> : null}

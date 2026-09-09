@@ -1021,7 +1021,24 @@ textarea:focus {
   gap: 12px;
 }
 
+.candidate-severity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.error-confirmation-modal select.review-severity-select {
+  width: 96px;
+  min-height: 32px;
+  height: 32px;
+  padding: 4px 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .candidate-error-header {
+  flex-wrap: wrap;
   color: #475569;
   font-size: 13px;
 }
@@ -1133,6 +1150,23 @@ textarea:focus {
   border-radius: 8px;
   background: #f8fafc;
   padding: 14px;
+}
+
+.custom-review-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.custom-review-card-header .custom-review-card-severity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .custom-review-card-form > label {

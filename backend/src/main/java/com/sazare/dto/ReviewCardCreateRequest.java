@@ -3,6 +3,7 @@ package com.sazare.dto;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Pattern;
 
 public record ReviewCardCreateRequest(
         @NotBlank(message = "复习重点不能为空")
@@ -17,6 +18,17 @@ public record ReviewCardCreateRequest(
         Integer sourceSegmentIndex,
 
         @Size(max = 1000, message = "复习题中文长度不能超过 1000")
-        String reviewSourceText
+        String reviewSourceText,
+
+        @Pattern(regexp = "LOW|MEDIUM|HIGH", message = "错误级别只能是 LOW、MEDIUM 或 HIGH")
+        String severity
 ) {
+    public ReviewCardCreateRequest {
+        severity = severity == null ? "MEDIUM" : severity;
+    }
+
+    public ReviewCardCreateRequest(String name, String targetExpression, Integer sourceSegmentIndex,
+                                   String reviewSourceText) {
+        this(name, targetExpression, sourceSegmentIndex, reviewSourceText, "MEDIUM");
+    }
 }

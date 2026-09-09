@@ -39,6 +39,8 @@ import com.sazare.service.review.ReviewDerivedQuestionService;
 import com.sazare.service.review.Sm2Scheduler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -459,8 +461,10 @@ class ReviewServiceImplTest {
         assertThat(dueAtCaptor.getValue()).isEqualTo(LocalDateTime.of(2026, 9, 1, 7, 0));
     }
 
-    @Test
-    void activePracticeFailureShouldIncrementCycleFailureCountOnce() {
+    @ParameterizedTest
+    @CsvSource({"LOW,3", "MEDIUM,4", "HIGH,5"})
+    void activePracticeFailureShouldIncrementCycleFailureCountOnce(String severity, int target) {
+        when(cardMapper.selectConfirmedSeverities(1L, 50L, 2L)).thenReturn(List.of(severity));
         ReviewCard card = card("ACTIVE", LocalDateTime.now().plusDays(3));
         ReviewCycle cycle = cycle(2, 4, 1);
         ReviewCycleQuestion cycleQuestion = cycleQuestion("PASSED", "ORIGINAL", 1);
@@ -476,7 +480,7 @@ class ReviewServiceImplTest {
         service.recordPracticeError(
                 1L, 50L, 100L, 2L, LocalDateTime.of(2026, 8, 6, 18, 30));
 
-        verify(cycleMapper).updateProgress(eq(20L), eq(4), eq(2), eq(2), any(), any());
+        verify(cycleMapper).updateProgress(eq(20L), eq(target), eq(2), eq(2), any(), any());
     }
 
     @Test
@@ -501,8 +505,10 @@ class ReviewServiceImplTest {
         verify(cycleMapper).updateProgress(20L, 4, 1, 0, occurredAt, occurredAt);
     }
 
-    @Test
-    void firstPracticeFailureShouldCreateCardCycleAndSingleLapse() {
+    @ParameterizedTest
+    @CsvSource({"LOW,3", "MEDIUM,4", "HIGH,5"})
+    void firstPracticeFailureShouldCreateCardCycleAndSingleLapse(String severity, int target) {
+        when(cardMapper.selectConfirmedSeverities(1L, 50L, 2L)).thenReturn(List.of(severity));
         when(userErrorTypeMapper.selectActiveByIdAndUserId(2L, 1L)).thenReturn(userErrorType());
         when(questionMapper.selectActiveQuestionById(100L)).thenReturn(question());
         AtomicReference<ReviewCard> insertedCard = new AtomicReference<>();
@@ -534,6 +540,7 @@ class ReviewServiceImplTest {
         ArgumentCaptor<ReviewCycle> cycleCaptor = ArgumentCaptor.forClass(ReviewCycle.class);
         verify(cycleMapper).insertCycle(cycleCaptor.capture());
         assertThat(cycleCaptor.getValue().getFailedReviewCount()).isZero();
+        assertThat(cycleCaptor.getValue().getTargetSuccessCount()).isEqualTo(target);
         ArgumentCaptor<LocalDateTime> dueAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         verify(cardMapper).updateSchedule(
                 eq(1L), eq("ACTIVE"), eq(new BigDecimal("2.1800")), eq(0), eq(1), eq(1),

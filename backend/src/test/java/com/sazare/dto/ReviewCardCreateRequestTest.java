@@ -62,6 +62,15 @@ class ReviewCardCreateRequestTest {
     }
 
     @Test
+    void severityShouldDefaultToMediumAndRejectInvalidValues() {
+        assertThat(new ReviewCardCreateRequest("重点", "表現", null, null, null).severity())
+                .isEqualTo("MEDIUM");
+        assertThat(validator.validate(new ReviewCardCreateRequest("重点", "表現", null, null, "INVALID")))
+                .extracting(ConstraintViolation::getMessage)
+                .contains("错误级别只能是 LOW、MEDIUM 或 HIGH");
+    }
+
+    @Test
     void blankRequiredFieldsShouldBeRejected() {
         ReviewCardCreateRequest request = new ReviewCardCreateRequest(" ", "", null, null);
 

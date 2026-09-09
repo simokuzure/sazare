@@ -255,7 +255,7 @@ public class UserAnswerServiceImpl implements UserAnswerService {
         reviewItem.setOriginalText(reviewSourceText);
         reviewItem.setIssue(name);
         reviewItem.setSuggestion(targetExpression);
-        reviewItem.setSeverity("LOW");
+        reviewItem.setSeverity(request.severity());
         reviewItem.setSortOrder(0);
         reviewItem.setCreatedAt(now);
         reviewItem.setUpdatedAt(now);

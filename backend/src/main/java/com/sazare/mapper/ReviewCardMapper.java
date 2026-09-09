@@ -27,6 +27,10 @@ public interface ReviewCardMapper {
 
     ReviewCard selectForUpdateByUserErrorTypeId(@Param("userErrorTypeId") Long userErrorTypeId);
 
+    List<String> selectConfirmedSeverities(@Param("userId") Long userId,
+                                           @Param("userAnswerId") Long userAnswerId,
+                                           @Param("userErrorTypeId") Long userErrorTypeId);
+
     int insertCardIfAbsent(ReviewCard card);
 
     int logicalDelete(@Param("id") Long id, @Param("userId") Long userId,

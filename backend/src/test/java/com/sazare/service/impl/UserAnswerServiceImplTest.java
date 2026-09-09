@@ -549,7 +549,7 @@ class UserAnswerServiceImplTest {
         assertThat(reviewItem.getOriginalText()).isEqualTo("我明天下午去公园散步。");
         assertThat(reviewItem.getIssue()).isEqualTo("练习更自然的移动表达");
         assertThat(reviewItem.getSuggestion()).isEqualTo("明日の午後、公園を散歩します。");
-        assertThat(reviewItem.getSeverity()).isEqualTo("LOW");
+        assertThat(reviewItem.getSeverity()).isEqualTo("MEDIUM");
     }
 
     @Test

@@ -56,6 +56,7 @@ export type UserAnswerError = {
 }
 
 export type ReviewCardCreatePayload = {
+  severity?: AnswerErrorAnalysis['severity']
   name: string
   targetExpression: string
   sourceSegmentIndex?: number
