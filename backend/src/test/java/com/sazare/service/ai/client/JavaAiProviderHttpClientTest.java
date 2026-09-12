@@ -93,6 +93,21 @@ class JavaAiProviderHttpClientTest {
         assertThat(output.getOut())
                 .contains("AI 服务调用失败")
                 .contains("durationMs=")
-                .contains("connection failed");
+                .contains("errorType=IOException")
+                .doesNotContain("connection failed");
     }
+    @Test
+    @SuppressWarnings("unchecked")
+    void errorResponseShouldNotLogAudioOrTranscript(CapturedOutput output) throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(400);
+        when(response.body()).thenReturn("private-transcript-or-audio");
+        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+        new JavaAiProviderHttpClient(httpClient, Duration.ofSeconds(10)).postJson(
+                URI.create("https://example.com/generateContent"), Map.of(), "private-request-audio");
+        assertThat(output.getOut()).contains("status=400").contains("durationMs=")
+                .doesNotContain("private-transcript-or-audio", "private-request-audio");
+    }
+
 }

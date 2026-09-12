@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import SpeechInput from '../components/SpeechInput'
+import { useSpeechInput } from '../hooks/useSpeechInput'
 import { getErrorMessage } from '../api/client'
 import { correctJapanese } from '../api/japaneseCorrectionApi'
 import { confirmUserAnswerErrors, fetchUserErrorTypes } from '../api/userErrorApi'
@@ -46,13 +48,20 @@ const TRANSLATION_ONLY_ERROR_TYPE_CODES = new Set([
   'CHINESE_CALQUE',
 ])
 
-export default function JapaneseCorrectionPractice() {
+export default function JapaneseCorrectionPractice({ active = true }: { active?: boolean }) {
   const { learningMode, text } = useLanguage()
   const [session, setSession] = useState<CorrectionSession>(EMPTY_SESSION)
   const [userErrorTypes, setUserErrorTypes] = useState<UserErrorType[]>([])
   const [userErrorTypesLoading, setUserErrorTypesLoading] = useState(false)
   const [errorConfirming, setErrorConfirming] = useState(false)
   const selectedErrorCount = session.candidates.filter((candidate) => candidate.selected && !candidate.saved).length
+  const speech = useSpeechInput({
+    contextKey: learningMode,
+    enabled: active && !session.submitted && !session.correcting,
+    value: session.text,
+    maxLength: 5000,
+    onChange: (value) => setSession((current) => ({ ...current, text: value })),
+  })
 
   async function handleCorrect() {
     const inputText = session.text.trim()
@@ -182,17 +191,20 @@ export default function JapaneseCorrectionPractice() {
               className="article-answer-input"
               value={session.text}
               maxLength={5000}
+              disabled={speech.busy}
               placeholder={text('请输入一段日语；AI 会检查语法、词汇、自然度、语体和表记', 'Enter Japanese text. AI will check grammar, vocabulary, fluency, register, and writing.')}
               onChange={(event) => setSession((current) => ({ ...current, text: event.target.value, notice: null }))}
             />
-            <div className="answer-input-footer">
-              <div className="action-row">
-                <button type="button" className="primary-button" disabled={session.correcting} onClick={handleCorrect}>
-                  {session.correcting ? text('纠错中', 'Checking') : text('开始纠错', 'Check text')}
-                </button>
-                <button type="button" disabled={!session.text} onClick={() => setSession(EMPTY_SESSION)}>{text('清空', 'Clear')}</button>
+            <SpeechInput speech={speech}>
+              <div className="answer-input-footer">
+                <div className="action-row">
+                  <button type="button" className="primary-button" disabled={session.correcting || speech.busy} onClick={handleCorrect}>
+                    {session.correcting ? text('纠错中', 'Checking') : text('开始纠错', 'Check text')}
+                  </button>
+                  <button type="button" disabled={speech.busy || !session.text} onClick={() => setSession(EMPTY_SESSION)}>{text('清空', 'Clear')}</button>
+                </div>
               </div>
-            </div>
+            </SpeechInput>
           </>
         ) : (
           <div className="answer-result">

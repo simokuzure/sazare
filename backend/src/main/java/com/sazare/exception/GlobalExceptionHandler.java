@@ -57,7 +57,7 @@ public class GlobalExceptionHandler {
     public ApiResponse<Void> handleHttpMediaTypeNotSupportedException(
             HttpMediaTypeNotSupportedException exception
     ) {
-        return ApiResponse.error(ErrorCode.PARAM_ERROR.getCode(), "Content-Type 必须为 application/json");
+        return ApiResponse.error(ErrorCode.PARAM_ERROR.getCode(), "Content-Type 不受支持，请使用接口要求的媒体类型");
     }
 
     @ExceptionHandler(Exception.class)

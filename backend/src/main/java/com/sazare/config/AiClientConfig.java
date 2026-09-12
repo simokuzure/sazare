@@ -1,6 +1,9 @@
 package com.sazare.config;
 
 import com.sazare.service.ai.AiQuestionClient;
+import com.sazare.service.ai.AiSpeechTranscriptionClient;
+import com.sazare.service.ai.client.GoogleAiSpeechTranscriptionClient;
+import com.sazare.service.ai.client.MockAiSpeechTranscriptionClient;
 import com.sazare.service.ai.AiEmbeddingClient;
 import com.sazare.service.ai.AiAnswerScoringClient;
 import com.sazare.service.ai.AiJapaneseCorrectionClient;
@@ -40,6 +43,15 @@ public class AiClientConfig {
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
         return new JavaAiProviderHttpClient(httpClient, aiProperties.getRequestTimeout());
+    }
+
+    @Bean
+    public AiSpeechTranscriptionClient aiSpeechTranscriptionClient(
+            AiProperties properties, ObjectMapper objectMapper, AiProviderHttpClient httpClient
+    ) {
+        return createClient(properties, MockAiSpeechTranscriptionClient::new,
+                () -> new GoogleAiSpeechTranscriptionClient(
+                        properties.getProviders().getGoogle(), objectMapper, httpClient));
     }
 
     @Bean

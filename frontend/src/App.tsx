@@ -85,7 +85,7 @@ function App() {
 
       <main id="main-workspace" className="workspace" tabIndex={-1}>
         <div hidden={activePage !== 'practice'}>
-          <PracticePage key={learningMode} />
+          <PracticePage key={learningMode} active={activePage === 'practice'} />
         </div>
         <AppErrorBoundary key={`${activePage}-${learningMode}`} scope="module">
           <Suspense fallback={<div className="surface" role="status">{english ? 'Loading page…' : '页面加载中…'}</div>}>

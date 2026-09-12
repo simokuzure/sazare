@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import SpeechInput from '../components/SpeechInput'
+import { useSpeechInput } from '../hooks/useSpeechInput'
 import { getErrorMessage } from '../api/client'
 import { fetchRandomQuestion, generateArticle, submitQuestionAnswer } from '../api/questionApi'
 import { fetchTags } from '../api/tagApi'
@@ -43,7 +45,7 @@ const EMPTY_ARTICLE_SESSION: ArticleAnswerSession = {
   errorConfirmationOpen: false,
 }
 
-export default function ArticlePractice() {
+export default function ArticlePractice({ active = true }: { active?: boolean }) {
   const { english, learningMode, articleQuestionType, text } = useLanguage()
   const [genreTags, setGenreTags] = useState<Tag[]>([])
   const [genreTagsLoading, setGenreTagsLoading] = useState(false)
@@ -92,6 +94,13 @@ export default function ArticlePractice() {
   const sourceSegments = useMemo(() => splitArticleParagraphs(question?.sourceText ?? ''), [question?.sourceText])
   const selectedErrorCount = session.errorCandidates.filter((candidate) => candidate.selected && !candidate.saved).length
   const questionLoading = questionGenerating || questionRandomizing
+  const speech = useSpeechInput({
+    contextKey: `${learningMode}:${question?.id}`,
+    enabled: active && !!question && !questionLoading && !session.answerSubmitted && !session.answerScoring,
+    value: session.answerText,
+    maxLength: 5000,
+    onChange: (value) => setSession((current) => ({ ...current, answerText: value })),
+  })
   const answerInputNotice = session.answerNotice ?? practiceNotice
 
   function replaceQuestion(nextQuestion: Question | null, notice: PracticeNotice) {
@@ -304,8 +313,9 @@ export default function ArticlePractice() {
         {!session.answerSubmitted ? (
           <>
             {answerInputNotice && (answerInputNotice.kind === 'error' || !question) ? <StatusNotice notice={answerInputNotice} /> : null}
-            <textarea aria-label={text('完整日语译文', 'Complete Japanese translation')} className="article-answer-input" value={session.answerText} maxLength={5000} disabled={!question} placeholder={question ? text('请输入完整日语译文；可以合并、拆分或调整句序', 'Enter the complete Japanese translation; you may merge, split, or reorder sentences.') : text('生成或随机抽取文章后即可作答', 'Generate or select an article to begin.')} onChange={(event) => setSession((current) => ({ ...current, answerText: event.target.value }))} />
-            <div className="answer-input-footer"><div className="action-row"><button type="button" className="primary-button" disabled={!question || session.answerScoring} onClick={handleSubmitAnswer}>{session.answerScoring ? text('评分中', 'Scoring') : text('提交答案', 'Submit answer')}</button><button type="button" disabled={!question && !session.answerText} onClick={() => { setSession(EMPTY_ARTICLE_SESSION); setPracticeNotice(null) }}>{text('清空', 'Clear')}</button></div></div>
+            <textarea aria-label={text('完整日语译文', 'Complete Japanese translation')} className="article-answer-input" value={session.answerText} maxLength={5000} disabled={!question || speech.busy} placeholder={question ? text('请输入完整日语译文；可以合并、拆分或调整句序', 'Enter the complete Japanese translation; you may merge, split, or reorder sentences.') : text('生成或随机抽取文章后即可作答', 'Generate or select an article to begin.')} onChange={(event) => setSession((current) => ({ ...current, answerText: event.target.value }))} />
+            <SpeechInput speech={speech}>
+            <div className="answer-input-footer"><div className="action-row"><button type="button" className="primary-button" disabled={!question || session.answerScoring || speech.busy} onClick={handleSubmitAnswer}>{session.answerScoring ? text('评分中', 'Scoring') : text('提交答案', 'Submit answer')}</button><button type="button" disabled={speech.busy || (!question && !session.answerText)} onClick={() => { setSession(EMPTY_ARTICLE_SESSION); setPracticeNotice(null) }}>{text('清空', 'Clear')}</button></div></div></SpeechInput>
           </>
         ) : (
           <div className="answer-result">

@@ -51,6 +51,7 @@ public class AiProperties {
     public static class Google {
 
         private String model = "gemini-3.6-flash";
+        private String transcriptionModel = "gemini-3.5-transcribe";
         private String embeddingModel = "gemini-embedding-001";
         private String apiKey = "";
         private String baseUrl = "https://generativelanguage.googleapis.com/v1beta";
@@ -63,6 +64,14 @@ public class AiProperties {
 
         public void setModel(String model) {
             this.model = model;
+        }
+
+        public String getTranscriptionModel() {
+            return transcriptionModel;
+        }
+
+        public void setTranscriptionModel(String transcriptionModel) {
+            this.transcriptionModel = transcriptionModel;
         }
 
         public String getEmbeddingModel() {

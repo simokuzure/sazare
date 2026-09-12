@@ -4,6 +4,10 @@ server:
     context-path: /api
 
 spring:
+  servlet:
+    multipart:
+      # 音频通过有界二进制流接收，禁止自动 multipart 解析生成临时文件。
+      enabled: false
   application:
     name: sazare
   datasource:
@@ -25,6 +29,7 @@ ai:
   providers:
     google:
       model: ${GOOGLE_AI_MODEL:gemini-3.6-flash}
+      transcription-model: ${GOOGLE_AI_TRANSCRIPTION_MODEL:gemini-3.5-transcribe}
       embedding-model: ${GOOGLE_AI_EMBEDDING_MODEL:gemini-embedding-001}
       api-key: ${GOOGLE_AI_API_KEY:}
       base-url: ${GOOGLE_AI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}

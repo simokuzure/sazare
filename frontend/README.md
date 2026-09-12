@@ -30,3 +30,16 @@ If you are developing a production application, we recommend enabling type-aware
 ```
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+
+
+## 语音输入交互回归
+
+先运行 `npm.cmd run build`，再用本机已有的 Playwright 运行时和 Chrome 执行：
+
+```powershell
+node tests/speech-input.browser.cjs
+```
+
+Playwright 不在项目依赖中。如果本机已有独立运行时，可通过 `PLAYWRIGHT_MODULE_PATH` 指向该包目录；`SPEECH_TEST_BROWSER=msedge` 可切换到 Edge。测试脚本启动临时 HTTP 服务和无头浏览器，模拟麦克风及 API，不调用真实 Google，也不保存音频。可选 `SPEECH_TEST_SCREENSHOT` 指定截图输出路径。
+
+测试覆盖两种学习方向的四个入口、取消与迟到响应、隐藏页面清理、超长转写、录音限制和失败恢复。真实录音识别效果需另行联调。

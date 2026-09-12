@@ -17,7 +17,6 @@ import java.util.Map;
 public class JavaAiProviderHttpClient implements AiProviderHttpClient {
 
     private static final Logger log = LoggerFactory.getLogger(JavaAiProviderHttpClient.class);
-    private static final int ERROR_RESPONSE_LOG_LIMIT = 2_000;
 
     private final HttpClient httpClient;
     private final Duration requestTimeout;
@@ -40,11 +39,10 @@ public class JavaAiProviderHttpClient implements AiProviderHttpClient {
             long durationMs = elapsedMillis(startedAt);
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 log.error(
-                        "AI 服务调用失败: endpoint={}, status={}, durationMs={}, responseBody={}",
+                        "AI 服务调用失败: endpoint={}, status={}, durationMs={}",
                         endpoint,
                         response.statusCode(),
-                        durationMs,
-                        summarizeResponseBody(response.body())
+                        durationMs
                 );
             } else {
                 log.info(
@@ -58,18 +56,18 @@ public class JavaAiProviderHttpClient implements AiProviderHttpClient {
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             log.error(
-                    "AI 服务调用被中断: endpoint={}, durationMs={}",
+                    "AI 服务调用被中断: endpoint={}, durationMs={}, errorType={}",
                     endpoint,
                     elapsedMillis(startedAt),
-                    exception
+                    exception.getClass().getSimpleName()
             );
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 服务请求被中断", exception);
         } catch (IOException exception) {
             log.error(
-                    "AI 服务调用失败: endpoint={}, durationMs={}",
+                    "AI 服务调用失败: endpoint={}, durationMs={}, errorType={}",
                     endpoint,
                     elapsedMillis(startedAt),
-                    exception
+                    exception.getClass().getSimpleName()
             );
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 服务请求失败", exception);
         }
@@ -99,14 +97,4 @@ public class JavaAiProviderHttpClient implements AiProviderHttpClient {
         return (System.nanoTime() - startedAt) / 1_000_000L;
     }
 
-    private String summarizeResponseBody(String responseBody) {
-        if (responseBody == null || responseBody.isBlank()) {
-            return "<empty>";
-        }
-        String normalized = responseBody.replaceAll("\\s+", " ").trim();
-        if (normalized.length() <= ERROR_RESPONSE_LOG_LIMIT) {
-            return normalized;
-        }
-        return normalized.substring(0, ERROR_RESPONSE_LOG_LIMIT) + "...(truncated)";
-    }
 }

@@ -11,7 +11,7 @@ type PracticeMode = 'sentence' | 'article' | 'correction'
 
 const PRACTICE_MODES: PracticeMode[] = ['sentence', 'article', 'correction']
 
-export default function PracticePage() {
+export default function PracticePage({ active = true }: { active?: boolean }) {
   const { text } = useLanguage()
   const [activeMode, setActiveMode] = useState<PracticeMode>('sentence')
   const [loadedModes, setLoadedModes] = useState<Set<PracticeMode>>(() => new Set(['sentence']))
@@ -90,19 +90,19 @@ export default function PracticePage() {
         aria-labelledby="sentence-practice-tab"
         hidden={activeMode !== 'sentence'}
       >
-        <ShortSentencePractice />
+        <ShortSentencePractice active={active && activeMode === 'sentence'} />
       </div>
       <div id="article-practice-panel" role="tabpanel" aria-labelledby="article-practice-tab" hidden={activeMode !== 'article'}>
         <AppErrorBoundary scope="module">
           <Suspense fallback={<div className="surface" role="status">{text('练习模块加载中…', 'Loading practice…')}</div>}>
-            {loadedModes.has('article') ? <ArticlePractice /> : null}
+            {loadedModes.has('article') ? <ArticlePractice active={active && activeMode === 'article'} /> : null}
           </Suspense>
         </AppErrorBoundary>
       </div>
       <div id="correction-practice-panel" role="tabpanel" aria-labelledby="correction-practice-tab" hidden={activeMode !== 'correction'}>
         <AppErrorBoundary scope="module">
           <Suspense fallback={<div className="surface" role="status">{text('练习模块加载中…', 'Loading practice…')}</div>}>
-            {loadedModes.has('correction') ? <JapaneseCorrectionPractice /> : null}
+            {loadedModes.has('correction') ? <JapaneseCorrectionPractice active={active && activeMode === 'correction'} /> : null}
           </Suspense>
         </AppErrorBoundary>
       </div>

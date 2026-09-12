@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react'
+import SpeechInput from '../SpeechInput'
+import { useSpeechInput } from '../../hooks/useSpeechInput'
 import PageHeader from '../PageHeader'
 import ReviewList from '../ReviewList'
 import StatusNotice from '../StatusNotice'
@@ -58,7 +60,14 @@ export function ReviewDetailView({ detail, loading, error, answerText, submittin
   onReload: () => void
   onBack: () => void
 }) {
-  const { text } = useLanguage()
+  const { text, learningMode } = useLanguage()
+  const speech = useSpeechInput({
+    contextKey: `${learningMode}:${detail?.id}:${detail?.currentQuestion?.cycleQuestionId}`,
+    enabled: detail?.reviewState === 'READY' && !!detail.currentQuestion && !loading && !submitting && !derivedGenerating,
+    value: answerText,
+    maxLength: 2000,
+    onChange: onAnswerChange,
+  })
   return <section className="page-content target-page review-page" aria-label={text('复习答题', 'Review answer')}>
     <PageHeader eyebrow={text('复习卡片', 'Review cards')} title={earlyReview ? text('提前复习', 'Early review') : text('复习答题', 'Review answer')} actions={<><button type="button" disabled={submitting} onClick={onBack}>{text('返回列表', 'Back to list')}</button><button type="button" disabled={loading || submitting || derivedGenerating} onClick={onReload}>{text('重新加载', 'Reload')}</button></>} />
     <section className="surface review-surface review-detail-surface">
@@ -70,7 +79,7 @@ export function ReviewDetailView({ detail, loading, error, answerText, submittin
         {notice ? <StatusNotice notice={notice} className="review-notice" /> : null}
         {detail.reviewState === 'READY' && detail.currentQuestion ? <div className="review-attempt-grid">
           <section className="review-question-block"><div className="section-title"><span className="label">{detail.currentQuestion.questionRole === 'DERIVED' ? text('衍生题', 'Derived question') : text('原题', 'Original question')}</span><strong>{text('请翻译为日语', 'Translate into Japanese')}</strong></div><p className="review-question-source">{detail.currentQuestion.sourceText}</p>{detail.currentQuestion.contextText ? <p className="review-question-context"><strong>{text('语境：', 'Context: ')}</strong>{detail.currentQuestion.contextText}</p> : null}<QuestionMetadata detail={detail} /></section>
-          <section className="review-answer-block"><div className="section-title"><span className="label">{text('作答', 'Answer')}</span><strong>{text('输入日语答案', 'Enter your Japanese answer')}</strong></div><textarea aria-label={text('复习日语答案', 'Review answer in Japanese')} value={answerText} maxLength={2000} disabled={submitting} placeholder={text('请输入日语答案', 'Enter your Japanese answer')} onChange={(event) => onAnswerChange(event.target.value)} /><div className="review-answer-footer"><div className="action-row"><button type="button" disabled={submitting || answerText.length === 0} onClick={() => onAnswerChange('')}>{text('清空', 'Clear')}</button><button type="button" className="primary-button" disabled={submitting || !answerText.trim()} onClick={onSubmit}>{submitting ? text('评分中', 'Scoring') : earlyReview ? text('提交提前复习', 'Submit early review') : text('提交答案', 'Submit answer')}</button></div></div></section>
+          <section className="review-answer-block"><div className="section-title"><span className="label">{text('作答', 'Answer')}</span><strong>{text('输入日语答案', 'Enter your Japanese answer')}</strong></div><textarea aria-label={text('复习日语答案', 'Review answer in Japanese')} value={answerText} maxLength={2000} disabled={submitting || speech.busy} placeholder={text('请输入日语答案', 'Enter your Japanese answer')} onChange={(event) => onAnswerChange(event.target.value)} /><SpeechInput speech={speech}><div className="review-answer-footer"><div className="action-row"><button type="button" disabled={submitting || speech.busy || answerText.length === 0} onClick={() => onAnswerChange('')}>{text('清空', 'Clear')}</button><button type="button" className="primary-button" disabled={submitting || speech.busy || !answerText.trim()} onClick={onSubmit}>{submitting ? text('评分中', 'Scoring') : earlyReview ? text('提交提前复习', 'Submit early review') : text('提交答案', 'Submit answer')}</button></div></div></SpeechInput></section>
         </div> : null}
         {detail.reviewState === 'READY' && detail.currentQuestion ? <p className="review-answer-helper">{text('提交后将显示评分、标准答案和下一步复习安排。', 'After submitting, you will see the score, standard answers, and next review steps.')}</p> : null}
         {detail.reviewState === 'WAITING' ? <StateMessage title={text('等待下次复习', 'Waiting for next review')} message={text(`下次到期时间：${formatDateTime(detail.dueAt)}。到期前不能提交答案。`, `Next due: ${formatDateTime(detail.dueAt)}. Answers cannot be submitted before then.`)} /> : null}

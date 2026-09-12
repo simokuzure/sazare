@@ -48,6 +48,7 @@ AI-generated output is always treated as unverified candidate data. Only error a
 - Practice Chinese-to-Japanese and English-to-Japanese article translation with configurable genre, length, and JLPT level.
 - Receive a fully revised version of Japanese text together with dimension scores, candidate errors, and revision suggestions.
 - Scoring results include a total score, dimension-level feedback, error analysis, recommended expressions, and full reference answers.
+- Use voice input to transcribe recordings into Japanese text for editing and submission.
 
 ### AI and question bank
 

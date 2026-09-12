@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import SpeechInput from '../../components/SpeechInput'
+import { useSpeechInput } from '../../hooks/useSpeechInput'
 import { getErrorMessage } from '../../api/client'
 import { fetchRandomQuestions, generateQuestions, submitQuestionAnswer } from '../../api/questionApi'
 import { fetchAllTags } from '../../api/tagApi'
@@ -43,7 +45,7 @@ const EMPTY_ANSWER_SESSION: AnswerSessionState = {
   errorConfirmationOpen: false,
 }
 
-export default function ShortSentencePractice() {
+export default function ShortSentencePractice({ active = true }: { active?: boolean }) {
   const { english, learningMode, shortQuestionType, text } = useLanguage()
   const [practiceTags, setPracticeTags] = useState<Tag[]>([])
   const [practiceTagsLoading, setPracticeTagsLoading] = useState(false)
@@ -107,6 +109,13 @@ export default function ShortSentencePractice() {
   const answerInputNotice = answerNotice ?? practiceNotice
   const selectedErrorCount = errorCandidates.filter((candidate) => candidate.selected && !candidate.saved).length
   const questionLoading = questionGenerating || questionRandomizing
+  const speech = useSpeechInput({
+    contextKey: `${learningMode}:${selectedQuestionId}`,
+    enabled: active && !!selectedQuestion && !questionLoading && !answerSubmitted && !answerScoring,
+    value: answerText,
+    maxLength: 2000,
+    onChange: (value) => updateSelectedAnswerSession((session) => ({ ...session, answerText: value })),
+  })
 
   async function handleGenerateQuestion() {
     setQuestionGenerating(true)
@@ -433,8 +442,9 @@ export default function ShortSentencePractice() {
           {!answerSubmitted ? (
             <>
               {answerInputNotice && (answerInputNotice.kind === 'error' || !selectedQuestion) ? <StatusNotice notice={answerInputNotice} /> : null}
-              <textarea aria-label={text('日语答案', 'Japanese answer')} value={answerText} maxLength={2000} disabled={!selectedQuestion} placeholder={selectedQuestion ? text('请输入日语答案', 'Enter your Japanese answer') : text('生成题目后即可作答', 'Generate a question to begin')} onChange={(event) => updateSelectedAnswerSession((session) => ({ ...session, answerText: event.target.value }))} />
-              <div className="action-row answer-input-actions"><button type="button" className="primary-button" disabled={!selectedQuestion || answerScoring} onClick={handleSubmitAnswer}>{answerScoring ? text('评分中', 'Scoring') : text('提交答案', 'Submit')}</button><button type="button" disabled={!selectedQuestion && !answerText} onClick={handleClearAnswer}>{text('清空', 'Clear')}</button></div>
+              <textarea aria-label={text('日语答案', 'Japanese answer')} value={answerText} maxLength={2000} disabled={!selectedQuestion || speech.busy} placeholder={selectedQuestion ? text('请输入日语答案', 'Enter your Japanese answer') : text('生成题目后即可作答', 'Generate a question to begin')} onChange={(event) => updateSelectedAnswerSession((session) => ({ ...session, answerText: event.target.value }))} />
+              <SpeechInput speech={speech}>
+              <div className="action-row answer-input-actions"><button type="button" className="primary-button" disabled={!selectedQuestion || answerScoring || speech.busy} onClick={handleSubmitAnswer}>{answerScoring ? text('评分中', 'Scoring') : text('提交答案', 'Submit')}</button><button type="button" disabled={speech.busy || (!selectedQuestion && !answerText)} onClick={handleClearAnswer}>{text('清空', 'Clear')}</button></div></SpeechInput>
             </>
           ) : (
             <div className="answer-result">

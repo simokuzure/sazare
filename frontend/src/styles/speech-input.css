@@ -1,0 +1,51 @@
+.speech-input {
+  margin-block: 10px;
+  min-width: 0;
+  width: 100%;
+}
+
+.speech-input-toolbar,
+.speech-input-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.speech-input-toolbar {
+  justify-content: space-between;
+}
+
+.speech-input-controls {
+  flex-shrink: 0;
+}
+
+.speech-input-timer {
+  white-space: nowrap;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.speech-input-status {
+  margin: 6px 0;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.speech-input-status:empty {
+  display: none;
+}
+
+.speech-input-draft {
+  display: grid;
+  gap: 8px;
+}
+
+.speech-input-draft textarea {
+  width: 100%;
+  min-height: 100px;
+}
+
+.speech-input-draft button {
+  justify-self: start;
+}

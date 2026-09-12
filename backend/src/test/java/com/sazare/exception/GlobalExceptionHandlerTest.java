@@ -32,7 +32,7 @@ class GlobalExceptionHandlerTest {
         );
 
         assertThat(response.code()).isEqualTo(ErrorCode.PARAM_ERROR.getCode());
-        assertThat(response.message()).isEqualTo("Content-Type 必须为 application/json");
+        assertThat(response.message()).isEqualTo("Content-Type 不受支持，请使用接口要求的媒体类型");
     }
 
     @Test
