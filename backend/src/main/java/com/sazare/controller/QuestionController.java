@@ -93,12 +93,13 @@ public class QuestionController {
             @RequestParam(required = false) Boolean exam,
             @Pattern(regexp = "AI|MANUAL|REVIEW_DERIVED", message = "sourceType 只能是 AI、MANUAL 或 REVIEW_DERIVED")
             @RequestParam(required = false) String sourceType,
-            @RequestParam(defaultValue = "true") Boolean enabled,
+            @RequestParam(required = false) Boolean enabled,
             @Min(value = 1, message = "page 必须大于等于 1")
             @RequestParam(defaultValue = "1") Integer page,
             @Min(value = 1, message = "size 必须在 1 到 100 之间")
             @Max(value = 100, message = "size 必须在 1 到 100 之间")
-            @RequestParam(defaultValue = "20") Integer size
+            @RequestParam(defaultValue = "20") Integer size,
+            @Positive(message = "id 必须大于 0") @RequestParam(required = false) Long id
     ) {
         QuestionQueryRequest request = new QuestionQueryRequest(
                 learningMode,
@@ -112,7 +113,8 @@ public class QuestionController {
                 sourceType,
                 enabled,
                 page,
-                size
+                size,
+                id
         );
         return ApiResponse.success(questionService.listQuestions(request));
     }
@@ -150,7 +152,8 @@ public class QuestionController {
                 sourceType,
                 enabled,
                 1,
-                1
+                1,
+                null
         );
         return ApiResponse.success(questionService.getRandomQuestions(request, count));
     }

@@ -56,7 +56,7 @@ export type QuestionFilterState = {
   difficulty: string
   tagCodes: string
   sourceType: '' | 'AI' | 'MANUAL' | 'REVIEW_DERIVED'
-  enabled: 'true' | 'false' | 'all'
+  id: string
   page: number
   size: number
 }

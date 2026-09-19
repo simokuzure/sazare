@@ -856,6 +856,23 @@ tbody tr:hover {
   max-width: none;
 }
 
+.target-page .question-table .table-actions {
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+@media (min-width: 861px) {
+  .question-table th:nth-child(7),
+  .question-table td:nth-child(7) {
+    width: auto;
+  }
+
+  .question-table th:nth-child(8),
+  .question-table td:nth-child(8) {
+    width: 19rem;
+  }
+}
+
 .answer-record-table td:nth-child(10) .table-actions {
   justify-content: flex-start;
   flex-wrap: nowrap;
@@ -1426,4 +1443,3 @@ tbody tr:hover {
   border-color: var(--border);
   border-radius: 7px;
 }
-

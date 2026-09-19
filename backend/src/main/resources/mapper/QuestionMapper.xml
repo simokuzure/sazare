@@ -24,6 +24,9 @@
 
     <sql id="questionFilterClause">
         where q.deleted = false
+        <if test="request.id != null">
+            and q.id = #{request.id}
+        </if>
         <if test="request.questionTypes != null and request.questionTypes.size() > 0">
             and q.question_type in
             <foreach collection="request.questionTypes" item="questionType" open="(" separator="," close=")">

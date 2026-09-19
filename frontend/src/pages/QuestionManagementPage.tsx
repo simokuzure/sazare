@@ -20,6 +20,7 @@ type QuestionViewMode = 'list' | 'detail' | 'create' | 'edit'
 
 type QuestionManagementPageProps = {
   initialQuestionId?: number | null
+  onPracticeQuestion: (question: Question) => void
 }
 
 const EMPTY_QUESTION_FORM: QuestionFormState = {
@@ -43,12 +44,12 @@ const INITIAL_QUESTION_FILTERS: QuestionFilterState = {
   difficulty: '',
   tagCodes: '',
   sourceType: '',
-  enabled: 'true',
+  id: '',
   page: 1,
   size: 20,
 }
 
-export default function QuestionManagementPage({ initialQuestionId = null }: QuestionManagementPageProps) {
+export default function QuestionManagementPage({ initialQuestionId = null, onPracticeQuestion }: QuestionManagementPageProps) {
   const { english, learningMode, shortQuestionType, articleQuestionType, text } = useLanguage()
   const [questions, setQuestions] = useState<Question[]>([])
   const [questionTotal, setQuestionTotal] = useState(0)
@@ -495,12 +496,19 @@ export default function QuestionManagementPage({ initialQuestionId = null }: Que
                 </label>
 
                 <label>
-                  <span>{text('状态', 'Status')}</span>
-                  <select value={questionFilters.enabled} onChange={(event) => updateQuestionFilters({ enabled: event.target.value as QuestionFilterState['enabled'] })}>
-                    <option value="true">{text('启用', 'Enabled')}</option>
-                    <option value="false">{text('停用', 'Disabled')}</option>
-                    <option value="all">{text('全部', 'All')}</option>
-                  </select>
+                  <span>{text('题目 ID', 'Question ID')}</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={questionFilters.id}
+                    placeholder={text('输入题目 ID', 'Enter question ID')}
+                    onChange={(event) => {
+                      const id = event.target.value.trim()
+                      if (id === '' || (/^[1-9]\d*$/.test(id) && Number.isSafeInteger(Number(id)))) {
+                        updateQuestionFilters({ id })
+                      }
+                    }}
+                  />
                 </label>
 
               </form>
@@ -539,6 +547,9 @@ export default function QuestionManagementPage({ initialQuestionId = null }: Que
                         </td>
                         <td className="question-actions-cell" data-label={text('操作', 'Actions')}>
                           <div className="table-actions">
+                            <button type="button" disabled={!question.enabled || questionActionId === question.id} onClick={() => onPracticeQuestion(question)}>
+                              {text('答题', 'Practice')}
+                            </button>
                             <button
                               type="button"
                               disabled={questionActionId === question.id}

@@ -45,7 +45,7 @@ const EMPTY_ARTICLE_SESSION: ArticleAnswerSession = {
   errorConfirmationOpen: false,
 }
 
-export default function ArticlePractice({ active = true }: { active?: boolean }) {
+export default function ArticlePractice({ active = true, initialQuestion = null }: { active?: boolean; initialQuestion?: Question | null }) {
   const { english, learningMode, articleQuestionType, text } = useLanguage()
   const [genreTags, setGenreTags] = useState<Tag[]>([])
   const [genreTagsLoading, setGenreTagsLoading] = useState(false)
@@ -56,7 +56,7 @@ export default function ArticlePractice({ active = true }: { active?: boolean })
   const [genreTagCode, setGenreTagCode] = useState('')
   const [topic, setTopic] = useState('')
   const [extraRequirements, setExtraRequirements] = useState('')
-  const [question, setQuestion] = useState<Question | null>(null)
+  const [question, setQuestion] = useState<Question | null>(initialQuestion)
   const [vocabularyHintsVisible, setVocabularyHintsVisible] = useState(false)
   const [questionGenerating, setQuestionGenerating] = useState(false)
   const [questionRandomizing, setQuestionRandomizing] = useState(false)

@@ -18,9 +18,9 @@ class QuestionMapperSqlTest {
     void listQuestionSqlShouldScopeAllTypesToLearningMode() throws Exception {
         Configuration configuration = loadConfiguration();
         QuestionQueryRequest directionRequest = new QuestionQueryRequest(
-                "EN_TO_JA", null, null, null, null, null, null, null, null, true, 1, 20);
+                "EN_TO_JA", null, null, null, null, null, null, null, null, true, 1, 20, null);
         QuestionQueryRequest shortQuestionRequest = new QuestionQueryRequest(
-                null, "TRANSLATION_ZH_TO_JA", null, null, null, null, null, null, null, true, 1, 20);
+                null, "TRANSLATION_ZH_TO_JA", null, null, null, null, null, null, null, true, 1, 20, null);
 
         BoundSql directionSql = configuration
                 .getMappedStatement("com.sazare.mapper.QuestionMapper.countQuestions")
@@ -46,7 +46,7 @@ class QuestionMapperSqlTest {
     void randomQuestionSqlShouldExcludeReviewDerivedQuestionsAndUseRequestedLimit() throws Exception {
         Configuration configuration = loadConfiguration();
         QuestionQueryRequest request = new QuestionQueryRequest(
-                null, "TRANSLATION_ZH_TO_JA", null, null, null, null, null, null, null, true, 1, 1);
+                null, "TRANSLATION_ZH_TO_JA", null, null, null, null, null, null, null, true, 1, 1, null);
         BoundSql boundSql = configuration
                 .getMappedStatement("com.sazare.mapper.QuestionMapper.selectRandomQuestionIds")
                 .getBoundSql(Map.of("request", request, "limit", 3));
@@ -55,6 +55,21 @@ class QuestionMapperSqlTest {
                 .contains("q.source_type <> 'REVIEW_DERIVED'")
                 .contains("limit ?");
         assertThat(boundSql.getParameterMappings()).extracting("property").contains("limit");
+    }
+
+    @Test
+    void listAndCountShouldFilterByIdWithoutRestrictingStatus() throws Exception {
+        Configuration configuration = loadConfiguration();
+        QuestionQueryRequest request = new QuestionQueryRequest(
+                "ZH_TO_JA", null, null, null, null, null, null, null, null, null, 1, 20, 42L);
+
+        for (String statement : new String[]{"countQuestions", "selectQuestionIds"}) {
+            BoundSql sql = configuration
+                    .getMappedStatement("com.sazare.mapper.QuestionMapper." + statement)
+                    .getBoundSql(Map.of("request", request, "limit", 20, "offset", 0));
+            assertThat(sql.getSql()).contains("q.id = ?").doesNotContain("q.enabled =");
+            assertThat(sql.getParameterMappings()).extracting("property").contains("request.id");
+        }
     }
 
     private static Configuration loadConfiguration() throws Exception {

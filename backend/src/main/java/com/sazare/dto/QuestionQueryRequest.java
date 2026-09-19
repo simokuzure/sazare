@@ -46,16 +46,22 @@ public record QuestionQueryRequest(
 
         @Min(value = 1, message = "size 必须在 1 到 100 之间")
         @Max(value = 100, message = "size 必须在 1 到 100 之间")
-        Integer size
+        Integer size,
+
+        @Min(value = 1, message = "id 必须大于等于 1")
+        Long id
 ) {
     public QuestionQueryRequest {
         learningMode = learningMode == null || learningMode.isBlank() ? null : learningMode.trim();
         questionType = questionType == null || questionType.isBlank() ? null : questionType.trim();
         level = level == null || level.isBlank() ? null : level.trim();
         sourceType = sourceType == null || sourceType.isBlank() ? null : sourceType.trim();
-        enabled = enabled == null ? true : enabled;
         page = page == null ? 1 : page;
         size = size == null ? 20 : size;
+    }
+
+    public Long getId() {
+        return id;
     }
 
     public String getLearningMode() {

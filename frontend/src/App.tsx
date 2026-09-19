@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import PracticePage from './pages/PracticePage'
+import type { Question } from './types/question'
 import AppErrorBoundary from './components/AppErrorBoundary'
 import './App.css'
 import { useLanguage } from './i18n/LanguageContext'
@@ -15,6 +16,7 @@ function App() {
   const { english, learningMode, setLearningMode, t } = useLanguage()
   const [activePage, setActivePage] = useState<PageKey>('practice')
   const [questionDetailTarget, setQuestionDetailTarget] = useState<number | null>(null)
+  const [practiceTarget, setPracticeTarget] = useState<{ question: Question; revision: number } | null>(null)
   const navItems: { key: PageKey; label: string }[] = [
     { key: 'practice', label: t('practice') },
     { key: 'reviews', label: t('reviewCards') },
@@ -32,6 +34,16 @@ function App() {
     setQuestionDetailTarget(questionId)
     setActivePage('questions')
   }
+
+  function handlePracticeQuestion(question: Question) {
+    setPracticeTarget((current) => ({ question, revision: (current?.revision ?? 0) + 1 }))
+    setQuestionDetailTarget(null)
+    setActivePage('practice')
+  }
+
+  const initialPracticeQuestion = practiceTarget?.question.questionType.includes(learningMode)
+    ? practiceTarget.question
+    : null
 
   return (
     <div className="app-shell">
@@ -85,13 +97,13 @@ function App() {
 
       <main id="main-workspace" className="workspace" tabIndex={-1}>
         <div hidden={activePage !== 'practice'}>
-          <PracticePage key={learningMode} active={activePage === 'practice'} />
+          <PracticePage key={`${learningMode}-${practiceTarget?.revision ?? 0}`} active={activePage === 'practice'} initialQuestion={initialPracticeQuestion} />
         </div>
         <AppErrorBoundary key={`${activePage}-${learningMode}`} scope="module">
           <Suspense fallback={<div className="surface" role="status">{english ? 'Loading page…' : '页面加载中…'}</div>}>
             {activePage === 'answerRecords' ? <AnswerRecordsPage key={learningMode} onOpenQuestion={handleOpenQuestion} /> : null}
             {activePage === 'statistics' ? <LearningStatisticsPage key={learningMode} /> : null}
-            {activePage === 'questions' ? <QuestionManagementPage key={learningMode} initialQuestionId={questionDetailTarget} /> : null}
+            {activePage === 'questions' ? <QuestionManagementPage key={learningMode} initialQuestionId={questionDetailTarget} onPracticeQuestion={handlePracticeQuestion} /> : null}
             {activePage === 'reviews' ? <ReviewPage key={learningMode} /> : null}
           </Suspense>
         </AppErrorBoundary>

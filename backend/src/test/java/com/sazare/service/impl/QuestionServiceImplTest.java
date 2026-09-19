@@ -768,7 +768,7 @@ class QuestionServiceImplTest {
                 null,
                 null,
                 null,
-                null
+                null, 100L
         ));
 
         assertThat(page.total()).isEqualTo(1);
@@ -784,6 +784,8 @@ class QuestionServiceImplTest {
         assertThat(requestCaptor.getValue().tagCodes())
                 .containsExactly("FINANCE_BANK", "FUNCTION_EXPRESS_PLAN");
         assertThat(requestCaptor.getValue().learningMode()).isEqualTo("ZH_TO_JA");
+        assertThat(requestCaptor.getValue().id()).isEqualTo(100L);
+        assertThat(requestCaptor.getValue().enabled()).isNull();
     }
 
     @Test
@@ -816,7 +818,7 @@ class QuestionServiceImplTest {
                 null,
                 null,
                 null,
-                null
+                null, null
         ), 5);
 
         assertThat(result).extracting("id").containsExactly(100L, 101L);
@@ -855,7 +857,7 @@ class QuestionServiceImplTest {
                 null,
                 null,
                 null,
-                null
+                null, null
         ), 1);
 
         assertThat(result).singleElement().satisfies(questionVO -> {
@@ -880,7 +882,7 @@ class QuestionServiceImplTest {
                 null,
                 null,
                 null,
-                null
+                null, null
         ), 5);
 
         assertThat(result).isEmpty();

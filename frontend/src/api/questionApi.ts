@@ -64,8 +64,8 @@ export async function fetchQuestions(filters: QuestionFilterState, signal?: Abor
   if (filters.sourceType) {
     searchParams.set('sourceType', filters.sourceType)
   }
-  if (filters.enabled !== 'all') {
-    searchParams.set('enabled', filters.enabled)
+  if (filters.id) {
+    searchParams.set('id', filters.id)
   }
   const tagCodes = parseCodeList(filters.tagCodes)
   if (tagCodes.length > 0) {

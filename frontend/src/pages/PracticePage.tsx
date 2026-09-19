@@ -7,14 +7,17 @@ import ShortSentencePractice from './practice/ShortSentencePractice'
 const ArticlePractice = lazy(() => import('./ArticlePractice'))
 const JapaneseCorrectionPractice = lazy(() => import('./JapaneseCorrectionPractice'))
 
+import type { Question } from '../types/question'
+
 type PracticeMode = 'sentence' | 'article' | 'correction'
 
 const PRACTICE_MODES: PracticeMode[] = ['sentence', 'article', 'correction']
 
-export default function PracticePage({ active = true }: { active?: boolean }) {
+export default function PracticePage({ active = true, initialQuestion = null }: { active?: boolean; initialQuestion?: Question | null }) {
   const { text } = useLanguage()
-  const [activeMode, setActiveMode] = useState<PracticeMode>('sentence')
-  const [loadedModes, setLoadedModes] = useState<Set<PracticeMode>>(() => new Set(['sentence']))
+  const initialMode: PracticeMode = initialQuestion?.questionType.endsWith('_ARTICLE') ? 'article' : 'sentence'
+  const [activeMode, setActiveMode] = useState<PracticeMode>(initialMode)
+  const [loadedModes, setLoadedModes] = useState<Set<PracticeMode>>(() => new Set(['sentence', initialMode]))
 
   function activateMode(mode: PracticeMode) {
     setLoadedModes((current) => current.has(mode) ? current : new Set(current).add(mode))
@@ -90,12 +93,12 @@ export default function PracticePage({ active = true }: { active?: boolean }) {
         aria-labelledby="sentence-practice-tab"
         hidden={activeMode !== 'sentence'}
       >
-        <ShortSentencePractice active={active && activeMode === 'sentence'} />
+        <ShortSentencePractice active={active && activeMode === 'sentence'} initialQuestion={initialMode === 'sentence' ? initialQuestion : null} />
       </div>
       <div id="article-practice-panel" role="tabpanel" aria-labelledby="article-practice-tab" hidden={activeMode !== 'article'}>
         <AppErrorBoundary scope="module">
           <Suspense fallback={<div className="surface" role="status">{text('练习模块加载中…', 'Loading practice…')}</div>}>
-            {loadedModes.has('article') ? <ArticlePractice active={active && activeMode === 'article'} /> : null}
+            {loadedModes.has('article') ? <ArticlePractice active={active && activeMode === 'article'} initialQuestion={initialMode === 'article' ? initialQuestion : null} /> : null}
           </Suspense>
         </AppErrorBoundary>
       </div>

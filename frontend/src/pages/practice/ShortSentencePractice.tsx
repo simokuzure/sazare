@@ -45,7 +45,7 @@ const EMPTY_ANSWER_SESSION: AnswerSessionState = {
   errorConfirmationOpen: false,
 }
 
-export default function ShortSentencePractice({ active = true }: { active?: boolean }) {
+export default function ShortSentencePractice({ active = true, initialQuestion = null }: { active?: boolean; initialQuestion?: Question | null }) {
   const { english, learningMode, shortQuestionType, text } = useLanguage()
   const [practiceTags, setPracticeTags] = useState<Tag[]>([])
   const [practiceTagsLoading, setPracticeTagsLoading] = useState(false)
@@ -56,7 +56,7 @@ export default function ShortSentencePractice({ active = true }: { active?: bool
   const [sceneParentId, setSceneParentId] = useState('')
   const [sceneTagCode, setSceneTagCode] = useState('')
   const [extraRequirements, setExtraRequirements] = useState('')
-  const [generatedQuestions, setGeneratedQuestions] = useState<Question[]>([])
+  const [generatedQuestions, setGeneratedQuestions] = useState<Question[]>(() => initialQuestion ? [initialQuestion] : [])
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0)
   const [grammarPointVisible, setGrammarPointVisible] = useState(false)
   const [questionGenerating, setQuestionGenerating] = useState(false)
