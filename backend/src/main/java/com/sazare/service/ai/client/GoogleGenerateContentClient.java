@@ -4,6 +4,7 @@ import com.sazare.config.AiProperties;
 import com.sazare.exception.BusinessException;
 import com.sazare.exception.ErrorCode;
 import com.sazare.service.ai.AiQuestionPrompt;
+import lombok.extern.slf4j.Slf4j;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -11,12 +12,17 @@ import tools.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 public final class GoogleGenerateContentClient {
 
     public static final String JSON_CONTENT_TYPE = "application/json";
+    private static final List<String> FLASH_MODELS = List.of(
+            "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"
+    );
 
     private final AiProperties.Google properties;
     private final ObjectMapper objectMapper;
@@ -42,12 +48,7 @@ public final class GoogleGenerateContentClient {
             String operationName
     ) {
         validateProperties();
-        AiProviderHttpResponse response = httpClient.postJson(
-                buildUri(),
-                Map.of(
-                        "Content-Type", JSON_CONTENT_TYPE,
-                        "x-goog-api-key", properties.getApiKey().trim()
-                ),
+        AiProviderHttpResponse response = postWithQuotaFallback(
                 buildRequestBody(prompt, generationConfig, operationName)
         );
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
@@ -76,12 +77,37 @@ public final class GoogleGenerateContentClient {
         }
     }
 
-    private URI buildUri() {
-        String baseUrl = properties.getBaseUrl().trim().replaceAll("/+$", "");
+    private AiProviderHttpResponse postWithQuotaFallback(String requestBody) {
         String model = properties.getModel().trim();
         if (model.startsWith("models/")) {
             model = model.substring("models/".length());
         }
+        List<String> models = new ArrayList<>();
+        models.add(model);
+        if (FLASH_MODELS.contains(model)) {
+            for (String fallback : FLASH_MODELS) {
+                if (!fallback.equals(model)) {
+                    models.add(fallback);
+                }
+            }
+        }
+        Map<String, String> headers = Map.of(
+                "Content-Type", JSON_CONTENT_TYPE,
+                "x-goog-api-key", properties.getApiKey().trim()
+        );
+        var candidates = models.iterator();
+        while (true) {
+            String candidate = candidates.next();
+            AiProviderHttpResponse response = httpClient.postJson(buildUri(candidate), headers, requestBody);
+            if (response.statusCode() != 429 || !candidates.hasNext()) {
+                return response;
+            }
+            log.warn("Google AI 模型额度受限，尝试下一个 Flash 模型: model={}, status=429", candidate);
+        }
+    }
+
+    private URI buildUri(String model) {
+        String baseUrl = properties.getBaseUrl().trim().replaceAll("/+$", "");
         return URI.create(baseUrl + "/models/"
                 + URLEncoder.encode(model, StandardCharsets.UTF_8) + ":generateContent");
     }
