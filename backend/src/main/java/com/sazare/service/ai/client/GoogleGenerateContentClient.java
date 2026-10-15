@@ -20,6 +20,8 @@ import java.util.Map;
 public final class GoogleGenerateContentClient {
 
     public static final String JSON_CONTENT_TYPE = "application/json";
+    private static final int MAX_UNAVAILABLE_RETRIES = 2;
+    private static final long INITIAL_RETRY_DELAY_MILLIS = 2_000;
     private static final List<String> FLASH_MODELS = List.of(
             "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"
     );
@@ -27,15 +29,26 @@ public final class GoogleGenerateContentClient {
     private final AiProperties.Google properties;
     private final ObjectMapper objectMapper;
     private final AiProviderHttpClient httpClient;
+    private final RetrySleeper retrySleeper;
 
     public GoogleGenerateContentClient(
             AiProperties.Google properties,
             ObjectMapper objectMapper,
             AiProviderHttpClient httpClient
     ) {
+        this(properties, objectMapper, httpClient, Thread::sleep);
+    }
+
+    GoogleGenerateContentClient(
+            AiProperties.Google properties,
+            ObjectMapper objectMapper,
+            AiProviderHttpClient httpClient,
+            RetrySleeper retrySleeper
+    ) {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.httpClient = httpClient;
+        this.retrySleeper = retrySleeper;
     }
 
     public String generate(AiQuestionPrompt prompt, Map<String, Object> generationConfig) {
@@ -48,7 +61,7 @@ public final class GoogleGenerateContentClient {
             String operationName
     ) {
         validateProperties();
-        AiProviderHttpResponse response = postWithQuotaFallback(
+        AiProviderHttpResponse response = postWithRetryAndQuotaFallback(
                 buildRequestBody(prompt, generationConfig, operationName)
         );
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
@@ -77,7 +90,7 @@ public final class GoogleGenerateContentClient {
         }
     }
 
-    private AiProviderHttpResponse postWithQuotaFallback(String requestBody) {
+    private AiProviderHttpResponse postWithRetryAndQuotaFallback(String requestBody) {
         String model = properties.getModel().trim();
         if (model.startsWith("models/")) {
             model = model.substring("models/".length());
@@ -96,14 +109,38 @@ public final class GoogleGenerateContentClient {
                 "x-goog-api-key", properties.getApiKey().trim()
         );
         var candidates = models.iterator();
+        String candidate = candidates.next();
+        int unavailableRetries = 0;
         while (true) {
-            String candidate = candidates.next();
             AiProviderHttpResponse response = httpClient.postJson(buildUri(candidate), headers, requestBody);
+            if (response.statusCode() == 503 && unavailableRetries < MAX_UNAVAILABLE_RETRIES) {
+                long delayMillis = INITIAL_RETRY_DELAY_MILLIS * (1L << unavailableRetries);
+                unavailableRetries++;
+                log.warn("Google AI 服务暂时不可用，等待后重试: model={}, retry={}/{}, delayMillis={}",
+                        candidate, unavailableRetries, MAX_UNAVAILABLE_RETRIES, delayMillis);
+                waitBeforeRetry(delayMillis);
+                continue;
+            }
             if (response.statusCode() != 429 || !candidates.hasNext()) {
                 return response;
             }
             log.warn("Google AI 模型额度受限，尝试下一个 Flash 模型: model={}, status=429", candidate);
+            candidate = candidates.next();
         }
+    }
+
+    private void waitBeforeRetry(long delayMillis) {
+        try {
+            retrySleeper.sleep(delayMillis);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "Google AI 重试等待被中断", exception);
+        }
+    }
+
+    @FunctionalInterface
+    interface RetrySleeper {
+        void sleep(long delayMillis) throws InterruptedException;
     }
 
     private URI buildUri(String model) {

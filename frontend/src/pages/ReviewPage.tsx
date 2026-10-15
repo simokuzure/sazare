@@ -265,8 +265,9 @@ export default function ReviewPage() {
     try {
       await generateDerivedReviewQuestion(selectedCardId)
       setAttemptResult((current) => current ? { ...current, derivedGenerationStatus: 'SUCCEEDED' } : current)
-      setActionNotice({ kind: 'info', title: text('衍生题已生成', 'Derived question generated'), message: text('已刷新卡片，可以继续本周期复习。', 'The card was refreshed. You can continue this review cycle.') })
-      setView('REVIEW')
+      if (view !== 'RESULT') {
+        setActionNotice({ kind: 'info', title: text('衍生题已生成', 'Derived question generated'), message: text('已刷新卡片，可以继续本周期复习。', 'The card was refreshed. You can continue this review cycle.') })
+      }
       setAnswerText('')
       setDetailReloadToken((value) => value + 1)
       setListReloadToken((value) => value + 1)
