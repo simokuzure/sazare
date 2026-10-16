@@ -14,6 +14,9 @@ import java.util.List;
 
 public interface ReviewService {
 
+    ReviewCard recordChatImportErrors(Long userId, List<Long> questionIds, Long userErrorTypeId,
+                                     String severity, LocalDateTime now);
+
     PageVO<ReviewCardListVO> listReviewCards(ReviewCardQueryRequest request);
 
     ReviewCardDetailVO getReviewCard(Long cardId, boolean earlyReview);

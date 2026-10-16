@@ -550,7 +550,7 @@ create table if not exists review_attempts (
     review_card_id bigint not null,
     review_cycle_id bigint not null,
     review_cycle_question_id bigint not null,
-    user_answer_id bigint not null,
+    user_answer_id bigint null,
     attempt_source varchar(24) not null,
     result varchar(16) not null,
     sm2_quality smallint not null,
@@ -564,7 +564,11 @@ create table if not exists review_attempts (
     created_at timestamp not null default current_timestamp,
 
     constraint uq_review_attempts_card_user_answer unique (review_card_id, user_answer_id),
-    constraint ck_review_attempts_source check (attempt_source in ('REVIEW', 'PRACTICE_ERROR')),
+    constraint ck_review_attempts_source check (attempt_source in ('REVIEW', 'PRACTICE_ERROR', 'CHAT_IMPORT')),
+    constraint ck_review_attempts_answer_source check (
+        (attempt_source = 'CHAT_IMPORT' and user_answer_id is null)
+        or (attempt_source in ('REVIEW', 'PRACTICE_ERROR') and user_answer_id is not null)
+    ),
     constraint ck_review_attempts_result check (result in ('PASS', 'FAIL')),
     constraint ck_review_attempts_quality check (sm2_quality between 0 and 5),
     constraint ck_review_attempts_result_quality check (
@@ -572,7 +576,7 @@ create table if not exists review_attempts (
         or (result = 'FAIL' and sm2_quality between 0 and 2 and target_error_resolved = false)
     ),
     constraint ck_review_attempts_practice_error check (
-        attempt_source <> 'PRACTICE_ERROR'
+        attempt_source not in ('PRACTICE_ERROR', 'CHAT_IMPORT')
         or (result = 'FAIL' and sm2_quality = 2 and target_error_resolved = false)
     ),
     constraint ck_review_attempts_ease_factor check (ease_factor_after >= 1.3000),
@@ -588,8 +592,8 @@ comment on column review_attempts.user_id is '作答用户ID，对应 users.id�
 comment on column review_attempts.review_card_id is '本次事件影响的复习卡片ID，对应 review_cards.id';
 comment on column review_attempts.review_cycle_id is '本次事件所属复习周期ID，对应 review_cycles.id';
 comment on column review_attempts.review_cycle_question_id is '本次事件对应周期题目ID，对应 review_cycle_questions.id';
-comment on column review_attempts.user_answer_id is '实际用户答案ID，对应 user_answers.id';
-comment on column review_attempts.attempt_source is '事件来源：REVIEW=复习作答，PRACTICE_ERROR=普通练习确认同类错误';
+comment on column review_attempts.user_answer_id is '实际用户答案ID，对应 user_answers.id；CHAT_IMPORT 为空';
+comment on column review_attempts.attempt_source is '事件来源：REVIEW=复习作答，PRACTICE_ERROR=普通练习确认同类错误，CHAT_IMPORT=聊天导入确认错误';
 comment on column review_attempts.result is '复习结果：PASS=通过，FAIL=失败';
 comment on column review_attempts.sm2_quality is 'SM-2质量分，范围0到5，普通练习确认同类错误固定为2';
 comment on column review_attempts.target_error_resolved is '本次回答是否解决卡片针对的目标错误';

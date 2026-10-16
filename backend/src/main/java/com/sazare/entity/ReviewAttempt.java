@@ -25,10 +25,10 @@ public class ReviewAttempt {
     /** 本次事件对应周期题目ID。 */
     private Long reviewCycleQuestionId;
 
-    /** 实际用户答案ID。 */
+    /** 实际用户答案ID；聊天导入事件为空。 */
     private Long userAnswerId;
 
-    /** 事件来源：REVIEW或PRACTICE_ERROR。 */
+    /** 事件来源：REVIEW、PRACTICE_ERROR或CHAT_IMPORT。 */
     private String attemptSource;
 
     /** 本次结果：PASS或FAIL。 */

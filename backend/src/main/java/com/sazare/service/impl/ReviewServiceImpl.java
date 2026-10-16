@@ -419,15 +419,15 @@ public class ReviewServiceImpl implements ReviewService {
         }
 
         if (newCard) {
-            createPracticeFailureCycle(card, userAnswerId, questionId, 1, 0, occurredAt);
+            createPracticeFailureCycle(card, userAnswerId, questionId, 1, 0, occurredAt, "PRACTICE_ERROR", resolveTargetSuccessCount(card, userAnswerId));
             return card;
         }
         if (CARD_MASTERED.equals(card.getStatus())) {
             int cycleNo = reviewCycleMapper.selectMaxCycleNo(card.getId()) + 1;
-            createPracticeFailureCycle(card, userAnswerId, questionId, cycleNo, 1, occurredAt);
+            createPracticeFailureCycle(card, userAnswerId, questionId, cycleNo, 1, occurredAt, "PRACTICE_ERROR", resolveTargetSuccessCount(card, userAnswerId));
             return card;
         }
-        applyPracticeFailureToCurrentCycle(card, userAnswerId, questionId, occurredAt);
+        applyPracticeFailureToCurrentCycle(card, userAnswerId, questionId, occurredAt, "PRACTICE_ERROR", resolveTargetSuccessCount(card, userAnswerId));
         return card;
     }
 
@@ -471,19 +471,55 @@ public class ReviewServiceImpl implements ReviewService {
         );
     }
 
+    @Override
+    @Transactional
+    public ReviewCard recordChatImportErrors(Long userId, List<Long> questionIds,
+                                              Long userErrorTypeId, String severity, LocalDateTime now) {
+        UserErrorType type = userErrorTypeMapper.selectActiveByIdAndUserId(userErrorTypeId, userId);
+        if (type == null) throw business("用户错误类型不存在或不属于当前用户");
+        List<Long> ids = questionIds.stream().distinct().toList();
+        if (ids.isEmpty()) throw business("导入复习题不能为空");
+        ids.forEach(this::requireQuestion);
+        int target = switch (severity) { case "LOW" -> 3; case "HIGH" -> 5; default -> 4; };
+        ReviewCard card = reviewCardMapper.selectForUpdateByUserErrorTypeId(userErrorTypeId);
+        boolean newCard = false;
+        if (card == null) {
+            newCard = reviewCardMapper.insertCardIfAbsent(newReviewCard(userId, userErrorTypeId, now)) == 1;
+            card = reviewCardMapper.selectForUpdateByUserErrorTypeId(userErrorTypeId);
+        }
+        if (card == null || !userId.equals(card.getUserId()) || Boolean.TRUE.equals(card.getDeleted())) {
+            throw business("复习卡片不存在或已删除");
+        }
+        if (newCard) {
+            createPracticeFailureCycle(card, null, ids.getFirst(), 1, 0, now, "CHAT_IMPORT", target);
+        } else if (CARD_MASTERED.equals(card.getStatus())) {
+            createPracticeFailureCycle(card, null, ids.getFirst(),
+                    reviewCycleMapper.selectMaxCycleNo(card.getId()) + 1, 1, now, "CHAT_IMPORT", target);
+        } else {
+            applyPracticeFailureToCurrentCycle(card, null, ids.getFirst(), now, "CHAT_IMPORT", target);
+        }
+        ReviewCycle cycle = requireCurrentCycle(card.getId());
+        for (Long id : ids) {
+            reviewCycleQuestionMapper.insertQuestionIfAbsent(newOriginalRetryQuestion(cycle.getId(), id, now));
+        }
+        return card;
+    }
+
     private void createPracticeFailureCycle(
             ReviewCard card,
             Long userAnswerId,
             Long questionId,
             int cycleNo,
             int initialFailureCount,
-            LocalDateTime occurredAt
+            LocalDateTime occurredAt,
+            String source,
+            int targetSuccessCount
     ) {
         ReviewCycle cycle = new ReviewCycle();
         cycle.setReviewCardId(card.getId());
         cycle.setCycleNo(cycleNo);
         cycle.setStatus(CYCLE_IN_PROGRESS);
-        cycle.setTargetSuccessCount(resolveTargetSuccessCount(card, userAnswerId));
+        cycle.setTargetSuccessCount(targetSuccessCount);
         cycle.setSuccessfulReviewCount(0);
         cycle.setFailedReviewCount(initialFailureCount);
         cycle.setVerificationRequiredAfter(occurredAt);
@@ -495,14 +531,16 @@ public class ReviewServiceImpl implements ReviewService {
 
         ReviewCycleQuestion cycleQuestion = newOriginalRetryQuestion(cycle.getId(), questionId, occurredAt);
         reviewCycleQuestionMapper.insertQuestion(cycleQuestion);
-        applyPracticeFailureSchedule(card, cycle, cycleQuestion, userAnswerId, occurredAt);
+        applyPracticeFailureSchedule(card, cycle, cycleQuestion, userAnswerId, occurredAt, source);
     }
 
     private void applyPracticeFailureToCurrentCycle(
             ReviewCard card,
             Long userAnswerId,
             Long questionId,
-            LocalDateTime occurredAt
+            LocalDateTime occurredAt,
+            String source,
+            int targetSuccessCount
     ) {
         ReviewCycle cycle = requireCurrentCycle(card.getId());
         ReviewCycleQuestion cycleQuestion = reviewCycleQuestionMapper
@@ -517,13 +555,12 @@ public class ReviewServiceImpl implements ReviewService {
             cycleQuestion.setAttemptCount(cycleQuestion.getAttemptCount() + 1);
         }
         int failedCount = cycle.getFailedReviewCount() + 1;
-        int targetSuccessCount = resolveTargetSuccessCount(card, userAnswerId);
         reviewCycleMapper.updateProgress(
                 cycle.getId(), targetSuccessCount, cycle.getSuccessfulReviewCount(), failedCount, occurredAt, occurredAt);
         cycle.setTargetSuccessCount(targetSuccessCount);
         cycle.setFailedReviewCount(failedCount);
         cycle.setVerificationRequiredAfter(occurredAt);
-        applyPracticeFailureSchedule(card, cycle, cycleQuestion, userAnswerId, occurredAt);
+        applyPracticeFailureSchedule(card, cycle, cycleQuestion, userAnswerId, occurredAt, source);
     }
 
     private void applyPracticeFailureSchedule(
@@ -531,7 +568,8 @@ public class ReviewServiceImpl implements ReviewService {
             ReviewCycle cycle,
             ReviewCycleQuestion cycleQuestion,
             Long userAnswerId,
-            LocalDateTime occurredAt
+            LocalDateTime occurredAt,
+            String source
     ) {
         Sm2Result sm2 = sm2Scheduler.schedule(
                 card.getEaseFactor(), card.getRepetitionCount(), card.getIntervalDays(), card.getLapseCount(), 2);
@@ -541,7 +579,7 @@ public class ReviewServiceImpl implements ReviewService {
                 sm2.lapseCount(), dueAt, occurredAt, null, occurredAt);
         reviewAttemptMapper.insertAttempt(buildAttempt(
                 card.getUserId(), card.getId(), cycle.getId(), cycleQuestion.getId(), userAnswerId,
-                "PRACTICE_ERROR", RESULT_FAIL, 2, false, null, sm2,
+                source, RESULT_FAIL, 2, false, null, sm2,
                 cycle.getSuccessfulReviewCount(), dueAt, occurredAt));
     }
 

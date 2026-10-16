@@ -76,6 +76,46 @@ import static org.mockito.Mockito.when;
 
 class ReviewServiceImplTest {
 
+    @ParameterizedTest
+    @CsvSource({"LOW,3", "MEDIUM,4", "HIGH,5"})
+    void chatImportAddsMultipleQuestionsAndOneFailureWithoutAnswer(String severity, int target) {
+        when(userErrorTypeMapper.selectActiveByIdAndUserId(2L, 1L)).thenReturn(userErrorType());
+        when(questionMapper.selectActiveQuestionById(anyLong())).thenReturn(question());
+        when(cardMapper.selectForUpdateByUserErrorTypeId(2L)).thenReturn(card("ACTIVE", LocalDateTime.now()));
+        when(cycleMapper.selectCurrentForUpdateByCardId(1L)).thenReturn(cycle(2, 4, 1));
+        when(cycleQuestionMapper.selectByCycleIdAndQuestionId(20L, 100L))
+                .thenReturn(cycleQuestion("RETRY", "ORIGINAL", 1));
+        service.recordChatImportErrors(1L, List.of(100L, 101L), 2L, severity, LocalDateTime.now());
+        verify(cycleMapper).updateProgress(eq(20L), eq(target), eq(2), eq(2), any(), any());
+        verify(attemptMapper).insertAttempt(argThat(event -> event.getUserAnswerId() == null
+                && "CHAT_IMPORT".equals(event.getAttemptSource()) && "FAIL".equals(event.getResult())));
+        verify(cycleQuestionMapper).insertQuestionIfAbsent(argThat(q -> q.getQuestionId().equals(101L)
+                && q.getReviewCycleId().equals(20L) && "RETRY".equals(q.getReviewStatus())));
+        org.mockito.Mockito.verifyNoInteractions(userAnswerMapper);
+        verify(cardMapper, never()).selectConfirmedSeverities(any(), any(), any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"NEW,0,1", "MASTERED,1,2"})
+    void chatImportCreatesOrReactivatesCycle(String state, int failures, int cycleNo) {
+        when(userErrorTypeMapper.selectActiveByIdAndUserId(2L, 1L)).thenReturn(userErrorType());
+        when(questionMapper.selectActiveQuestionById(100L)).thenReturn(question());
+        ReviewCard card = card("MASTERED", null);
+        if ("NEW".equals(state)) {
+            when(cardMapper.selectForUpdateByUserErrorTypeId(2L)).thenReturn(null, card);
+            when(cardMapper.insertCardIfAbsent(any())).thenReturn(1);
+        } else {
+            when(cardMapper.selectForUpdateByUserErrorTypeId(2L)).thenReturn(card);
+        }
+        when(cycleMapper.selectMaxCycleNo(1L)).thenReturn(1);
+        when(cycleMapper.selectCurrentForUpdateByCardId(1L)).thenReturn(cycle(0, 4, failures));
+        service.recordChatImportErrors(1L, List.of(100L), 2L, "MEDIUM", LocalDateTime.now());
+        verify(cycleMapper).insertCycle(argThat(c -> c.getCycleNo() == cycleNo
+                && c.getFailedReviewCount() == failures && c.getTargetSuccessCount() == 4));
+        verify(cardMapper).updateSchedule(eq(1L), eq("ACTIVE"), any(), eq(0), eq(1), eq(1), any(), any(), eq(null), any());
+        verify(attemptMapper).insertAttempt(argThat(event -> event.getUserAnswerId() == null));
+    }
+
     private ReviewCardMapper cardMapper;
     private ReviewCycleMapper cycleMapper;
     private ReviewCycleQuestionMapper cycleQuestionMapper;

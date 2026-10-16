@@ -1,6 +1,9 @@
 package com.sazare.config;
 
 import com.sazare.service.ai.AiQuestionClient;
+import com.sazare.service.ai.AiChatImportClient;
+import com.sazare.service.ai.client.GoogleAiChatImportClient;
+import com.sazare.service.ai.client.MockAiChatImportClient;
 import com.sazare.service.ai.AiSpeechTranscriptionClient;
 import com.sazare.service.ai.client.GoogleAiSpeechTranscriptionClient;
 import com.sazare.service.ai.client.MockAiSpeechTranscriptionClient;
@@ -36,6 +39,15 @@ import java.util.function.Supplier;
 @Configuration
 @EnableConfigurationProperties(AiProperties.class)
 public class AiClientConfig {
+
+    @Bean
+    public AiChatImportClient aiChatImportClient(
+            AiProperties properties, ObjectMapper mapper, AiProviderHttpClient http) {
+        return createClient(properties,
+                () -> new MockAiChatImportClient(mapper),
+                () -> new GoogleAiChatImportClient(
+                        properties.getProviders().getGoogle(), mapper, http));
+    }
 
     @Bean
     public AiProviderHttpClient aiProviderHttpClient(AiProperties aiProperties) {

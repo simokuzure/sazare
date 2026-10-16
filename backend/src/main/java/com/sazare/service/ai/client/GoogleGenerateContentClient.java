@@ -90,6 +90,44 @@ public final class GoogleGenerateContentClient {
         }
     }
 
+    /** 聊天导入必须只发送一次请求，不执行重试或模型回退。 */
+    public String generateOnce(AiQuestionPrompt prompt, Map<String, Object> config, String operationName) {
+        validateProperties();
+        String model = properties.getModel().trim().replaceFirst("^models/", "");
+        AiProviderHttpResponse response = httpClient.postJson(buildUri(model), Map.of(
+                "Content-Type", JSON_CONTENT_TYPE, "x-goog-api-key", properties.getApiKey().trim()),
+                buildRequestBody(prompt, config, operationName));
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "聊天分析服务请求失败，请稍后重新分析");
+        }
+        try {
+            JsonNode candidates = objectMapper.readTree(response.body()).get("candidates");
+            if (candidates == null || !candidates.isArray() || candidates.size() != 1) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "聊天分析响应缺少唯一候选结果");
+            }
+            JsonNode candidate = candidates.get(0);
+            JsonNode finishReason = candidate.get("finishReason");
+            if (finishReason == null || !"STOP".equals(finishReason.asString())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "聊天分析未完整完成，请重新分析");
+            }
+            JsonNode parts = child(child(candidate, "content"), "parts");
+            StringBuilder output = new StringBuilder();
+            if (parts != null && parts.isArray()) {
+                for (JsonNode part : parts) {
+                    JsonNode thought = part.get("thought");
+                    JsonNode text = part.get("text");
+                    if ((thought == null || !thought.asBoolean()) && text != null && text.isTextual()) {
+                        output.append(text.asString());
+                    }
+                }
+            }
+            if (output.isEmpty()) throw new BusinessException(ErrorCode.BUSINESS_ERROR, "聊天分析响应缺少文本内容");
+            return output.toString();
+        } catch (JacksonException exception) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "聊天分析响应格式错误");
+        }
+    }
+
     private AiProviderHttpResponse postWithRetryAndQuotaFallback(String requestBody) {
         String model = properties.getModel().trim();
         if (model.startsWith("models/")) {

@@ -1,6 +1,8 @@
 package com.sazare.exception;
 
 import com.sazare.common.ApiResponse;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.context.MessageSourceResolvable;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +16,15 @@ import org.springframework.web.util.DisconnectedClientHelper;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ApiResponse<Void> handleMethodValidation(
+            HandlerMethodValidationException exception) {
+        String message = exception.getAllErrors().stream().findFirst()
+                .map(MessageSourceResolvable::getDefaultMessage)
+                .orElse("请求参数不合法");
+        return ApiResponse.error(ErrorCode.PARAM_ERROR.getCode(), message);
+    }
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
