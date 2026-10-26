@@ -33,13 +33,15 @@ import type {
 } from '../types/review'
 import type { UserErrorType } from '../types/userError'
 import { useLanguage } from '../i18n/LanguageContext'
+import ChatImportWorkbench from '../components/chat-import/ChatImportWorkbench'
+import type { LeaveGuardListener } from '../types/chatImport'
 
 const INITIAL_FILTERS: ReviewCardFilterState = { mode: 'DUE', page: 1, size: 20 }
 const EMPTY_PAGE: PageData<ReviewCard> = { items: [], page: 1, size: 20, total: 0 }
 
-type WorkbenchView = 'LIST' | 'CARD_DETAIL' | 'REVIEW' | 'RESULT'
+type WorkbenchView = 'LIST' | 'CARD_DETAIL' | 'REVIEW' | 'RESULT' | 'IMPORT'
 
-export default function ReviewPage() {
+export default function ReviewPage({ onLeaveGuardChange }: { onLeaveGuardChange: LeaveGuardListener }) {
   const { learningMode, text } = useLanguage()
   const [filters, setFilters] = useState<ReviewCardFilterState>({ ...INITIAL_FILTERS, learningMode })
   const [cards, setCards] = useState<PageData<ReviewCard>>(EMPTY_PAGE)
@@ -368,6 +370,11 @@ export default function ReviewPage() {
     }
   }
 
+  if (view === 'IMPORT') {
+    return <ChatImportWorkbench onLeaveGuardChange={onLeaveGuardChange} onBack={returnToList}
+      onViewCard={viewCard} onSaved={() => setListReloadToken(value => value + 1)} />
+  }
+
   if (view === 'CARD_DETAIL') {
     return <ReviewCardOverview
       detail={detail}
@@ -442,13 +449,13 @@ export default function ReviewPage() {
     <PageHeader
       title={text('复习卡片', 'Review cards')}
       description={text('按复习重点聚合的间隔复习计划，跟踪周期进度、待重试与下次到期时间。', 'Review cards organized by learning focus, with progress, retries, and due dates.')}
-      actions={<div className="segmented-control review-list-modes" aria-label={text('复习卡片视图', 'Review card view')}>
+      actions={<><button type="button" onClick={() => setView('IMPORT')}>{text('导入聊天记录', 'Import chat history')}</button><div className="segmented-control review-list-modes" aria-label={text('复习卡片视图', 'Review card view')}>
           {(['DUE', 'ACTIVE', 'MASTERED'] as const).map((mode) => (
             <button key={mode} type="button" className={filters.mode === mode ? 'is-selected' : ''} onClick={() => changeMode(mode)}>
               {text(listModeLabel(mode), mode === 'DUE' ? 'Due' : mode === 'ACTIVE' ? 'Active' : 'Mastered')}
             </button>
           ))}
-        </div>}
+        </div></>}
     />
     <section className="surface review-surface review-workbench target-list-panel" aria-busy={listLoading}>
 

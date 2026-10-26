@@ -25,7 +25,7 @@ dictionary-cache:
 
 ai:
   provider: ${AI_PROVIDER:google}
-  request-timeout: ${AI_REQUEST_TIMEOUT:180s}
+  request-timeout: ${AI_REQUEST_TIMEOUT:300s}
   providers:
     google:
       model: ${GOOGLE_AI_MODEL:gemini-3.8-flash}

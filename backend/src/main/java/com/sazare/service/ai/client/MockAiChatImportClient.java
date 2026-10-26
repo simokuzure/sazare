@@ -2,9 +2,10 @@ package com.sazare.service.ai.client;
 
 import com.sazare.service.ai.AiChatImportClient;
 import com.sazare.service.ai.AiQuestionPrompt;
+import com.sazare.dto.AiChatImportAnalysisDTO;
 import tools.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
-import java.util.Map;
+import java.util.List;
 
 /** Mock 仅验证完整消息覆盖和接口流程，不模拟真实错误识别。 */
 public class MockAiChatImportClient implements AiChatImportClient {
@@ -14,10 +15,12 @@ public class MockAiChatImportClient implements AiChatImportClient {
 
     @Override
     public String analyze(AiQuestionPrompt prompt) {
-        var ids = new ArrayList<Integer>();
+        var checks = new ArrayList<AiChatImportAnalysisDTO.MessageCheck>();
         for (var message : mapper.readTree(prompt.userPrompt()).get("messages")) {
-            if ("user".equals(message.get("role").asString())) ids.add(message.get("id").asInt());
+            if ("user".equals(message.get("role").asString())) {
+                checks.add(new AiChatImportAnalysisDTO.MessageCheck(message.get("id").asInt(), List.of()));
+            }
         }
-        return mapper.writeValueAsString(Map.of("checkedUserMessageIds", ids, "candidates", java.util.List.of()));
+        return mapper.writeValueAsString(new AiChatImportAnalysisDTO(checks, List.of()));
     }
 }

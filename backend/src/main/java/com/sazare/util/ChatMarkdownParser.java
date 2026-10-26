@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
 public class ChatMarkdownParser {
     public static final int MAX_FILE_BYTES = 128 * 1024;
     public static final int MAX_BODY_CHARACTERS = 30_000;
-    private static final Pattern ROLE = Pattern.compile("^##[ \\t]+(User|Assistant)[ \\t]*$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ROLE = Pattern.compile("^ {0,3}##[ \\t]+(User|Assistant)[ \\t]*$", Pattern.CASE_INSENSITIVE);
     private static final Pattern FENCE = Pattern.compile("^ {0,3}(`{3,}|~{3,})(.*)$");
 
     public List<ChatMessageDTO> parse(byte[] bytes) {
@@ -35,7 +35,6 @@ public class ChatMarkdownParser {
         List<String> lines = new ArrayList<>();
         String role = null;
         String fence = null;
-        boolean titleSeen = false;
         for (String line : markdown.split("\n", -1)) {
             var roleMatch = ROLE.matcher(line);
             if (fence == null && roleMatch.matches()) {
@@ -43,14 +42,6 @@ public class ChatMarkdownParser {
                 lines.clear();
                 role = roleMatch.group(1).toLowerCase(Locale.ROOT);
                 continue;
-            }
-            if (role == null) {
-                if (line.isBlank()) continue;
-                if (!titleSeen && line.startsWith("# ") && !line.substring(2).isBlank()) {
-                    titleSeen = true;
-                    continue;
-                }
-                throw invalid("聊天内容必须使用 ## User 和 ## Assistant 标题分隔");
             }
             var fenceMatch = FENCE.matcher(line);
             if (fenceMatch.matches()) {
@@ -62,10 +53,11 @@ public class ChatMarkdownParser {
                     fence = null;
                 }
             }
-            lines.add(line);
+            if (role != null) lines.add(line);
         }
         if (fence != null) throw invalid("Markdown 代码围栏未闭合");
-        if (role != null) addMessage(messages, role, lines);
+        if (role == null) throw invalid("未找到聊天角色标题，请使用 ## User 或 ## Assistant 标题分隔消息");
+        addMessage(messages, role, lines);
         if (messages.stream().noneMatch(message -> "user".equals(message.role()))) {
             throw invalid("聊天记录必须包含用户消息");
         }

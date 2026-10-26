@@ -4,9 +4,17 @@ dist/
 .idea/
 .vscode/
 .agents/
+AGENTS.md
+.codex-tmp/
 *.iml
 *.log
 .DS_Store
+
+# Local environment configuration
+.env
+.env.*
+!.env.example
+!.env.*.example
 
 backend.zip
 

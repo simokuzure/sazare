@@ -8,7 +8,7 @@ import java.time.Duration;
 public class AiProperties {
 
     private String provider = "google";
-    private Duration requestTimeout = Duration.ofSeconds(180);
+    private Duration requestTimeout = Duration.ofSeconds(300);
     private Providers providers = new Providers();
 
     public String getProvider() {

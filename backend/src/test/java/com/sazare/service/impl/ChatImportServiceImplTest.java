@@ -1,17 +1,23 @@
 package com.sazare.service.impl;
 
 import com.sazare.dto.ChatImportConfirmationRequest;
+import com.sazare.dto.AiErrorTypeOptionDTO;
+import com.sazare.dto.AiChatImportAnalysisDTO;
 import com.sazare.entity.*;
 import com.sazare.mapper.*;
 import com.sazare.service.DictionaryCacheService;
 import com.sazare.service.ReviewService;
 import com.sazare.service.ai.AiChatImportClient;
+import com.sazare.service.ai.AiQuestionPrompt;
 import com.sazare.service.ai.prompt.AiChatImportPromptBuilder;
 import com.sazare.service.ai.validation.ChatImportAiResponseValidator;
 import com.sazare.util.ChatMarkdownParser;
+import com.sazare.vo.ChatImportAnalysisVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import tools.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -47,6 +53,49 @@ class ChatImportServiceImplTest {
             Question question = invocation.getArgument(0); question.setId(5L); return 1;
         });
         when(reviews.recordChatImportErrors(eq(1L), anyList(), eq(2L), anyString(), any())).thenReturn(card);
+    }
+
+    @Test
+    void analysisSendsAllMessagesOnceAndDoesNotWriteBusinessData() {
+        when(dictionary.getEnabledLeafErrorTypes()).thenReturn(List.of(
+                new AiErrorTypeOptionDTO(3L, "PARTICLE", "助词", "助词说明", "GRAMMAR", "语法")));
+        var expected = new ChatImportAnalysisVO(List.of(1, 3), List.of());
+        when(ai.analyze(any())).thenReturn(mapper.writeValueAsString(new AiChatImportAnalysisDTO(List.of(
+                new AiChatImportAnalysisDTO.MessageCheck(1, List.of()),
+                new AiChatImportAnalysisDTO.MessageCheck(3, List.of())), List.of())));
+        byte[] markdown = "## User\n日本に来た前に、何を勉強しましたか。\n## Assistant\n日本語だよ。\n## User\nありがとう。"
+                .getBytes(StandardCharsets.UTF_8);
+
+        assertThat(service.analyze(markdown, "ZH_TO_JA")).isEqualTo(expected);
+
+        var prompt = ArgumentCaptor.forClass(AiQuestionPrompt.class);
+        verify(ai, times(1)).analyze(prompt.capture());
+        var input = mapper.readTree(prompt.getValue().userPrompt());
+        assertThat(input.get("learningMode").asString()).isEqualTo("ZH_TO_JA");
+        var messages = input.get("messages");
+        assertThat(messages.size()).isEqualTo(3);
+        assertThat(messages.get(0).get("content").asString()).isEqualTo("日本に来た前に、何を勉強しましたか。");
+        assertThat(messages.get(1).get("role").asString()).isEqualTo("assistant");
+        assertThat(messages.get(1).get("content").asString()).isEqualTo("日本語だよ。");
+        assertThat(messages.get(2).get("id").asInt()).isEqualTo(3);
+        assertThat(messages.get(2).get("content").asString()).isEqualTo("ありがとう。");
+        verifyNoInteractions(questions, answers, types, cards, reviews, errors);
+    }
+
+    @Test
+    void incompleteAnalysisFailsWithoutRetryOrBusinessWrites() {
+        when(dictionary.getEnabledLeafErrorTypes()).thenReturn(List.of(
+                new AiErrorTypeOptionDTO(3L, "PARTICLE", "助词", "助词说明", "GRAMMAR", "语法")));
+        when(ai.analyze(any())).thenReturn(mapper.writeValueAsString(new AiChatImportAnalysisDTO(
+                List.of(new AiChatImportAnalysisDTO.MessageCheck(1, List.of())), List.of())));
+        byte[] markdown = "## User\nこんにちは。\n## Assistant\nこんにちは。\n## User\nまたね。"
+                .getBytes(StandardCharsets.UTF_8);
+
+        assertThatThrownBy(() -> service.analyze(markdown, "ZH_TO_JA"))
+                .hasMessageContaining("不完整或不合法", "消息检查记录数量不符，应为 2 条，实际为 1 条");
+
+        verify(ai, times(1)).analyze(any());
+        verifyNoInteractions(questions, answers, types, cards, reviews, errors);
     }
 
     @Test

@@ -20,6 +20,8 @@ import com.sazare.util.ChatMarkdownParser;
 import com.sazare.util.ChatReviewTextValidator;
 import com.sazare.vo.ChatImportAnalysisVO;
 import com.sazare.vo.ChatImportConfirmationVO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +31,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class ChatImportServiceImpl implements ChatImportService {
+    private static final Logger log = LoggerFactory.getLogger(ChatImportServiceImpl.class);
     private static final Set<String> UNSUPPORTED_CODES = Set.of(
             "OMISSION", "MISTRANSLATION", "ADDITION", "FALSE_FRIEND", "CHINESE_CALQUE");
     private final ChatMarkdownParser parser;
@@ -70,8 +73,12 @@ public class ChatImportServiceImpl implements ChatImportService {
         var options = dictionary.getEnabledLeafErrorTypes().stream()
                 .filter(type -> !UNSUPPORTED_CODES.contains(type.code())).toList();
         if (options.isEmpty()) throw invalid("没有适用于聊天纠错的分类");
+        log.info("聊天分析开始: promptVersion={}, userMessageCount={}", AiChatImportPromptBuilder.VERSION,
+                messages.stream().filter(message -> "user".equals(message.role())).count());
         String json = client.analyze(promptBuilder.build(messages, options, mode));
-        return validator.validate(json, messages, options.stream().map(type -> type.id()).collect(Collectors.toSet()), mode);
+        var result = validator.validate(json, messages, options.stream().map(type -> type.id()).collect(Collectors.toSet()), mode);
+        log.info("聊天分析完成: promptVersion={}, candidateCount={}", AiChatImportPromptBuilder.VERSION, result.candidates().size());
+        return result;
     }
 
     @Override

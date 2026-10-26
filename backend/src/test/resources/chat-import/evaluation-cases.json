@@ -1,0 +1,66 @@
+[
+  {
+    "id": "japanese-question",
+    "learningMode": "ZH_TO_JA",
+    "markdown": "## User\n日本に来た前に、何を勉強しましたか。\n## Assistant\n日本語を勉強したよ。",
+    "requiredFocuses": ["用户消息 #1：来た前に → 来る前に；疑问句仍需检查"],
+    "optionalFocuses": [],
+    "mustNotFlag": ["不能仅因使用礼貌体或向对方提问而判错"]
+  },
+  {
+    "id": "independent-errors",
+    "learningMode": "ZH_TO_JA",
+    "markdown": "## User\n昨日、図書館に日本語を勉強するました。",
+    "requiredFocuses": ["用户消息 #1：図書館に → 図書館で；动作发生场所", "用户消息 #1：勉強するました → 勉強しました；活用错误，不能与场所助词合并成一个泛泛重点"],
+    "optionalFocuses": [],
+    "mustNotFlag": ["昨日的时间设定"]
+  },
+  {
+    "id": "repeated-focus",
+    "learningMode": "ZH_TO_JA",
+    "markdown": "## User\n日本に来た前に、日本語を勉強しました。\n## Assistant\nそうなんだ。毎日の習慣も教えて。\n## User\n毎日、ご飯を食べた前に手を洗います。",
+    "requiredFocuses": ["前に接续辞书形，合并成一个具体学习重点，同时保留用户消息 #1 和 #3 的引用"],
+    "optionalFocuses": [],
+    "mustNotFlag": ["把同一接续问题拆成两张同义候选", "将两次引用只保留一次"]
+  },
+  {
+    "id": "assistant-misdiagnosis",
+    "learningMode": "ZH_TO_JA",
+    "markdown": "## User\n疲れて寝込んでしまって、そのチャンスを逃した。\n## Assistant\n「寝込む」は病気で寝ている意味だけなので、ここでは誤りです。「眠り込む」に直してください。",
+    "requiredFocuses": [],
+    "optionalFocuses": [],
+    "mustNotFlag": ["寝込む也有熟睡的意思，本句可以成立；不能照搬助手的词义误判", "不能因缺少主语或使用普通体而判错；此例预期空候选"]
+  },
+  {
+    "id": "valid-colloquial",
+    "learningMode": "EN_TO_JA",
+    "markdown": "## User\n今日は疲れてるから、もう帰っちゃうね。\n## Assistant\nうん、また明日。\n## User\nじゃ、またね！",
+    "requiredFocuses": [],
+    "optionalFocuses": [],
+    "mustNotFlag": ["疲れてる、帰っちゃう、じゃ是当前朋友对话中正常的口语形式；此例预期空候选"]
+  },
+  {
+    "id": "quoted-example-and-own-error",
+    "learningMode": "ZH_TO_JA",
+    "markdown": "## User\n「日本に来た前に」という例文の間違いは何ですか。私は毎日、図書館に日本語を勉強しています。",
+    "requiredFocuses": ["用户消息 #1 自己使用的図書館に → 図書館で"],
+    "optionalFocuses": [],
+    "mustNotFlag": ["引用并询问的例文「日本に来た前に」不能直接作为用户自己用错的引用", "不能因为消息含引用或疑问句而跳过用户自己的后半句"]
+  },
+  {
+    "id": "castle-naturalness",
+    "learningMode": "ZH_TO_JA",
+    "markdown": "## User\n日本語には敬語という話し方があるよね。小説の中に村人や役人たちが話してる時に、敬意の一欠片も感じてない敬語を使って、Ｋの意見を否定したり、自分の意見を主張したりするのは、本当にインパクトがある。\n## Assistant\n言葉遣いと態度の差が印象的だね。\n## User\nＫとフリーダの感情は本当ですか。それとも、ある意味では二人の打算を込めている変わったものですか。\n## Assistant\n好意と打算が混ざっているのかもしれないね。\n## User\nもし彼女たちがそのことをなかったことにして平気に振る舞うなら、村人たちも喜んで彼女たちを受け入れるんだろう。",
+    "requiredFocuses": ["用户消息 #1：小説の中に → 小説の中で；描述故事中发生的言语行为", "用户消息 #3：打算を込めている的当前搭配问题，例如打算が含まれている"],
+    "optionalFocuses": ["用户消息 #3：感情は本当ですか，可考虑気持ちは本物ですか等搭配，并解释当前语境的问题", "用户消息 #5：平気に振る舞う，可考虑何事もなかったように振る舞う等表达；须说明理由，不能泛称形容动词一律不能接に", "用户消息 #1：敬意の一欠片も感じてない敬語的修饰关系，须说明具体问题"],
+    "mustNotFlag": ["话してる等正常口语缩约", "读者对小说的观点或角色评价", "以修改时态、主体或观点来制造纠错"]
+  },
+  {
+    "id": "contextual-spelling",
+    "learningMode": "EN_TO_JA",
+    "markdown": "## Assistant\nここでは登場人物の二人を「フリーダ」と「オルガ」と表記するね。\n## User\nその二人の話をしたいです。フーダーとホルガの関係をどう思いますか。",
+    "requiredFocuses": ["用户消息 #2：上下文中的フーダー → フリーダ、ホルガ → オルガ；可合并为同一具体表记重点，但须保留两处引用", "英文学习模式的题面、名称和说明应为英文，答案为日语", "若出题，需给出必要的人名提示，不能只考小说人物知识"],
+    "optionalFocuses": [],
+    "mustNotFlag": ["不能凭外部版本的译名臆造人物或表记错误"]
+  }
+]

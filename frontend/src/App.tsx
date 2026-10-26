@@ -1,4 +1,5 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useCallback, useRef, useState } from 'react'
+import type { LeaveGuard } from './types/chatImport'
 import PracticePage from './pages/PracticePage'
 import type { Question } from './types/question'
 import AppErrorBoundary from './components/AppErrorBoundary'
@@ -15,6 +16,8 @@ type PageKey = 'practice' | 'answerRecords' | 'statistics' | 'questions' | 'revi
 function App() {
   const { english, learningMode, setLearningMode, t } = useLanguage()
   const [activePage, setActivePage] = useState<PageKey>('practice')
+  const reviewLeaveGuard = useRef<LeaveGuard | null>(null)
+  const handleReviewGuardChange = useCallback((guard: LeaveGuard | null) => { reviewLeaveGuard.current = guard }, [])
   const [questionDetailTarget, setQuestionDetailTarget] = useState<number | null>(null)
   const [practiceTarget, setPracticeTarget] = useState<{ question: Question; revision: number } | null>(null)
   const navItems: { key: PageKey; label: string }[] = [
@@ -26,16 +29,19 @@ function App() {
   ]
 
   function handleNavigate(page: PageKey) {
+    if (page !== activePage && activePage === 'reviews' && reviewLeaveGuard.current && !reviewLeaveGuard.current()) return
     setQuestionDetailTarget(null)
     setActivePage(page)
   }
 
   function handleOpenQuestion(questionId: number) {
+    if (activePage === 'reviews' && reviewLeaveGuard.current && !reviewLeaveGuard.current()) return
     setQuestionDetailTarget(questionId)
     setActivePage('questions')
   }
 
   function handlePracticeQuestion(question: Question) {
+    if (activePage === 'reviews' && reviewLeaveGuard.current && !reviewLeaveGuard.current()) return
     setPracticeTarget((current) => ({ question, revision: (current?.revision ?? 0) + 1 }))
     setQuestionDetailTarget(null)
     setActivePage('practice')
@@ -68,7 +74,11 @@ function App() {
               <select
                 value={learningMode}
                 aria-label={t('learningMode')}
-                onChange={(event) => setLearningMode(event.target.value === 'EN_TO_JA' ? 'EN_TO_JA' : 'ZH_TO_JA')}
+                onChange={(event) => {
+                  const mode = event.target.value === 'EN_TO_JA' ? 'EN_TO_JA' : 'ZH_TO_JA'
+                  if (mode !== learningMode && activePage === 'reviews' && reviewLeaveGuard.current && !reviewLeaveGuard.current()) return
+                  setLearningMode(mode)
+                }}
               >
                 <option value="ZH_TO_JA">中 → 日</option>
                 <option value="EN_TO_JA">EN → JP</option>
@@ -104,7 +114,7 @@ function App() {
             {activePage === 'answerRecords' ? <AnswerRecordsPage key={learningMode} onOpenQuestion={handleOpenQuestion} /> : null}
             {activePage === 'statistics' ? <LearningStatisticsPage key={learningMode} /> : null}
             {activePage === 'questions' ? <QuestionManagementPage key={learningMode} initialQuestionId={questionDetailTarget} onPracticeQuestion={handlePracticeQuestion} /> : null}
-            {activePage === 'reviews' ? <ReviewPage key={learningMode} /> : null}
+            {activePage === 'reviews' ? <ReviewPage key={learningMode} onLeaveGuardChange={handleReviewGuardChange} /> : null}
           </Suspense>
         </AppErrorBoundary>
       </main>
