@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchTags as queryTags } from '../api/tagApi'
+import { getErrorMessage } from '../api/client'
 import PageHeader from '../components/PageHeader'
 import type { Tag, TagFilter } from '../types/tag'
 import { useLanguage } from '../i18n/LanguageContext'
@@ -36,7 +37,7 @@ export default function TagManagementPage() {
         }
         setTags([])
         setTotal(0)
-        setTagError(fetchError instanceof Error ? fetchError.message : text('请求失败', 'Request failed'))
+        setTagError(getErrorMessage(fetchError))
       } finally {
         setTagLoading(false)
       }

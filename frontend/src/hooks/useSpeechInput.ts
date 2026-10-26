@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { transcribeSpeech } from '../api/speechApi'
 import { useLanguage } from '../i18n/LanguageContext'
+import { getErrorMessage } from '../api/client'
 
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024
 const MAX_SECONDS = 60
@@ -40,7 +41,7 @@ function releaseRecording(recording: Recording) {
 }
 
 export function useSpeechInput(options: Options) {
-  const { text, english } = useLanguage()
+  const { text } = useLanguage()
   const [phase, setPhase] = useState<Phase>('idle')
   const [seconds, setSeconds] = useState(0)
   const [message, setMessage] = useState('')
@@ -167,9 +168,7 @@ export function useSpeechInput(options: Options) {
           setPhase('idle')
           append(transcript)
         } catch (error) {
-          fail(recording, english
-            ? 'Transcription failed or no speech was recognized. Check your connection and record again.'
-            : error instanceof Error ? error.message : '转写失败，请重新录音。')
+          fail(recording, error instanceof Error ? getErrorMessage(error) : text('转写失败，请重新录音。', 'Transcription failed. Please record again.'))
         }
       }
       recorder.start(250)

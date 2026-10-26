@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { analyzeChatImport, ChatImportRequestError, confirmChatImport } from '../../api/chatImportApi'
+import { getErrorMessage } from '../../api/client'
 import { useLanguage } from '../../i18n/LanguageContext'
 import type { PracticeNotice } from '../../types/api'
 import type { ChatImportCardResult, ChatImportDraft, LeaveGuardListener } from '../../types/chatImport'
@@ -8,11 +9,11 @@ import type { ReviewCard } from '../../types/review'
 import { createImportDraft, MAX_CHAT_FILE_BYTES, toImportItem, validateImportDraft, type DraftErrors } from './chatImportModel'
 import { loadImportCards, loadImportTypes } from './chatImportMetadata'
 
-function message(error: unknown) { return error instanceof Error ? error.message : '请求失败，请稍后重试。' }
 function aborted(error: unknown) { return error instanceof DOMException && error.name === 'AbortError' }
 
 export function useChatImport(onLeaveGuardChange: LeaveGuardListener, onSaved: () => void) {
   const { learningMode, text } = useLanguage()
+  const message = useCallback((error: unknown) => getErrorMessage(error, learningMode), [learningMode])
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState('')
   const [reading, setReading] = useState(false)
@@ -77,7 +78,7 @@ export function useChatImport(onLeaveGuardChange: LeaveGuardListener, onSaved: (
     }).catch(error => { if (!aborted(error)) setTypesError(message(error)) })
       .finally(() => { if (!controller.signal.aborted) setTypesLoading(false) })
     return () => controller.abort()
-  }, [typesRevision])
+  }, [typesRevision, message])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -88,7 +89,7 @@ export function useChatImport(onLeaveGuardChange: LeaveGuardListener, onSaved: (
     }).catch(error => { if (!aborted(error)) setCardsError(message(error)) })
       .finally(() => { if (!controller.signal.aborted) setCardsLoading(false) })
     return () => controller.abort()
-  }, [learningMode, cardsRevision])
+  }, [learningMode, cardsRevision, message])
 
   async function selectFiles(files: File[]) {
     if (confirmingRef.current) return

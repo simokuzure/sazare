@@ -13,23 +13,24 @@ export function createImportDraft(candidate: ChatImportCandidate, key: number): 
 
 export function validateImportDraft(draft: ChatImportDraft, mode: string, types: ErrorType[], cards: ReviewCard[]): DraftErrors {
   const errors: DraftErrors = {}
+  const text = (chinese: string, english: string) => mode === 'EN_TO_JA' ? english : chinese
   if (draft.mode === 'NEW_USER_ERROR_TYPE') {
-    if (!types.some(type => type.id === draft.errorTypeId)) errors.errorTypeId = '请选择可用的错误分类。'
-    if (!draft.name.trim() || draft.name.length > 128) errors.name = '请填写名称（最多 128 字符）。'
-    if (!draft.description.trim() || draft.description.length > 255) errors.description = '请填写说明（最多 255 字符）。'
+    if (!types.some(type => type.id === draft.errorTypeId)) errors.errorTypeId = text('请选择可用的错误分类。', 'Select an available error category.')
+    if (!draft.name.trim() || draft.name.length > 128) errors.name = text('请填写名称（最多 128 字符）。', 'Enter a name (up to 128 characters).')
+    if (!draft.description.trim() || draft.description.length > 255) errors.description = text('请填写说明（最多 255 字符）。', 'Enter a description (up to 255 characters).')
   } else if (!cards.some(card => card.userErrorTypeId === Number(draft.userErrorTypeId)
     && types.some(type => type.id === card.errorTypeId))) {
-    errors.userErrorTypeId = '请选择可用的已有复习卡片。'
+    errors.userErrorTypeId = text('请选择可用的已有复习卡片。', 'Select an available existing review card.')
   }
   const source = draft.reviewSourceText.trim()
-  if (!source || source.length > 1000) errors.reviewSourceText = '请填写题面（最多 1000 字符）。'
+  if (!source || source.length > 1000) errors.reviewSourceText = text('请填写题面（最多 1000 字符）。', 'Enter a review prompt (up to 1000 characters).')
   else if (/[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(source)
     || (mode === 'ZH_TO_JA' ? !/\p{Script=Han}/u.test(source) : /\p{Script=Han}/u.test(source) || !/[A-Za-z]/.test(source))) {
-    errors.reviewSourceText = mode === 'ZH_TO_JA' ? '请使用中文，不含日语假名。' : '请使用英文，不含中文或日语假名。'
+    errors.reviewSourceText = text('请使用中文，不含日语假名。', 'Use English without Chinese characters or Japanese kana.')
   }
   const answer = draft.referenceAnswer.trim()
-  if (!answer || answer.length > 2000) errors.referenceAnswer = '请填写日语答案（最多 2000 字符）。'
-  else if (!/[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(answer)) errors.referenceAnswer = '参考答案需要包含日语假名。'
+  if (!answer || answer.length > 2000) errors.referenceAnswer = text('请填写日语答案（最多 2000 字符）。', 'Enter a Japanese answer (up to 2000 characters).')
+  else if (!/[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(answer)) errors.referenceAnswer = text('参考答案需要包含日语假名。', 'The reference answer must contain Japanese kana.')
   return errors
 }
 

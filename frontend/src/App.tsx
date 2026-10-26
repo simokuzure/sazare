@@ -80,7 +80,7 @@ function App() {
                   setLearningMode(mode)
                 }}
               >
-                <option value="ZH_TO_JA">中 → 日</option>
+                <option value="ZH_TO_JA">{english ? 'ZH → JP' : '中 → 日'}</option>
                 <option value="EN_TO_JA">EN → JP</option>
               </select>
               <svg viewBox="0 0 16 16" aria-hidden="true">

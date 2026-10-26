@@ -120,14 +120,14 @@ export default function ChatImportWorkbench({ onLeaveGuardChange, onBack, onView
           <div className="import-filters">
             <label><span className="sr-only">{text('搜索候选', 'Search candidates')}</span><input type="search" placeholder={text('搜索候选…', 'Search candidates…')} value={search} onChange={event => setSearch(event.target.value)} /></label>
             <div className="import-filter-row"><label><span className="sr-only">{text('分类', 'Category')}</span><select value={category} onChange={event => setCategory(event.target.value)}>
-              <option value="">{text('全部分类', 'All categories')}</option>{state.types.map(type => <option key={type.id} value={type.id}>{english ? type.nameEn || type.name : type.name}</option>)}</select></label>
+              <option value="">{text('全部分类', 'All categories')}</option>{state.types.map(type => <option key={type.id} value={type.id}>{english ? type.nameEn || type.code : type.name}</option>)}</select></label>
               <label><span className="sr-only">{text('状态', 'Status')}</span><select value={status} onChange={event => setStatus(event.target.value)}><option value="PENDING">{text('待处理', 'Pending')}</option><option value="SAVED">{text('已保存', 'Saved')}</option><option value="ALL">{text('全部', 'All')}</option></select></label></div>
             <button type="button" disabled={busy || !actionable.length} onClick={() => actionable.forEach(draft => state.updateDraft(draft.key, { selected: !allSelected }))}>
               {allSelected ? text('取消选择筛选结果', 'Deselect filtered items') : text('选择筛选结果', 'Select filtered items')}</button>
           </div>
           <ul>{visible.map(draft => <li key={draft.key} className={`${draft.key === state.activeKey ? 'is-active' : ''}${draft.selected && !draft.saved ? ' is-selected' : ''}`}>
             <button type="button" aria-current={draft.key === state.activeKey ? 'true' : undefined} onClick={() => state.setActiveKey(draft.key)}>
-              <strong>{draft.name || text('未命名复习重点', 'Untitled focus')}</strong><span className="import-candidate-meta"><span>{(() => { const type = state.types.find(t => t.id === draft.errorTypeId); return type ? english ? type.nameEn || type.name : type.name : `#${draft.errorTypeId}` })()}</span>
+              <strong>{draft.name || text('未命名复习重点', 'Untitled focus')}</strong><span className="import-candidate-meta"><span>{(() => { const type = state.types.find(t => t.id === draft.errorTypeId); return type ? english ? type.nameEn || type.code : type.name : `#${draft.errorTypeId}` })()}</span>
                 <small>{text(`${draft.severity === 'LOW' ? '低' : draft.severity === 'HIGH' ? '高' : '中'} · ${draft.evidence.length} 处引用 · ${draft.saved ? '已保存' : draft.selected ? '已选择' : '待确认'}`,
                   `${draft.severity} · ${draft.evidence.length} excerpts · ${draft.saved ? 'Saved' : draft.selected ? 'Selected' : 'Pending'}`)}</small></span>
             </button></li>)}</ul>

@@ -1,5 +1,6 @@
 import type { ApiResponse } from '../types/api'
-import { LEARNING_MODE_STORAGE_KEY } from '../i18n/translationDirections'
+import { LEARNING_MODE_STORAGE_KEY, type LearningMode } from '../i18n/translationDirections'
+import { englishErrorMessage, REQUEST_FAILED_EN } from '../i18n/errorMessages'
 
 export async function readApiResponse<T>(response: Response): Promise<ApiResponse<T>> {
   let result: ApiResponse<T> | null = null
@@ -17,11 +18,11 @@ export async function readApiResponse<T>(response: Response): Promise<ApiRespons
   return result
 }
 
-export function getErrorMessage(error: unknown) {
-  if (window.localStorage.getItem(LEARNING_MODE_STORAGE_KEY) === 'EN_TO_JA') {
+export function getErrorMessage(error: unknown, mode?: LearningMode) {
+  if ((mode ?? window.localStorage.getItem(LEARNING_MODE_STORAGE_KEY)) !== 'ZH_TO_JA') {
     if (error instanceof TypeError) return 'Network connection failed.'
     if (error instanceof Error && /^HTTP \d+$/.test(error.message)) return `Request failed (${error.message}).`
-    return 'The request could not be completed. Please try again.'
+    return error instanceof Error && error.message ? englishErrorMessage(error.message) : REQUEST_FAILED_EN
   }
   return error instanceof Error ? error.message : '请求失败'
 }

@@ -35,7 +35,7 @@ export default function ChatImportEditor({ draft, candidateCount, types, cards, 
       </div>
       <div className="import-analysis-body">
         <div className="import-detail-title"><h4 id="import-detail-heading" tabIndex={-1}>{draft.name || text('未命名复习重点', 'Untitled focus')}</h4>
-          <span>{(() => { const type = types.find(item => item.id === draft.errorTypeId); return type ? english ? type.nameEn || type.name : type.name : `#${draft.errorTypeId}` })()}</span>
+          <span>{(() => { const type = types.find(item => item.id === draft.errorTypeId); return type ? english ? type.nameEn || type.code : type.name : `#${draft.errorTypeId}` })()}</span>
           <small>{text(`严重程度：${draft.severity === 'LOW' ? '低' : draft.severity === 'HIGH' ? '高' : '中'}`, `Severity: ${draft.severity}`)}</small></div>
         <section className="import-evidence">
           <h4>{text(`原文引用 · ${draft.evidence.length} 处`, `Source excerpts · ${draft.evidence.length}`)}</h4>
@@ -66,7 +66,7 @@ export default function ChatImportEditor({ draft, candidateCount, types, cards, 
             {draft.mode === 'NEW_USER_ERROR_TYPE' ? <label><span>{text('错误分类', 'Error category')}</span>
               <select {...attrs('errorTypeId')} value={draft.errorTypeId} onChange={event => onUpdate({ errorTypeId: Number(event.target.value) })}>
                 {!types.some(type => type.id === draft.errorTypeId) ? <option value={draft.errorTypeId}>{text('请选择可用分类', 'Choose an available category')}</option> : null}
-                {types.map(type => <option key={type.id} value={type.id}>{english ? type.nameEn || type.name : type.name}</option>)}
+                {types.map(type => <option key={type.id} value={type.id}>{english ? type.nameEn || type.code : type.name}</option>)}
               </select>{error('errorTypeId')}</label> : null}
             <label><span>{text('严重程度', 'Severity')}</span><select value={draft.severity} onChange={event => onUpdate({ severity: event.target.value as ImportSeverity })}>
               <option value="LOW">{text('低', 'Low')}</option><option value="MEDIUM">{text('中', 'Medium')}</option><option value="HIGH">{text('高', 'High')}</option>

@@ -296,11 +296,12 @@ async function main() {
     await upload()
     state.mode = 'analysis-error'
     await page.getByRole('button', { name: 'Analyze conversation', exact: true }).click()
-    await page.getByText('聊天正文不能超过 30000 字符', { exact: true }).waitFor()
+    await page.getByText('The chat body must not exceed 30,000 characters.', { exact: true }).waitFor()
+    assert.doesNotMatch(await page.getByRole('alert').innerText(), /\p{Script=Han}/u)
     state.mode = 'empty'
     await page.getByRole('button', { name: 'Analyze conversation', exact: true }).click()
     await page.getByText('No clear errors found. You can analyze another file.', { exact: true }).waitFor()
-    record('English interface preserves concrete Chinese backend errors and handles no-error analysis')
+    record('English interface translates concrete backend validation and handles no-error analysis')
 
     await upload(file('held.md'))
     state.mode = 'analysis-hold'
@@ -321,6 +322,24 @@ async function main() {
     }), true)
     record('replacing a file ignores aborted stale analysis; unconfirmed candidates guard browser unload')
     await page.setViewportSize({ width: 1366, height: 768 })
+    for (const label of ['Learning focus', 'Focus description', 'Review prompt (English)', 'Japanese reference answer']) {
+      await editor().getByLabel(label, { exact: true }).fill('')
+    }
+    await editor().getByRole('checkbox', { name: 'Select item', exact: true }).check()
+    const confirmationsBeforeValidation = state.confirmations.length
+    await confirm().click()
+    for (const message of ['Enter a name (up to 128 characters).', 'Enter a description (up to 255 characters).',
+      'Enter a review prompt (up to 1000 characters).', 'Enter a Japanese answer (up to 2000 characters).']) {
+      await page.getByText(message, { exact: true }).waitFor()
+    }
+    await editor().getByLabel('Review prompt (English)', { exact: true }).fill('中文')
+    await editor().getByLabel('Japanese reference answer', { exact: true }).fill('English')
+    await confirm().click()
+    await page.getByText('Use English without Chinese characters or Japanese kana.', { exact: true }).waitFor()
+    await page.getByText('The reference answer must contain Japanese kana.', { exact: true }).waitFor()
+    for (const message of await page.locator('.import-field-error').allTextContents()) assert.doesNotMatch(message, /\p{Script=Han}/u)
+    assert.equal(state.confirmations.length, confirmationsBeforeValidation)
+    record('English field validation covers required values, limits and source/answer languages without submitting invalid drafts')
     page.once('dialog', dialog => dialog.accept())
     await upload(file('long.md'))
     state.mode = 'long'
