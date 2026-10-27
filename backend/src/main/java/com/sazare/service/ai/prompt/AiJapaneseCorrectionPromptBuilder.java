@@ -21,7 +21,7 @@ public class AiJapaneseCorrectionPromptBuilder {
             四项评分均为 0 到 100 的整数：grammarVocabularyScore 评语法与词汇准确性，naturalFluencyScore 评自然度与篇章连贯，scenarioAdaptationScore 评语体与风格一致性，informationCompletenessScore 评表记与输入完整性。
             totalScore 是四项平均值，保留两位小数。correctedText 必须在保留原意的前提下给出完整修订文本，避免无必要改写。
             errorAnalysis 只列有明确依据的错误；original 必须从用户原文中连续复制，suggestion 必须是 correctedText 中连续出现的完整日语修订句。
-            reviewSourceText 必须是 suggestion 对应的简体中文含义，供后续中译日复习使用，不能包含日语假名。
+            reviewSourceText 必须是 suggestion 对应的简体中文含义，供后续中译日复习使用，允许包含人名、术语或读音等必要的假名提示。
             errorTypeCode 只能从输入的可选二级错误类型中选择；没有明确错误时返回空数组。
             issue、分项评语、总评、修改建议和推荐表达说明使用简洁中文。
             severity 只能是 LOW、MEDIUM、HIGH；recommendedExpressions.formality 只能是 CASUAL、NEUTRAL、POLITE、BUSINESS。

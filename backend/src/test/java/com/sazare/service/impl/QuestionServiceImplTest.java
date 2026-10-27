@@ -55,6 +55,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -365,23 +366,26 @@ class QuestionServiceImplTest {
     }
 
     @Test
-    void generateArticleByAiShouldReportSentenceIndexAndDetectedKana() {
+    void generateArticleByAiShouldKeepKanaInSourceSentences() {
         Tag genreTag = tag(3L, "GENRE", "NARRATIVE", "叙事文");
         when(tagMapper.selectEnabledTagsByCodes("GENRE", List.of("NARRATIVE")))
                 .thenReturn(List.of(genreTag));
         when(aiQuestionClient.generateArticle(any(), any(), anyString()))
                 .thenAnswer(invocation -> validArticleJson(invocation.getArgument(2))
                         .replace("我们原本计划乘早班电车出发", "我们の原本计划乘早班电车出发"));
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(104L);
+            return 1;
+        });
 
-        assertThatThrownBy(() -> questionService.generateArticleByAi(
+        QuestionVO question = questionService.generateArticleByAi(
                 new AiArticleGenerationRequest("N3", 3, "NARRATIVE", null, null)
-        ))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("第 2 句 chineseText")
-                .hasMessageContaining("检测到：の");
+        );
+        assertThat(question.sourceText()).contains("我们の原本计划乘早班电车出发");
 
         verify(aiQuestionClient, times(1)).generateArticle(any(), any(), anyString());
-        verify(questionMapper, never()).insertQuestion(any());
+        verify(questionMapper).insertQuestion(any());
     }
 
     @Test
@@ -687,11 +691,19 @@ class QuestionServiceImplTest {
         verify(questionMapper).insertQuestion(any());
     }
 
-    @Test
-    void createQuestionShouldRejectJapaneseKanaInChineseSource() {
+    @ParameterizedTest
+    @CsvSource({"ZH_TO_JA,我今天要去コンビニ买东西。", "EN_TO_JA,I am going shopping at コンビニ today."})
+    void createQuestionShouldKeepJapaneseKanaInSource(String mode, String source) {
+        when(tagMapper.selectEnabledTagsByAnyCodes(anyList()))
+                .thenReturn(List.of(tag(1L, "SCENE", "FINANCE_BANK", "银行")));
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(100L);
+            return 1;
+        });
         QuestionCreateRequest request = new QuestionCreateRequest(
-                "TRANSLATION_ZH_TO_JA",
-                "我今天要去コンビニ买东西。",
+                "TRANSLATION_" + mode,
+                source,
                 "日常购物场景。",
                 "N4",
                 3,
@@ -708,11 +720,36 @@ class QuestionServiceImplTest {
                 ))
         );
 
-        assertThatThrownBy(() -> questionService.createQuestion(request))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("日语假名");
+        assertThat(questionService.createQuestion(request).sourceText()).isEqualTo(source);
 
-        verify(questionMapper, never()).insertQuestion(any());
+        verify(questionMapper).insertQuestion(any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"ZH_TO_JA,今天我见到了芙丽达（フリーダ）。", "EN_TO_JA,Today I met Frieda (フリーダ)."})
+    void createArticleShouldKeepKanaHints(String mode, String source) {
+        when(tagMapper.selectEnabledTagsByAnyCodes(anyList()))
+                .thenReturn(List.of(tag(3L, "GENRE", "NARRATIVE", "叙事文")));
+        when(questionMapper.insertQuestion(any())).thenAnswer(invocation -> {
+            Question question = invocation.getArgument(0);
+            question.setId(100L);
+            return 1;
+        });
+        var request = articleCreateRequest("TRANSLATION_" + mode + "_ARTICLE", source, "今日、フリーダに会いました。");
+        assertThat(questionService.createQuestion(request).sourceText()).isEqualTo(source);
+    }
+
+    @Test
+    void generatedEnglishQuestionShouldKeepKanaHints() {
+        String source = "If it rains tomorrow, let us study at home. (Name: フリーダ.)";
+        String response = validAiJson().replace("TRANSLATION_ZH_TO_JA", "TRANSLATION_EN_TO_JA")
+                .replace("如果明天下雨，我们就在家学习吧。", source);
+        var request = new AiQuestionGenerationRequest(1, "N4", 3, null, null, null, null, "EN_TO_JA");
+        var validator = new AiQuestionGenerationResponseValidator(new ObjectMapper());
+        var result = validator.validateQuestions(request, response,
+                Map.of("DAILY_LIFE_WEATHER", tag(1L, "SCENE", "DAILY_LIFE_WEATHER", "天气")),
+                Map.of("FUNCTION_PROPOSE_PLAN", tag(2L, "FUNCTION", "FUNCTION_PROPOSE_PLAN", "提出计划")));
+        assertThat(result.getFirst().question().sourceText()).isEqualTo(source);
     }
 
     @Test
@@ -937,13 +974,13 @@ class QuestionServiceImplTest {
 
         QuestionVO question = questionService.updateQuestion(100L, englishArticleUpdateRequest());
 
-        assertThat(question.sourceText()).isEqualTo("I visited the library.\n\nThen I read a book at home.");
+        assertThat(question.sourceText()).isEqualTo("I visited the library (としょかん).\n\nThen I read a book at home.");
         assertThat(question.answers()).singleElement()
                 .extracting("answerText")
                 .isEqualTo("図書館に行きました。\n\nその後、家で本を読みました。");
         verify(questionMapper).updateQuestion(any());
         verify(questionEmbeddingService).embedArticleBody(
-                "I visited the library.\n\nThen I read a book at home."
+                "I visited the library (としょかん).\n\nThen I read a book at home."
         );
         verify(questionEmbeddingService).saveEmbedding(any(), any());
     }
@@ -1353,7 +1390,7 @@ class QuestionServiceImplTest {
 
     private QuestionUpdateRequest englishArticleUpdateRequest() {
         return new QuestionUpdateRequest(
-                "I visited the library.\n\nThen I read a book at home.",
+                "I visited the library (としょかん).\n\nThen I read a book at home.",
                 "A short narrative about reading.",
                 "N4",
                 3,
@@ -1491,7 +1528,7 @@ class QuestionServiceImplTest {
     }
 
     private String articleJsonWithEnglishWordCount(String seed, int wordCount) {
-        String sourceText = ("word ".repeat(wordCount)).trim() + ".";
+        String sourceText = "フリーダ " + ("word ".repeat(wordCount - 1)).trim() + ".";
         return """
                 {
                   "blueprint": {

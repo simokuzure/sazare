@@ -157,9 +157,9 @@ class ChatImportAiResponseValidatorTest {
         var blank = candidateWithTexts(" ", "使用辞书形", "来日本之前学习过。", "日本に来る前に勉強しました。");
         assertThatThrownBy(() -> validate(new AiChatImportAnalysisDTO(checks, List.of(blank))))
                 .hasMessageContaining("第 1 个候选的重点名称不能为空");
-        var japaneseSource = candidateWithTexts("前に的接续", "使用辞书形", "来フリーダ家之前学习过。", "日本に来る前に勉強しました。");
+        var japaneseSource = candidateWithTexts("前に的接续", "使用辞书形", "ありがとう。", "日本に来る前に勉強しました。");
         assertThatThrownBy(() -> validate(new AiChatImportAnalysisDTO(checks, List.of(japaneseSource))))
-                .hasMessageContaining("第 1 个候选：复习题面必须使用当前学习模式的中文或英文，不能包含日语假名");
+                .hasMessageContaining("第 1 个候选：复习题面必须使用当前学习模式的中文或英文");
         var answerWithoutKana = candidateWithTexts("前に的接续", "使用辞书形", "来日本之前学习过。", "日本");
         assertThatThrownBy(() -> validate(new AiChatImportAnalysisDTO(checks, List.of(answerWithoutKana))))
                 .hasMessageContaining("第 1 个候选：日语参考答案必须包含日语假名");
@@ -170,6 +170,20 @@ class ChatImportAiResponseValidatorTest {
     }
 
     @Test
+    void acceptsKanaHintsInChineseAndEnglishReviewPrompts() {
+        var checks = List.of(check(1, new Finding("来た前に", 0)), check(3));
+        for (String source : List.of("他仍然在袒护芙丽达。（人名读音：フリーダ。）",
+                "奥尔加一家住在这个村子里。（奥尔加的读音：オルガ。）", "来她家之前学习过。（读音：かのじょ。）")) {
+            var candidate = candidateWithTexts("学习重点", "说明", source, "彼は今もフリーダをかばっている。");
+            assertThat(validate(new AiChatImportAnalysisDTO(checks, List.of(candidate))).candidates()).containsExactly(candidate);
+        }
+        var english = candidateWithTexts("Name spelling", "Use the correct spelling",
+                "He still defends Frieda. (Name: フリーダ.)", "彼は今もフリーダをかばっている。");
+        assertThat(validator.validate(mapper.writeValueAsString(new AiChatImportAnalysisDTO(checks, List.of(english))),
+                messages, Set.of(4L), "EN_TO_JA").candidates()).containsExactly(english);
+    }
+
+    @Test
     @ExtendWith(OutputCaptureExtension.class)
     void diagnosticsDoNotExposeChatAiFieldsOrParserExceptions(CapturedOutput output) {
         var parseFailure = catchThrowableOfType(() -> validator.validate("{\"私密模型输出\":", messages,
@@ -177,7 +191,7 @@ class ChatImportAiResponseValidatorTest {
         assertThat(parseFailure).hasMessageContaining("JSON 格式或字段类型不符合约定").hasNoCause();
         assertThat(parseFailure.getCode()).isEqualTo(ErrorCode.BUSINESS_ERROR.getCode());
 
-        var candidate = candidateWithTexts("私密重点", "私密解释", "敏感题面テスト", "私密答案です。");
+        var candidate = candidateWithTexts("私密重点", "私密解释", "テスト", "私密答案です。");
         var languageFailure = catchThrowableOfType(() -> validate(new AiChatImportAnalysisDTO(List.of(
                 check(1, new Finding("来た前に", 0)), check(3)), List.of(candidate))), BusinessException.class);
         assertThat(languageFailure).hasMessageContaining("第 1 个候选：复习题面").hasNoCause();

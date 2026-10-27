@@ -654,12 +654,12 @@ class UserAnswerServiceImplTest {
 
         userAnswerService.createReviewCard(
                 10L,
-                new ReviewCardCreateRequest("练习自然的目的地表达", "私は昨日、図書館へ行きました。", null, "我昨天去了图书馆。")
+                new ReviewCardCreateRequest("练习自然的目的地表达", "私は昨日、図書館へ行きました。", null, "我昨天去了图书馆。（读音：としょかん。）")
         );
 
         ArgumentCaptor<Question> questionCaptor = ArgumentCaptor.forClass(Question.class);
         verify(questionMapper).insertQuestion(questionCaptor.capture());
-        assertThat(questionCaptor.getValue().getSourceText()).isEqualTo("我昨天去了图书馆。");
+        assertThat(questionCaptor.getValue().getSourceText()).isEqualTo("我昨天去了图书馆。（读音：としょかん。）");
         assertThat(questionCaptor.getValue().getLevel()).isEqualTo("N3");
         assertThat(questionCaptor.getValue().getDifficulty()).isEqualTo(3);
         verify(eventPublisher).publishEvent(new ReviewQuestionTagEnrichmentRequestedEvent(500L));
@@ -709,7 +709,7 @@ class UserAnswerServiceImplTest {
 
         assertThatThrownBy(() -> userAnswerService.createReviewCard(
                 10L,
-                new ReviewCardCreateRequest("练习自然表达", "自然な表現です。", null, "今日は去图书馆")
+                new ReviewCardCreateRequest("练习自然表达", "自然な表現です。", null, "ありがとう")
         )).isInstanceOf(BusinessException.class)
                 .hasMessageContaining("中文文本");
 

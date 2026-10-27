@@ -279,11 +279,10 @@ public class UserAnswerServiceImpl implements UserAnswerService {
             boolean invalidLanguage = direction == TranslationDirection.ZH_TO_JA
                     ? !HAN_PATTERN.matcher(sourceText).find()
                     : HAN_PATTERN.matcher(sourceText).find();
-            if (sourceText.length() > 1000 || invalidLanguage
-                    || JAPANESE_KANA_PATTERN.matcher(sourceText).find()) {
+            if (sourceText.length() > 1000 || invalidLanguage) {
                 String message = direction == TranslationDirection.ZH_TO_JA
-                        ? "纯日语纠错的复习题中文文本必须包含中文且不能包含日语假名"
-                        : "复习题英文必须是英文且不能包含中文或日语假名";
+                        ? "纯日语纠错的复习题中文文本必须包含中文"
+                        : "复习题英文必须是英文且不能包含中文";
                 throw new BusinessException(ErrorCode.PARAM_ERROR, message);
             }
             return sourceText;

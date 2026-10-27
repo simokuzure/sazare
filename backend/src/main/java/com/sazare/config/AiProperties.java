@@ -38,6 +38,15 @@ public class AiProperties {
     public static class Providers {
 
         private Google google = new Google();
+        private OpenAi openai = new OpenAi();
+
+        public OpenAi getOpenai() {
+            return openai;
+        }
+
+        public void setOpenai(OpenAi openai) {
+            this.openai = openai;
+        }
 
         public Google getGoogle() {
             return google;
@@ -45,6 +54,37 @@ public class AiProperties {
 
         public void setGoogle(Google google) {
             this.google = google;
+        }
+    }
+
+    public static class OpenAi {
+
+        private String model = "gpt-6.1-sol";
+        private String apiKey = "";
+        private String baseUrl = "https://api.openai.com/v1";
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
+        }
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
         }
     }
 

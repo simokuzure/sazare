@@ -20,15 +20,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 @Component
 public class JapaneseCorrectionAiResponseValidator {
 
     private static final int MAX_TEXT_LENGTH = 5000;
     private static final Set<String> VALID_FORMALITIES = Set.of("CASUAL", "NEUTRAL", "POLITE", "BUSINESS");
-    private static final Pattern JAPANESE_KANA_PATTERN = Pattern.compile("[\\p{IsHiragana}\\p{IsKatakana}]");
-    private static final Pattern HAN_PATTERN = Pattern.compile("\\p{IsHan}");
 
     private final ObjectMapper objectMapper;
     private final AiErrorAnalysisValidator errorAnalysisValidator;
@@ -173,8 +170,7 @@ public class JapaneseCorrectionAiResponseValidator {
         String suggestion = error.suggestion().trim();
         String reviewSourceText = error.reviewSourceText().trim();
         return correctedText.contains(suggestion)
-                && reviewSourceText.length() <= 1000
-                && !JAPANESE_KANA_PATTERN.matcher(reviewSourceText).find();
+                && reviewSourceText.length() <= 1000;
     }
 
     private List<String> normalizeSuggestions(List<String> suggestions) {

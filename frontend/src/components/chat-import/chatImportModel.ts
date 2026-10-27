@@ -24,9 +24,8 @@ export function validateImportDraft(draft: ChatImportDraft, mode: string, types:
   }
   const source = draft.reviewSourceText.trim()
   if (!source || source.length > 1000) errors.reviewSourceText = text('请填写题面（最多 1000 字符）。', 'Enter a review prompt (up to 1000 characters).')
-  else if (/[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(source)
-    || (mode === 'ZH_TO_JA' ? !/\p{Script=Han}/u.test(source) : /\p{Script=Han}/u.test(source) || !/[A-Za-z]/.test(source))) {
-    errors.reviewSourceText = text('请使用中文，不含日语假名。', 'Use English without Chinese characters or Japanese kana.')
+  else if (mode === 'ZH_TO_JA' ? !/\p{Script=Han}/u.test(source) : /\p{Script=Han}/u.test(source) || !/[A-Za-z]/.test(source)) {
+    errors.reviewSourceText = text('请使用中文。', 'Use English without Chinese characters.')
   }
   const answer = draft.referenceAnswer.trim()
   if (!answer || answer.length > 2000) errors.referenceAnswer = text('请填写日语答案（最多 2000 字符）。', 'Enter a Japanese answer (up to 2000 characters).')

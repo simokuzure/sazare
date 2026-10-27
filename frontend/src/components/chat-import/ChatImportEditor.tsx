@@ -18,7 +18,7 @@ export default function ChatImportEditor({ draft, candidateCount, types, cards, 
   const availableCards = cards.filter(card => types.some(type => type.id === card.errorTypeId))
   const options = availableCards.filter(matchesSearch).sort((a, b) => Number(b.errorTypeId === draft.errorTypeId) - Number(a.errorTypeId === draft.errorTypeId))
   const labels: Record<DraftField, string> = {
-    errorTypeId: text('错误分类', 'Error category'), name: text('复习重点名称', 'Learning focus'),
+    errorTypeId: text('学习分类', 'Learning category'), name: text('复习重点名称', 'Learning focus'),
     description: text('重点说明', 'Focus description'), userErrorTypeId: text('目标复习卡片', 'Target review card'),
     reviewSourceText: learningMode === 'ZH_TO_JA' ? '复习题面（中文）' : 'Review prompt (English)',
     referenceAnswer: text('日语参考答案', 'Japanese reference answer'),
@@ -44,7 +44,7 @@ export default function ChatImportEditor({ draft, candidateCount, types, cards, 
             <p lang="ja">{evidence.originalText}</p>
           </blockquote>)}
         </section>
-        <section className="import-correction"><h4>{text('AI 修正表达', 'AI correction')}</h4><p lang="ja">{draft.correctedExpression}</p></section>
+        <section className="import-correction"><h4>{text('AI 修正或优化表达', 'AI correction or improvement')}</h4><p lang="ja">{draft.correctedExpression}</p></section>
         <section className="import-explanation"><h4>{text('重点说明', 'Focus description')}</h4><p>{draft.description}</p></section>
       </div>
     </section>
@@ -63,7 +63,7 @@ export default function ChatImportEditor({ draft, candidateCount, types, cards, 
               disabled={!availableCards.length} onChange={() => onUpdate({ mode: 'EXISTING_USER_ERROR_TYPE' })} />{text('加入已有卡片', 'Add to a card')}</label>
           </div>
           <div className="import-field-row">
-            {draft.mode === 'NEW_USER_ERROR_TYPE' ? <label><span>{text('错误分类', 'Error category')}</span>
+            {draft.mode === 'NEW_USER_ERROR_TYPE' ? <label><span>{text('学习分类', 'Learning category')}</span>
               <select {...attrs('errorTypeId')} value={draft.errorTypeId} onChange={event => onUpdate({ errorTypeId: Number(event.target.value) })}>
                 {!types.some(type => type.id === draft.errorTypeId) ? <option value={draft.errorTypeId}>{text('请选择可用分类', 'Choose an available category')}</option> : null}
                 {types.map(type => <option key={type.id} value={type.id}>{english ? type.nameEn || type.code : type.name}</option>)}

@@ -1,17 +1,23 @@
-import { useState, type RefObject } from 'react'
+import { useRef, useState, type ReactNode, type RefObject } from 'react'
 import { useLanguage } from '../../i18n/LanguageContext'
 
-export default function ChatImportUpload({ file, reading, analyzing, confirming, hasAnalysis, inputRef, onSelectFiles, onAnalyze, onShowPrompt }: {
+export default function ChatImportUpload({ file, reading, analyzing, confirming, hasAnalysis, inputRef, onSelectFiles, onAnalyze, onShowPrompt, summary, confirmAction }: {
   file: File | null; reading: boolean; analyzing: boolean; confirming: boolean; hasAnalysis: boolean
   inputRef: RefObject<HTMLInputElement | null>
   onSelectFiles: (files: File[]) => Promise<void>; onAnalyze: () => Promise<void>; onShowPrompt: () => void
+  summary?: string; confirmAction?: ReactNode
 }) {
   const { learningMode, text } = useLanguage()
   const [dragging, setDragging] = useState(false)
+  const menu = useRef<HTMLDetailsElement>(null)
   const busy = reading || analyzing || confirming
   const fileInfo = file ? `${(file.size / 1024).toFixed(1)} KiB · ${learningMode === 'ZH_TO_JA' ? '中 → 日' : 'EN → JP'}` : ''
   const chooseFile = () => inputRef.current?.click()
   const analyzeLabel = analyzing ? text('正在分析…', 'Analyzing…') : hasAnalysis ? text('重新分析', 'Analyze again') : text('开始分析', 'Analyze conversation')
+  const closeMenu = () => {
+    if (menu.current) { menu.current.open = false; menu.current.querySelector('summary')?.focus() }
+  }
+  const runFileAction = (action: () => void) => { closeMenu(); action() }
 
   return <section className={`surface import-file-panel${hasAnalysis ? '' : ' import-upload-panel'}${dragging ? ' is-dragging' : ''}`}
     aria-label={text('上传聊天文件', 'Upload conversation')}
@@ -21,16 +27,24 @@ export default function ChatImportUpload({ file, reading, analyzing, confirming,
       onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) void onSelectFiles(files) }} />
     {hasAnalysis ? <>
       <div className="import-file-info"><span className="import-file-icon" aria-hidden="true">MD</span>
-        <strong>{file?.name}</strong><span>{fileInfo}</span><span className="import-file-status">{text('分析完成', 'Analyzed')}</span></div>
+        <div className="import-file-copy"><strong>{file?.name}</strong><div className="import-file-meta"><span>{fileInfo}</span><span className="import-file-status">{text('✓ 分析完成', '✓ Analyzed')}</span></div></div></div>
       <div className="import-file-actions">
-        <button type="button" className="import-text-button" onClick={onShowPrompt}>{text('导出提示词', 'Export prompt')}</button>
-        <button type="button" disabled={confirming} onClick={chooseFile}>{text('更换文件', 'Change file')}</button>
-        <button type="button" disabled={busy} onClick={() => void onAnalyze()}>{analyzeLabel}</button>
+        {summary ? <span className="import-summary" role="status" aria-live="polite">{summary}</span> : null}
+        <details className="import-file-menu" ref={menu} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false }}
+          onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); closeMenu() } }}>
+          <summary>{text('文件操作', 'File actions')}<span aria-hidden="true">⌄</span></summary>
+          <div className="import-file-menu-items">
+            <button type="button" onClick={() => runFileAction(onShowPrompt)}>{text('导出提示词', 'Export prompt')}</button>
+            <button type="button" disabled={confirming} onClick={() => runFileAction(chooseFile)}>{text('更换文件', 'Change file')}</button>
+            <button type="button" disabled={busy} onClick={() => runFileAction(() => { void onAnalyze() })}>{analyzeLabel}</button>
+          </div>
+        </details>
+        {confirmAction}
       </div>
     </> : <>
-      <div className="import-upload-heading"><span className="page-eyebrow">{text('聊天导入', 'Chat import')}</span>
+      <div className="import-upload-heading">
         <h3>{text('导入一段日语练习聊天', 'Import a Japanese practice conversation')}</h3>
-        <p>{text('让 AI 整理聊天中需要复习的表达，再由你逐项检查、编辑和确认。', 'Let AI find expressions to review, then check, edit, and confirm each item.')}</p></div>
+        <p>{text('AI 分析后，你可以逐项检查、编辑并加入复习。', 'After AI analysis, check and edit each item before adding it to your review.')}</p></div>
       <div className="import-upload-layout">
         <div className="import-upload-dropzone">
           <span className="import-upload-symbol" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none"><path d="M28 6H13a3 3 0 0 0-3 3v30a3 3 0 0 0 3 3h22a3 3 0 0 0 3-3V16L28 6Z" /><path d="M28 6v10h10M24 34V22m-5 5 5-5 5 5" /></svg></span>

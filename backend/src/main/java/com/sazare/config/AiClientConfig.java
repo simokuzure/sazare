@@ -26,6 +26,12 @@ import com.sazare.service.ai.client.MockAiEmbeddingClient;
 import com.sazare.service.ai.client.MockAiReviewQuestionClient;
 import com.sazare.service.ai.client.MockAiReviewScoringClient;
 import com.sazare.service.ai.client.AiProviderHttpClient;
+import com.sazare.service.ai.client.OpenAiAnswerScoringClient;
+import com.sazare.service.ai.client.OpenAiChatImportClient;
+import com.sazare.service.ai.client.OpenAiJapaneseCorrectionClient;
+import com.sazare.service.ai.client.OpenAiQuestionClient;
+import com.sazare.service.ai.client.OpenAiReviewQuestionClient;
+import com.sazare.service.ai.client.OpenAiReviewScoringClient;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -46,7 +52,8 @@ public class AiClientConfig {
         return createClient(properties,
                 () -> new MockAiChatImportClient(mapper),
                 () -> new GoogleAiChatImportClient(
-                        properties.getProviders().getGoogle(), mapper, http));
+                        properties.getProviders().getGoogle(), mapper, http),
+                () -> new OpenAiChatImportClient(properties.getProviders().getOpenai(), mapper, http));
     }
 
     @Bean
@@ -79,7 +86,9 @@ public class AiClientConfig {
                     aiProperties.getProviders().getGoogle(),
                     objectMapper,
                     aiProviderHttpClient
-                )
+                ),
+                () -> new OpenAiQuestionClient(
+                        aiProperties.getProviders().getOpenai(), objectMapper, aiProviderHttpClient)
         );
     }
 
@@ -113,7 +122,9 @@ public class AiClientConfig {
                     aiProperties.getProviders().getGoogle(),
                     objectMapper,
                     aiProviderHttpClient
-                )
+                ),
+                () -> new OpenAiAnswerScoringClient(
+                        aiProperties.getProviders().getOpenai(), objectMapper, aiProviderHttpClient)
         );
     }
 
@@ -130,7 +141,9 @@ public class AiClientConfig {
                         aiProperties.getProviders().getGoogle(),
                         objectMapper,
                         aiProviderHttpClient
-                )
+                ),
+                () -> new OpenAiJapaneseCorrectionClient(
+                        aiProperties.getProviders().getOpenai(), objectMapper, aiProviderHttpClient)
         );
     }
 
@@ -147,7 +160,9 @@ public class AiClientConfig {
                         aiProperties.getProviders().getGoogle(),
                         objectMapper,
                         aiProviderHttpClient
-                )
+                ),
+                () -> new OpenAiReviewScoringClient(
+                        aiProperties.getProviders().getOpenai(), objectMapper, aiProviderHttpClient)
         );
     }
 
@@ -164,7 +179,9 @@ public class AiClientConfig {
                         aiProperties.getProviders().getGoogle(),
                         objectMapper,
                         aiProviderHttpClient
-                )
+                ),
+                () -> new OpenAiReviewQuestionClient(
+                        aiProperties.getProviders().getOpenai(), objectMapper, aiProviderHttpClient)
         );
     }
 
@@ -173,10 +190,21 @@ public class AiClientConfig {
             Supplier<T> mockClientFactory,
             Supplier<T> googleClientFactory
     ) {
+        // OpenAI 仅接管文本能力，语音和向量继续使用 Google，避免改变已有向量空间。
+        return createClient(aiProperties, mockClientFactory, googleClientFactory, googleClientFactory);
+    }
+
+    private <T> T createClient(
+            AiProperties aiProperties,
+            Supplier<T> mockClientFactory,
+            Supplier<T> googleClientFactory,
+            Supplier<T> openaiClientFactory
+    ) {
         String provider = normalizeProvider(aiProperties.getProvider());
         return switch (provider) {
             case "mock" -> mockClientFactory.get();
             case "google" -> googleClientFactory.get();
+            case "openai" -> openaiClientFactory.get();
             default -> throw new IllegalArgumentException("不支持的 AI provider: " + aiProperties.getProvider());
         };
     }

@@ -122,8 +122,8 @@ public class AiQuestionGenerationResponseValidator {
             String sourceText = requireArticleText(sentence.chineseText(), "AI 文章源句不能为空");
             if (direction == TranslationDirection.ZH_TO_JA) {
                 validateAiArticleChineseSentence(sourceText, index);
-            } else if (containsChinese(sourceText) || containsJapaneseKana(sourceText)) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 英文文章源句不能包含中日文字");
+            } else if (containsChinese(sourceText)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "AI 英文文章源句不能包含中文");
             }
             String japanese = requireArticleText(sentence.japaneseReference(), "AI 文章 japaneseReference 不能为空");
             if (containsLineBreak(japanese) || !containsJapaneseKana(japanese)) {
@@ -241,7 +241,7 @@ public class AiQuestionGenerationResponseValidator {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " sourceText 必须包含中文");
         }
         if (direction == TranslationDirection.EN_TO_JA
-                && (containsChinese(question.sourceText()) || containsJapaneseKana(question.sourceText()))) {
+                && containsChinese(question.sourceText())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, prefix + " sourceText 必须是英文");
         }
         validateRequiredText(question.contextText(), prefix + " contextText 不能为空");
@@ -359,13 +359,6 @@ public class AiQuestionGenerationResponseValidator {
         }
         if (!containsChinese(value)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, fieldName + " 必须包含中文");
-        }
-        var kanaMatcher = JAPANESE_KANA_PATTERN.matcher(value);
-        if (kanaMatcher.find()) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    fieldName + " 不能包含平假名或片假名，检测到：" + kanaMatcher.group()
-            );
         }
         if (!CHINESE_ARTICLE_END_PATTERN.matcher(value).matches()) {
             throw new BusinessException(

@@ -41,10 +41,19 @@ test('validation covers unavailable targets, source language and Japanese answer
   const draft = model.createImportDraft(candidate, 0)
   assert.equal(Object.keys(model.validateImportDraft(draft, 'ZH_TO_JA', types, cards)).length, 0)
   assert.equal(Object.keys(model.validateImportDraft({ ...draft, reviewSourceText: 'Before coming to Japan, I studied.' }, 'EN_TO_JA', types, cards)).length, 0)
-  const errors = model.validateImportDraft({ ...draft, errorTypeId: 9, name: '', description: '', referenceAnswer: 'English', reviewSourceText: '日本に来る' }, 'ZH_TO_JA', types, cards)
+  const errors = model.validateImportDraft({ ...draft, errorTypeId: 9, name: '', description: '', referenceAnswer: 'English', reviewSourceText: 'ありがとう' }, 'ZH_TO_JA', types, cards)
   for (const key of ['errorTypeId', 'name', 'description', 'referenceAnswer', 'reviewSourceText']) assert.ok(errors[key])
   assert.ok(model.validateImportDraft({ ...draft, mode: 'EXISTING_USER_ERROR_TYPE', userErrorTypeId: '999' }, 'ZH_TO_JA', types, cards).userErrorTypeId)
   assert.ok(model.validateImportDraft({ ...draft, mode: 'EXISTING_USER_ERROR_TYPE', userErrorTypeId: '101' }, 'ZH_TO_JA', [], cards).userErrorTypeId)
+})
+
+test('review prompts retain kana hints in both learning modes', () => {
+  const draft = model.createImportDraft(candidate, 0)
+  for (const source of ['他仍然在袒护芙丽达。（人名读音：フリーダ。）', '奥尔加一家住在这个村子里。（奥尔加的读音：オルガ。）', '这是她的家。（读音：かのじょ。）']) {
+    assert.equal(model.validateImportDraft({ ...draft, reviewSourceText: source }, 'ZH_TO_JA', types, cards).reviewSourceText, undefined)
+    assert.equal(model.toImportItem({ ...draft, reviewSourceText: source }).reviewSourceText, source)
+  }
+  assert.equal(model.validateImportDraft({ ...draft, reviewSourceText: 'He still defends Frieda. (Name: フリーダ.)' }, 'EN_TO_JA', types, cards).reviewSourceText, undefined)
 })
 
 test('confirmation differentiates explicit business rejection from uncertain results; never retries', async () => {

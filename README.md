@@ -47,6 +47,7 @@ AI-generated output is always treated as unverified candidate data. Only error a
 - Practice Chinese-to-Japanese and English-to-Japanese sentence translation with randomly selected or AI-generated questions.
 - Practice Chinese-to-Japanese and English-to-Japanese article translation with configurable genre, length, and JLPT level.
 - Receive a fully revised version of Japanese text together with dimension scores, candidate errors, and revision suggestions.
+- Import Markdown chat history for AI analysis of errors and expression improvements, then confirm them to save as review cards.
 - Scoring results include a total score, dimension-level feedback, error analysis, recommended expressions, and full reference answers.
 - Use voice input to transcribe recordings into Japanese text for editing and submission.
 
@@ -151,9 +152,21 @@ $env:AI_PROVIDER = "google"
 $env:GOOGLE_AI_API_KEY = "your API key"
 ```
 
+To use the official OpenAI API for text features:
+
+```powershell
+$env:AI_PROVIDER = "openai"
+$env:OPENAI_API_KEY = "your OpenAI API key"
+$env:OPENAI_MODEL = "gpt-6.1-sol"
+```
+
+OpenAI handles text features; speech transcription and embeddings still use Google. Question generation uses embedding-based deduplication and also requires `GOOGLE_AI_API_KEY`.
+
+`AI_PROVIDER` defaults to `google`; use `mock` for mock implementations. Restart the backend after configuration changes. Keep API keys in the backend environment and out of version control.
+
 ### 5. Start the backend
 
-In a new PowerShell window, run:
+In the same PowerShell window where you configured the environment variables, run:
 
 ```powershell
 cd backend

@@ -41,7 +41,7 @@ class JapaneseCorrectionAiResponseValidatorTest {
                       "original": "図書館を行きました",
                       "issue": "移动目的地的助词错误。",
                       "suggestion": "私は昨日、図書館へ行きました。",
-                      "reviewSourceText": "我昨天去了图书馆。",
+                      "reviewSourceText": "我昨天去了图书馆。（读音：としょかん。）",
                       "severity": "MEDIUM",
                       "suggestedUserErrorTypeName": "移动目的地误用助词を",
                       "suggestedUserErrorTypeDescription": "表示移动目的地时应使用に或へ。"
@@ -59,7 +59,7 @@ class JapaneseCorrectionAiResponseValidatorTest {
         );
 
         assertThat(review.errorAnalysis()).hasSize(1);
-        assertThat(review.errorAnalysis().getFirst().reviewSourceText()).isEqualTo("我昨天去了图书馆。");
+        assertThat(review.errorAnalysis().getFirst().reviewSourceText()).isEqualTo("我昨天去了图书馆。（读音：としょかん。）");
         assertThat(review.correctedText()).isEqualTo("私は昨日、図書館へ行きました。");
     }
 

@@ -6,7 +6,6 @@ server:
 spring:
   servlet:
     multipart:
-      # 音频通过有界二进制流接收，禁止自动 multipart 解析生成临时文件。
       enabled: false
   application:
     name: sazare
@@ -27,6 +26,10 @@ ai:
   provider: ${AI_PROVIDER:google}
   request-timeout: ${AI_REQUEST_TIMEOUT:300s}
   providers:
+    openai:
+      model: ${OPENAI_MODEL:gpt-6.1-sol}
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
     google:
       model: ${GOOGLE_AI_MODEL:gemini-3.8-flash}
       transcription-model: ${GOOGLE_AI_TRANSCRIPTION_MODEL:gemini-3.5-transcribe}

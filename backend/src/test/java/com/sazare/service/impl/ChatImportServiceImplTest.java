@@ -15,6 +15,9 @@ import com.sazare.util.ChatMarkdownParser;
 import com.sazare.vo.ChatImportAnalysisVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.mockito.ArgumentCaptor;
 import tools.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
@@ -83,16 +86,23 @@ class ChatImportServiceImplTest {
     }
 
     @Test
-    void incompleteAnalysisFailsWithoutRetryOrBusinessWrites() {
+    @ExtendWith(OutputCaptureExtension.class)
+    void incompleteAnalysisLogsFullReplyBeforeFailingWithoutRetryOrBusinessWrites(CapturedOutput output) {
         when(dictionary.getEnabledLeafErrorTypes()).thenReturn(List.of(
                 new AiErrorTypeOptionDTO(3L, "PARTICLE", "助词", "助词说明", "GRAMMAR", "语法")));
-        when(ai.analyze(any())).thenReturn(mapper.writeValueAsString(new AiChatImportAnalysisDTO(
-                List.of(new AiChatImportAnalysisDTO.MessageCheck(1, List.of())), List.of())));
+        String reply = mapper.writeValueAsString(new AiChatImportAnalysisDTO(
+                List.of(new AiChatImportAnalysisDTO.MessageCheck(1, List.of())), List.of()));
+        when(ai.analyze(any())).thenReturn(reply);
         byte[] markdown = "## User\nこんにちは。\n## Assistant\nこんにちは。\n## User\nまたね。"
                 .getBytes(StandardCharsets.UTF_8);
 
         assertThatThrownBy(() -> service.analyze(markdown, "ZH_TO_JA"))
                 .hasMessageContaining("不完整或不合法", "消息检查记录数量不符，应为 2 条，实际为 1 条");
+
+        String logOutput = output.getAll();
+        assertThat(logOutput).contains("聊天分析 AI 原始回复: promptVersion=" + AiChatImportPromptBuilder.VERSION
+                + ", learningMode=ZH_TO_JA, response=" + reply);
+        assertThat(logOutput.indexOf("聊天分析 AI 原始回复")).isLessThan(logOutput.indexOf("聊天分析结果校验失败"));
 
         verify(ai, times(1)).analyze(any());
         verifyNoInteractions(questions, answers, types, cards, reviews, errors);
@@ -108,6 +118,17 @@ class ChatImportServiceImplTest {
         verify(answers, times(1)).insertQuestionAnswer(any());
         verify(reviews).recordChatImportErrors(eq(1L), eq(List.of(5L)), eq(2L), eq("HIGH"), any());
         verifyNoInteractions(ai, dictionary);
+    }
+
+    @Test
+    void confirmationKeepsKanaHintsInReviewSource() {
+        String source = "他仍然在袒护芙丽达。（人名读音：フリーダ。）";
+        var item = new ChatImportConfirmationRequest.Item("EXISTING_USER_ERROR_TYPE", null, 2L,
+                null, null, "LOW", source, "彼は今もフリーダをかばっている。");
+        service.confirm(new ChatImportConfirmationRequest("ZH_TO_JA", List.of(item)));
+        var question = ArgumentCaptor.forClass(Question.class);
+        verify(questions).insertQuestion(question.capture());
+        assertThat(question.getValue().getSourceText()).isEqualTo(source);
     }
 
     @Test

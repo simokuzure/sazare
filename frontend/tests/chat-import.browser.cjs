@@ -101,7 +101,7 @@ async function main() {
   const origin = process.env.CHAT_IMPORT_TEST_ORIGIN || `http://127.0.0.1:${server.address().port}`
   const file = (name = 'conversation.md', body = '# Conversation\n\n## User\n日本に来た前に勉強しました。\n\n## Assistant\n来る前に。') => ({ name, mimeType: 'text/markdown', buffer: Buffer.from(body) })
   const upload = async value => page.locator('input[type=file]').setInputFiles(value || file())
-  const analyze = async () => { await page.getByRole('button', { name: '开始分析', exact: true }).click(); await page.getByRole('heading', { name: '错误候选', exact: true }).waitFor() }
+  const analyze = async () => { await page.getByRole('button', { name: '开始分析', exact: true }).click(); await page.getByRole('heading', { name: '错误与优化候选', exact: true }).waitFor() }
   const editor = () => page.locator('.import-editor')
   const open = async index => page.locator('.import-candidate-list li > button').nth(index).click()
   const confirm = () => page.locator('.import-confirm-button')
@@ -115,8 +115,15 @@ async function main() {
   try {
     await page.goto(origin)
     await page.getByRole('navigation').getByRole('button', { name: '复习卡片', exact: true }).click()
+    await page.setViewportSize({ width: 1600, height: 900 })
+    const reviewWidth = await page.locator('.workspace').evaluate(element => element.getBoundingClientRect().width)
     await page.getByRole('button', { name: '导入聊天记录', exact: true }).click()
     await page.getByRole('heading', { name: '导入一段日语练习聊天', exact: true }).waitFor()
+    assert.equal(reviewWidth, 1280)
+    assert.equal(await page.locator('.workspace').evaluate(element => element.getBoundingClientRect().width), reviewWidth)
+    assert.equal(await page.evaluate(() => document.querySelector('.import-upload-panel').getBoundingClientRect().left
+      === document.querySelector('.app-header-inner').getBoundingClientRect().left + 32), true)
+    await page.setViewportSize({ width: 1366, height: 768 })
     assert.equal(await page.getByRole('button', { name: '开始分析', exact: true }).count(), 0)
     assert.equal(await page.evaluate(() => {
       const upload = document.querySelector('.import-upload-dropzone').getBoundingClientRect()
@@ -154,6 +161,9 @@ async function main() {
     await screenshot('upload-ready')
     assert.equal(await page.getByRole('button', { name: '查看聊天原文', exact: true }).count(), 0)
     await analyze()
+    await page.setViewportSize({ width: 1600, height: 900 })
+    assert.equal(await page.locator('.workspace').evaluate(element => element.getBoundingClientRect().width), reviewWidth)
+    await page.setViewportSize({ width: 1366, height: 768 })
     assert.equal(await page.locator('.import-upload-panel').count(), 0)
     assert.equal(await page.locator('.import-candidate-list input[type="checkbox"]').count(), 0)
     assert.equal(await page.locator('.import-candidate-list li.is-selected').count(), 0)
@@ -173,6 +183,13 @@ async function main() {
     assert.deepEqual(desktopLayout, { fitsViewport: true, columnsAligned: true, contentVisible: true, confirmVisible: true })
     await screenshot('desktop-ready')
     assert.equal(await page.getByRole('button', { name: '查看聊天原文', exact: true }).count(), 0)
+    const fileMenu = page.locator('.import-file-menu')
+    await fileMenu.locator('summary').click()
+    assert.deepEqual(await fileMenu.getByRole('button').allTextContents(), ['导出提示词', '更换文件', '重新分析'])
+    await page.keyboard.press('Escape')
+    assert.equal(await fileMenu.evaluate(element => element.open), false)
+    assert.equal(await fileMenu.locator('summary').evaluate(element => document.activeElement === element), true)
+    await fileMenu.locator('summary').click()
     await page.getByRole('button', { name: '导出提示词', exact: true }).click()
     const promptDialog = page.getByRole('dialog', { name: '导出提示词', exact: true })
     await assertDialogRemainsOpen('导出提示词')
@@ -186,6 +203,8 @@ async function main() {
     await promptDialog.getByRole('button', { name: '复制导出提示词', exact: true }).click()
     await promptDialog.getByRole('alert').waitFor()
     await promptDialog.getByRole('button', { name: '关闭', exact: true }).click()
+    assert.equal(await fileMenu.evaluate(element => element.open), false)
+    assert.equal(await fileMenu.locator('summary').evaluate(element => document.activeElement === element), true)
     assert.equal(await page.locator('.chat-import-page').innerText().then(value => value.includes('证据')), false)
     record('1366×768 results fit one screen; export prompt stays open and handles clipboard results; full conversation preview is removed')
     await page.getByRole('button', { name: '选择筛选结果', exact: true }).click()
@@ -204,7 +223,7 @@ async function main() {
     assert.equal(await page.locator('.import-candidate-list li.is-selected').count(), 0)
     record('candidate rows have no duplicate checkboxes; detail and bulk selection update green rows without selecting the open item')
     await open(0)
-    assert.equal(await editor().getByLabel('错误分类', { exact: true }).locator('option').count(), 1)
+    assert.equal(await editor().getByLabel('学习分类', { exact: true }).locator('option').count(), 1)
     await editor().getByLabel('日语参考答案', { exact: true }).fill('bad')
     await editor().getByRole('checkbox', { name: '选择此项', exact: true }).check()
     await confirm().click()
@@ -223,6 +242,7 @@ async function main() {
     await page.evaluate(() => scrollTo(0, 0))
     await screenshot('desktop')
     assert.match(await page.locator('.import-summary').innerText(), /已选 2 项/)
+    const panelsBeforeSave = await page.locator('.import-workspace').boundingBox()
     state.mode = 'confirmation-hold'
     await confirm().click()
     await page.getByText('正在保存…', { exact: true }).waitFor()
@@ -230,7 +250,11 @@ async function main() {
     assert.equal(await page.getByRole('heading', { name: '聊天分析' }).count(), 1)
     await waitUntil(() => releaseConfirmation)
     releaseConfirmation()
-    await page.getByText('所选内容已保存', { exact: true }).waitFor()
+    await page.locator('.import-summary').filter({ hasText: '已选 0 项 · 已保存 2 项' }).waitFor()
+    assert.equal(await page.getByText('所选内容已保存', { exact: true }).count(), 0)
+    assert.equal(await page.getByRole('region', { name: '本批次保存结果', exact: true }).count(), 0)
+    assert.equal(await page.locator('.import-feedback').count(), 0)
+    assert.deepEqual(await page.locator('.import-workspace').boundingBox(), panelsBeforeSave)
     assert.equal(state.confirmations.length, 1)
     assert.equal(state.confirmations[0].items.length, 2)
     assert.ok(!('evidence' in state.confirmations[0].items[0]))
@@ -246,7 +270,8 @@ async function main() {
     await confirm().click()
     await page.getByText('本次候选已全部保存，将按卡片的到期安排进入复习。', { exact: true }).waitFor()
     await page.getByText('卡片列表刷新失败', { exact: true }).waitFor()
-    assert.match(await page.locator('.import-results').innerText(), /重新激活 1/)
+    assert.match(await page.locator('.import-summary').innerText(), /已保存 3 项/)
+    assert.equal(await page.getByRole('region', { name: '本批次保存结果', exact: true }).count(), 0)
     state.metadataFail = false
     state.mode = 'ok'
     await page.getByRole('button', { name: '重新加载卡片', exact: true }).click()
@@ -271,7 +296,7 @@ async function main() {
     state.mode = 'ok'
     page.once('dialog', dialog => dialog.accept())
     await confirm().click()
-    await page.getByText('所选内容已保存', { exact: true }).waitFor()
+    await page.locator('.import-summary').filter({ hasText: '已选 0 项 · 已保存 1 项' }).waitFor()
     assert.equal(state.confirmations.length, posts + 1)
     record('unknown confirmation retains input, checks cards in place, requires explicit manual resubmission')
 
@@ -300,7 +325,7 @@ async function main() {
     assert.doesNotMatch(await page.getByRole('alert').innerText(), /\p{Script=Han}/u)
     state.mode = 'empty'
     await page.getByRole('button', { name: 'Analyze conversation', exact: true }).click()
-    await page.getByText('No clear errors found. You can analyze another file.', { exact: true }).waitFor()
+    await page.getByText('No errors or improvements worth adding were found. You can analyze another file.', { exact: true }).waitFor()
     record('English interface translates concrete backend validation and handles no-error analysis')
 
     await upload(file('held.md'))
@@ -335,7 +360,7 @@ async function main() {
     await editor().getByLabel('Review prompt (English)', { exact: true }).fill('中文')
     await editor().getByLabel('Japanese reference answer', { exact: true }).fill('English')
     await confirm().click()
-    await page.getByText('Use English without Chinese characters or Japanese kana.', { exact: true }).waitFor()
+    await page.getByText('Use English without Chinese characters.', { exact: true }).waitFor()
     await page.getByText('The reference answer must contain Japanese kana.', { exact: true }).waitFor()
     for (const message of await page.locator('.import-field-error').allTextContents()) assert.doesNotMatch(message, /\p{Script=Han}/u)
     assert.equal(state.confirmations.length, confirmationsBeforeValidation)

@@ -47,6 +47,7 @@ AI 返回内容始终作为候选数据；错误分析只有在用户主动确�
 - 支持中译日、英译日短句练习，可随机抽题或使用 AI 生成题目。
 - 支持中译日、英译日文章练习，包含体裁、长度和 JLPT 语言难度设置。
 - 支持日语内容纠错，返回完整修订稿、分项评分、错误候选和修改建议。
+- 支持导入 Markdown 聊天记录，由 AI 分析错误与表达优化建议，确认后加入复习卡片。
 - 评分结果包含总分、分项评价、错误分析、推荐表达和完整参考答案。
 - 支持语音输入，录音后转写为日语文字，可编辑后提交。
 
@@ -152,9 +153,21 @@ $env:AI_PROVIDER = "google"
 $env:GOOGLE_AI_API_KEY = "你的 API Key"
 ```
 
+使用 OpenAI 官方 API 处理文本功能：
+
+```powershell
+$env:AI_PROVIDER = "openai"
+$env:OPENAI_API_KEY = "你的 OpenAI API Key"
+$env:OPENAI_MODEL = "gpt-6.1-sol"
+```
+
+OpenAI 用于文本功能；语音转写和向量生成仍使用 Google。出题包含向量去重，需同时配置 `GOOGLE_AI_API_KEY`。
+
+`AI_PROVIDER` 默认为 `google`，设为 `mock` 可使用模拟实现。修改配置后重启后端；密钥仅存于后端环境，不提交到仓库。
+
 ### 5. 启动后端
 
-在新的 PowerShell 窗口中执行：
+在已配置上述环境变量的同一个 PowerShell 窗口中执行：
 
 ```powershell
 cd backend

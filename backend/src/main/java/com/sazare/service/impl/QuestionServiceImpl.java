@@ -674,13 +674,13 @@ public class QuestionServiceImpl implements QuestionService {
 
     private void validateSourceLanguage(TranslationDirection direction, String sourceText) {
         if (direction == TranslationDirection.ZH_TO_JA) {
-            if (!containsChinese(sourceText) || containsJapaneseKana(sourceText)) {
-                throw new BusinessException(ErrorCode.PARAM_ERROR, "sourceText 必须包含中文且不能包含日语假名");
+            if (!containsChinese(sourceText)) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "sourceText 必须包含中文");
             }
             return;
         }
-        if (!containsLatin(sourceText) || containsChinese(sourceText) || containsJapaneseKana(sourceText)) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "sourceText 必须包含英文且不能包含中文或日语假名");
+        if (!containsLatin(sourceText) || containsChinese(sourceText)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "sourceText 必须包含英文且不能包含中文");
         }
     }
 
@@ -764,17 +764,15 @@ public class QuestionServiceImpl implements QuestionService {
     private void validateArticleSourceSegment(TranslationDirection direction, String sourceSegment) {
         if (direction == TranslationDirection.ZH_TO_JA) {
             if (!containsChinese(sourceSegment)
-                    || containsJapaneseKana(sourceSegment)
                     || !CHINESE_ARTICLE_END_PATTERN.matcher(sourceSegment).matches()) {
-                throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题每个 sourceText 段落必须是无假名的完整中文句子");
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题每个 sourceText 段落必须是完整中文句子");
             }
             return;
         }
         if (!containsLatin(sourceSegment)
                 || containsChinese(sourceSegment)
-                || containsJapaneseKana(sourceSegment)
                 || !ENGLISH_ARTICLE_END_PATTERN.matcher(sourceSegment).matches()) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题每个 sourceText 段落必须是不含中日文字的完整英文句子");
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "文章题每个 sourceText 段落必须是不含中文的完整英文句子");
         }
     }
 

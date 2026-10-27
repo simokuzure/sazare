@@ -28,7 +28,7 @@ public class AiQuestionPromptBuilder {
             6. questionType 必须固定为 TRANSLATION_ZH_TO_JA。
             7. sourceText 必须是自然中文句子，适合作为中译日练习题。
             8. sourceText 不要过长，N5/N4 建议 10 到 25 个汉字，N3/N2/N1 可以适当更长。
-            9. sourceText 不能包含日语原文、日语假名或明显提示答案的内容。
+            9. sourceText 可以包含人名、术语或读音等必要的假名提示，但不能直接给出整句日语译文或明显泄露整题答案。
             10. contextText 必须用中文描述题目的使用场景，帮助学习者理解语境。
             11. level 只能使用用户指定的 JLPT 等级，不能自行更改。
             12. difficulty 只能使用用户指定的难度，不能自行更改。

@@ -76,6 +76,8 @@ public class ChatImportServiceImpl implements ChatImportService {
         log.info("聊天分析开始: promptVersion={}, userMessageCount={}", AiChatImportPromptBuilder.VERSION,
                 messages.stream().filter(message -> "user".equals(message.role())).count());
         String json = client.analyze(promptBuilder.build(messages, options, mode));
+        log.info("聊天分析 AI 原始回复: promptVersion={}, learningMode={}, response={}",
+                AiChatImportPromptBuilder.VERSION, mode, json);
         var result = validator.validate(json, messages, options.stream().map(type -> type.id()).collect(Collectors.toSet()), mode);
         log.info("聊天分析完成: promptVersion={}, candidateCount={}", AiChatImportPromptBuilder.VERSION, result.candidates().size());
         return result;

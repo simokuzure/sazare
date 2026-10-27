@@ -28,8 +28,8 @@
     "learningMode": "ZH_TO_JA",
     "markdown": "## User\n疲れて寝込んでしまって、そのチャンスを逃した。\n## Assistant\n「寝込む」は病気で寝ている意味だけなので、ここでは誤りです。「眠り込む」に直してください。",
     "requiredFocuses": [],
-    "optionalFocuses": [],
-    "mustNotFlag": ["寝込む也有熟睡的意思，本句可以成立；不能照搬助手的词义误判", "不能因缺少主语或使用普通体而判错；此例预期空候选"]
+    "optionalFocuses": ["若建议眠り込む以明确熟睡而非卧病的意思，须说明寝込む原用法也可成立，标为 LOW 优化建议，不复述助手的词义误判"],
+    "mustNotFlag": ["寝込む也有熟睡的意思，本句可以成立；不能照搬助手的词义误判", "不能因缺少主语或使用普通体而判错"]
   },
   {
     "id": "valid-colloquial",
@@ -62,5 +62,85 @@
     "requiredFocuses": ["用户消息 #2：上下文中的フーダー → フリーダ、ホルガ → オルガ；可合并为同一具体表记重点，但须保留两处引用", "英文学习模式的题面、名称和说明应为英文，答案为日语", "若出题，需给出必要的人名提示，不能只考小说人物知识"],
     "optionalFocuses": [],
     "mustNotFlag": ["不能凭外部版本的译名臆造人物或表记错误"]
+  },
+  {
+    "id": "contextual-necessity",
+    "learningMode": "ZH_TO_JA",
+    "markdown": "## Assistant\n我也不想这样，但有些事真的由不得自己。\n## User\n僕もそうしたくないけど、しなくちゃいけないこともあるんだよ。\n## Assistant\nしなくちゃいけない只表示义务，不能表达由不得自己，应判为中等词义错误。",
+    "requiredFocuses": [],
+    "optionalFocuses": ["可以建议更突出非个人意愿所能控制的说法，但须说明原表达也可传达迫不得已，按 LOW 优化建议收录并解释当前语境下的收益"],
+    "mustNotFlag": ["当前上下文中，しなくちゃいけない可以表达外部条件所迫、不得不做；不能只按道德义务理解并照搬助手判错", "不能仅列另一译法而不说明具体改善点，也不能把优化建议描述为原句不成立"]
+  },
+  {
+    "id": "contextual-self-awareness",
+    "learningMode": "EN_TO_JA",
+    "markdown": "## Assistant\nYou keep taking his side. Aren't you aware that you're doing it?\n## User\nいつも彼の肩を持っているけど、その自覚はないの？\n## Assistant\n自覚不能表达对实际情况的了解，应该改为自分でもわかっているんじゃないの。",
+    "requiredFocuses": [],
+    "optionalFocuses": [],
+    "mustNotFlag": ["自覚在此指对自己一贯偏袒他人这一行为的认识，符合上下文；不能因存在另一种问法就判错", "不能将自覚设置为禁用词；若收录优化建议须具体说明改善点，不能机械替换已有自然表达"]
+  },
+  {
+    "id": "past-state-with-current-continuation",
+    "learningMode": "ZH_TO_JA",
+    "markdown": "## Assistant\n我刚才找了很久也没找到，现在还在找。\n## User\nさっきはずっと探していたけど、見つからなかった。今も探している。\n## Assistant\n見つからなかった表示过去已经结束，现在还在找就不能用过去式。",
+    "requiredFocuses": [],
+    "optionalFocuses": [],
+    "mustNotFlag": ["前句回顾此前搜索的结果，后句说明当前仍在搜索，两者不矛盾；过去式不意味着现在已经找到了", "不能为统一时态而强行改写回顾句，也不能以优化为由改变事件时间关系"]
+  },
+  {
+    "id": "understanding-argument-roles",
+    "learningMode": "ZH_TO_JA",
+    "markdown": "## User\n私には彼の気持ちがわかるけど、彼は私の気持ちをわかってくれない。\n## Assistant\n気持ちが中的が说明气持ち是理解者，非人不能理解，所以前半句错了。\n## User\n君ならその難しさがわかってくれると思う。",
+    "requiredFocuses": [],
+    "optionalFocuses": ["若将用户消息 #3 改为難しさをわかってくれる，须给出该结构的搭配依据；不能仅以難しさ不是人作为判错理由，不要求固定候选数量"],
+    "mustNotFlag": ["用户消息 #1 中彼の気持ちがわかる与私の気持ちをわかってくれない均可成立，不照搬助手的施事分析", "不能把分かる前的が统一当作理解者，或宣称所有分かる结构都必须用を"]
+  },
+  {
+    "id": "reasonable-translation-choices",
+    "learningMode": "ZH_TO_JA",
+    "markdown": "## Assistant\n今天天气这么好，要不要出去走走？\n## User\n今日はいい天気だから、出かけましょう。\n## Assistant\n这部电影我看了三遍，每次都有不一样的感受。\n## User\nこの映画は三回見たよ。見るたびに新しい感じがする。",
+    "requiredFocuses": [],
+    "optionalFocuses": ["可建议散歩しませんか以更贴近出去走走的邀请，说明出かけましょう原译可成立，属于 LOW 优化建议", "可建议見るたびに感じることが違う以更贴合每次感受不同，说明原句意思可理解，不能将新しい感じ一概判错；按 LOW 优化建议收录"],
+    "mustNotFlag": ["仅因散歩する比出かける更具体，或しませんか比しましょう更委婉，就判为明确 MEDIUM 错误", "仅因違う与中文不同字面对应，就认定新しい只能表示与此处无关的新鲜感", "不能把判断不确定的错误一律降成 LOW 保留；优化建议须说明具体收益"]
+  },
+  {
+    "id": "focused-half-hour-question",
+    "learningMode": "ZH_TO_JA",
+    "markdown": "## Assistant\n我点的外卖送错了，客服说重新配送要半小时。\n## User\n頼んだデリバリーが間違って届いて、再配達には半時間かかるとサポートに言われた。",
+    "requiredFocuses": [],
+    "optionalFocuses": ["若收录半時間在现代日常会话中的自然度优化，应标 LOW，说明原词可成立而三十分更常用；复习题面仍使用半小时，避免改成三十分钟而绕开词语选择"],
+    "mustNotFlag": ["不能宣称半時間不存在或在任何语境都错误", "不因参考答案不唯一而强制学生使用唯一句式，不为满足候选数量硬收录"]
+  },
+  {
+    "id": "focused-past-purpose-question",
+    "learningMode": "ZH_TO_JA",
+    "markdown": "## Assistant\n我刚才只是想再确认一次。\n## User\nさっきはもう一度確認したかったんだけです。",
+    "requiredFocuses": ["用户消息 #2：確認したかったんだけです的接续问题，改为確認したかっただけです或相应自然表达", "复习题若以たかっただけです为答案，应在中文题面保留刚才、当时等过去时间线索，让题目脱离聊天仍与答案相符"],
+    "optionalFocuses": [],
+    "mustNotFlag": ["原题已经明确刚才，不得将たかった本身判错或无依据地改为现在式", "不能在题面缺少时间线索时只凭原聊天要求过去式答案"]
+  },
+  {
+    "id": "assistant-approval-is-not-proof",
+    "learningMode": "ZH_TO_JA",
+    "markdown": "## Assistant\n有什么事就说，大家可以一起想办法。\n## User\n何があれば言って。みんなで一緒に考えましょう。\n## Assistant\n自然です。\n## Assistant\n我不知道他是不是真心的，但看起来不像在骗我。\n## User\n彼は本心であるかどうかわからないけど、だましているようには見えない。\n## Assistant\nほぼ自然です。",
+    "requiredFocuses": ["用户消息 #2：不定条件应为何かあれば，不因助手认可而漏检", "用户消息 #5：彼は本心である的述谓搭配不当，可改为彼が本気か或彼の言葉が本心か；解释要区分被判断的人与其话语、想法"],
+    "optionalFocuses": [],
+    "mustNotFlag": ["收紧判错标准不能跳过明确的助词或述谓搭配问题", "不能把两个不同问题合并成一个泛泛的表达不自然候选"]
+  },
+  {
+    "id": "natural-expression-optimization",
+    "learningMode": "ZH_TO_JA",
+    "markdown": "## Assistant\n用日语随口告诉朋友：明天可能下雨。\n## User\n明日は雨が降る可能性があるかもしれません。",
+    "requiredFocuses": ["原句语法可成立，但可能性がある与かもしれません重复表达可能性；建议明日は雨が降るかもしれません等自然说法", "说明以优化建议：开头，明确原表达可成立并说明简化重复表达的收益，severity 为 LOW", "保留原意中的可能性，生成与该表达重点相符的复习题和日语答案"],
+    "optionalFocuses": [],
+    "mustNotFlag": ["不能因原句语法成立而遗漏有具体价值的自然表达优化", "不能把可能性があるかもしれません说成语法上绝对错误，不能将优化建议设为 MEDIUM 或 HIGH", "不能将原意改成一定下雨，也不能仅因对朋友用礼貌体另设错误候选"]
+  },
+  {
+    "id": "english-expression-optimization",
+    "learningMode": "EN_TO_JA",
+    "markdown": "## Assistant\nTell a friend in Japanese: I walked to the station.\n## User\n駅まで徒歩で歩いて行きました。",
+    "requiredFocuses": ["原句可以成立，徒歩で与歩いて重复表达步行，可建议駅まで歩いて行きました以减少冗余", "名称、说明和题面使用英文，说明以 Improvement: 开头，明确原句可成立并说明减少冗余的收益，severity 为 LOW", "优化和日语参考答案保留步行、车站与过去时间关系"],
+    "optionalFocuses": [],
+    "mustNotFlag": ["不能将此类优化描述为语法错误，不能仅因使用礼貌体而额外判错", "不能为了更简短而删除步行信息或改成现在、未来时态"]
   }
 ]

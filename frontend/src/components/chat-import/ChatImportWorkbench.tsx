@@ -11,8 +11,8 @@ import { formatDateTime } from '../review/reviewPresentation'
 import { useChatImport } from './useChatImport'
 import '../../styles/chat-import.css'
 
-export default function ChatImportWorkbench({ onLeaveGuardChange, onBack, onViewCard, onSaved }: {
-  onLeaveGuardChange: LeaveGuardListener; onBack: () => void; onViewCard: (id: number) => void; onSaved: () => void
+export default function ChatImportWorkbench({ onLeaveGuardChange, onBack, onSaved }: {
+  onLeaveGuardChange: LeaveGuardListener; onBack: () => void; onSaved: () => void
 }) {
   const { english, text } = useLanguage()
   const state = useChatImport(onLeaveGuardChange, onSaved)
@@ -34,9 +34,8 @@ export default function ChatImportWorkbench({ onLeaveGuardChange, onBack, onView
   const savedCount = state.drafts.filter(draft => draft.saved).length
   const actionable = visible.filter(draft => !draft.saved)
   const allSelected = actionable.length > 0 && actionable.every(draft => draft.selected)
-  const currentResults = state.batches.at(-1)
-  const hasFeedback = Boolean(state.notice || state.uncertain || state.typesError || state.cardsError || currentResults)
-  const prompt = text(`请将本次对话精简导出为 UTF-8 Markdown，供日语纠错分析使用。
+  const hasFeedback = Boolean(state.notice || state.uncertain || state.typesError || state.cardsError)
+  const prompt = text(`请将本次对话精简导出为 UTF-8 Markdown，供日语错误与表达优化分析使用。
 
 - 完整保留包含用户本人日语表达的消息原文，不纠正、改写或因认为正确而省略；保留引用标记。
 - 保留理解用户原意必需的上下文，包括用户回复所回应的必要问题，以及 AI 针对日语表达的纠正和解释。
@@ -45,7 +44,7 @@ export default function ChatImportWorkbench({ onLeaveGuardChange, onBack, onView
 - 保持角色和消息顺序，用户消息使用独占一行的 ## User 标题，AI 消息使用 ## Assistant 标题，省略空消息。
 - 代码围栏须闭合，不给整个文件添加代码围栏。
 - 无法访问完整对话时明确说明。`,
-    `Export a condensed version of this conversation as UTF-8 Markdown for Japanese error analysis.
+    `Export a condensed version of this conversation as UTF-8 Markdown for analysis of Japanese errors and expression improvements.
 
 - Preserve verbatim every message containing the user's own Japanese, including quotation markers. Do not correct, rewrite, or omit it because it seems correct.
 - Keep context needed to understand the user's intended meaning, including questions the user is responding to when needed for context, and the AI's corrections and explanations of Japanese expressions.
@@ -74,11 +73,14 @@ export default function ChatImportWorkbench({ onLeaveGuardChange, onBack, onView
   }
 
   return <section className={`page-content chat-import-page${state.drafts.length ? ' has-analysis' : ''}`} aria-label={text('导入聊天记录', 'Import chat history')}>
-    <PageHeader eyebrow={text('复习卡片 / 聊天导入', 'Review cards / Chat import')} title={text('聊天分析', 'Chat analysis')}
-      description={text('检查 AI 识别的错误，整理后加入复习。', 'Check the AI findings and prepare them for review.')}
+    <PageHeader eyebrow={text('复习卡片 / 聊天导入', 'Review cards / Chat import')} title={state.hasAnalysis ? text('聊天分析', 'Chat analysis') : text('导入聊天记录', 'Import chat history')}
+      description={state.hasAnalysis ? text('检查 AI 识别的错误与表达优化建议，整理后加入复习。', 'Review AI findings on errors and expression improvements, then add them to your review.') : text('导入日语练习聊天，整理值得复习的表达。', 'Import a Japanese practice conversation to find expressions worth reviewing.')}
       actions={<button type="button" disabled={state.confirming} onClick={() => leave(onBack)}>{text('返回复习列表', 'Back to review cards')}</button>} />
     <ChatImportUpload file={state.file} reading={state.reading} analyzing={state.analyzing} confirming={state.confirming}
-      hasAnalysis={state.hasAnalysis} inputRef={input} onSelectFiles={state.selectFiles} onAnalyze={state.analyze} onShowPrompt={() => setShowExportPrompt(true)} />
+      hasAnalysis={state.hasAnalysis} inputRef={input} onSelectFiles={state.selectFiles} onAnalyze={state.analyze} onShowPrompt={() => setShowExportPrompt(true)}
+      summary={state.drafts.length ? text(`已选 ${selected.length} 项 · 已保存 ${savedCount} 项`, `${selected.length} selected · ${savedCount} saved`) : undefined}
+      confirmAction={state.drafts.length ? <button type="button" className="primary-button import-confirm-button" disabled={busy || !selected.length || state.typesLoading || state.cardsLoading || Boolean(state.typesError || state.cardsError)} onClick={() => void confirm()}>
+        {state.confirming ? text('正在保存…', 'Saving…') : state.typesLoading || state.cardsLoading ? text('正在加载卡片与分类…', 'Loading cards and categories…') : state.uncertain ? text(`仍要重新提交 ${selected.length} 项`, `Submit ${selected.length} items again`) : text(`确认所选 ${selected.length} 项`, `Confirm ${selected.length} selected`)}</button> : undefined} />
     {showExportPrompt ? <ChatImportSourceDialog prompt={prompt} onClose={() => setShowExportPrompt(false)} /> : null}
     {state.reading || state.analyzing ? <p className="import-progress" role="status">{state.reading ? text('正在读取文件…', 'Reading file…') : text('正在分析聊天记录，请稍候。', 'Analyzing the conversation. Please wait.')}</p> : null}
     {hasFeedback ? <div className="import-feedback">
@@ -99,24 +101,12 @@ export default function ChatImportWorkbench({ onLeaveGuardChange, onBack, onView
       </> : null}
       {state.typesError ? <StatusNotice notice={{ kind: 'error', title: text('分类加载失败', 'Could not load categories'), message: state.typesError }} actionLabel={text('重新加载分类', 'Reload categories')} onAction={state.reloadTypes} /> : null}
       {state.cardsError ? <StatusNotice notice={{ kind: 'error', title: text('卡片列表刷新失败', 'Could not refresh cards'), message: state.cardsError }} actionLabel={text('重新加载卡片', 'Reload cards')} onAction={state.reloadCards} /> : null}
-      {currentResults ? <section className="surface import-results" aria-label={text('本批次保存结果', 'Latest batch results')}>
-        <h3>{text(`本批次：新建 ${currentResults.filter(c => c.action === 'CREATED').length} · 更新 ${currentResults.filter(c => c.action === 'UPDATED').length} · 重新激活 ${currentResults.filter(c => c.action === 'REACTIVATED').length}`,
-          `Latest batch: ${currentResults.filter(c => c.action === 'CREATED').length} created · ${currentResults.filter(c => c.action === 'UPDATED').length} updated · ${currentResults.filter(c => c.action === 'REACTIVATED').length} reactivated`)}</h3>
-        <ul>{currentResults.map(card => <li key={card.cardId}><span>{state.cards.find(c => c.id === card.cardId)?.userErrorTypeName ?? text(`卡片 #${card.cardId}`, `Card #${card.cardId}`)}</span>
-          <button type="button" onClick={() => leave(() => onViewCard(card.cardId))}>{text('查看卡片', 'View card')}</button></li>)}</ul>
-      </section> : null}
     </div> : null}
-    {state.hasAnalysis && !state.drafts.length ? <div className="surface empty-state" role="status">{text('未发现明确错误。可以更换文件继续分析。', 'No clear errors found. You can analyze another file.')}</div> : null}
+    {state.hasAnalysis && !state.drafts.length ? <div className="surface empty-state" role="status">{text('未发现值得收录的错误或优化建议。可以更换文件继续分析。', 'No errors or improvements worth adding were found. You can analyze another file.')}</div> : null}
     {state.drafts.length ? <>
-      <div className="import-summary-row">
-        <div className="import-summary"><h3>{text('分析结果', 'Analysis results')} <span>{state.drafts.length}</span></h3>
-          <span role="status" aria-live="polite">{text(`已选 ${selected.length} 项 · 已保存 ${savedCount} 项`, `${selected.length} selected · ${savedCount} saved`)}</span></div>
-        <button type="button" className="primary-button import-confirm-button" disabled={busy || !selected.length || state.typesLoading || state.cardsLoading || Boolean(state.typesError || state.cardsError)} onClick={() => void confirm()}>
-          {state.confirming ? text('正在保存…', 'Saving…') : state.typesLoading || state.cardsLoading ? text('正在加载卡片与分类…', 'Loading cards and categories…') : state.uncertain ? text(`仍要重新提交 ${selected.length} 项`, `Submit ${selected.length} items again`) : text(`确认所选 ${selected.length} 项`, `Confirm ${selected.length} selected`)}</button>
-      </div>
       <div className={`import-workspace${active ? ' has-detail' : ''}`}>
         <aside className="surface import-candidate-list" aria-label={text('候选列表', 'Candidates')}>
-          <div className="import-panel-heading"><h3 id="import-list-heading" tabIndex={-1}>{text('错误候选', 'Error candidates')}</h3><span>{text(`${visible.length} 项`, `${visible.length} items`)}</span></div>
+          <div className="import-panel-heading"><h3 id="import-list-heading" tabIndex={-1}>{text('错误与优化候选', 'Error and improvement candidates')}</h3><span>{text(`${visible.length} 项`, `${visible.length} items`)}</span></div>
           <div className="import-filters">
             <label><span className="sr-only">{text('搜索候选', 'Search candidates')}</span><input type="search" placeholder={text('搜索候选…', 'Search candidates…')} value={search} onChange={event => setSearch(event.target.value)} /></label>
             <div className="import-filter-row"><label><span className="sr-only">{text('分类', 'Category')}</span><select value={category} onChange={event => setCategory(event.target.value)}>

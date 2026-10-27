@@ -3,7 +3,7 @@ import { analyzeChatImport, ChatImportRequestError, confirmChatImport } from '..
 import { getErrorMessage } from '../../api/client'
 import { useLanguage } from '../../i18n/LanguageContext'
 import type { PracticeNotice } from '../../types/api'
-import type { ChatImportCardResult, ChatImportDraft, LeaveGuardListener } from '../../types/chatImport'
+import type { ChatImportDraft, LeaveGuardListener } from '../../types/chatImport'
 import type { ErrorType } from '../../types/errorType'
 import type { ReviewCard } from '../../types/review'
 import { createImportDraft, MAX_CHAT_FILE_BYTES, toImportItem, validateImportDraft, type DraftErrors } from './chatImportModel'
@@ -26,7 +26,6 @@ export function useChatImport(onLeaveGuardChange: LeaveGuardListener, onSaved: (
   const [notice, setNotice] = useState<PracticeNotice | null>(null)
   const [validationFailed, setValidationFailed] = useState(false)
   const [uncertain, setUncertain] = useState(false)
-  const [batches, setBatches] = useState<ChatImportCardResult[][]>([])
   const [types, setTypes] = useState<ErrorType[]>([])
   const [cards, setCards] = useState<ReviewCard[]>([])
   const [typesLoading, setTypesLoading] = useState(true)
@@ -116,7 +115,6 @@ export function useChatImport(onLeaveGuardChange: LeaveGuardListener, onSaved: (
     setErrors({})
     setNotice(null)
     setUncertain(false)
-    setBatches([])
     try {
       const decoded = new TextDecoder('utf-8', { fatal: true }).decode(await next.arrayBuffer())
       if (revision === fileRevision.current && mounted.current) setPreview(decoded)
@@ -144,7 +142,6 @@ export function useChatImport(onLeaveGuardChange: LeaveGuardListener, onSaved: (
     setErrors({})
     setHasAnalysis(false)
     setActiveKey(null)
-    setBatches([])
     try {
       const result = await analyzeChatImport(file, learningMode, controller.signal)
       if (!controller.signal.aborted && mounted.current) {
@@ -197,13 +194,11 @@ export function useChatImport(onLeaveGuardChange: LeaveGuardListener, onSaved: (
     setConfirming(true)
     setNotice(null)
     try {
-      const result = await confirmChatImport({ learningMode, items: selected.map(toImportItem) })
+      await confirmChatImport({ learningMode, items: selected.map(toImportItem) })
       if (!mounted.current) return
       const saved = new Set(selected.map(draft => draft.key))
       setDrafts(current => current.map(draft => saved.has(draft.key) ? { ...draft, selected: false, saved: true } : draft))
-      setBatches(current => [...current, result.cards])
       setUncertain(false)
-      setNotice({ kind: 'info', title: text('所选内容已保存', 'Selected items saved'), message: text('未处理候选仍保留在工作区，可以继续整理。', 'Remaining candidates are retained. You can confirm another batch.') })
       onSaved()
       setCardsRevision(value => value + 1)
     } catch (error) {
@@ -220,7 +215,7 @@ export function useChatImport(onLeaveGuardChange: LeaveGuardListener, onSaved: (
   }
 
   return { file, preview, reading, analyzing, confirming, hasAnalysis, drafts, activeKey, setActiveKey, errors, notice, setNotice,
-    uncertain, batches, types, cards, typesLoading, cardsLoading, typesError, cardsError, mayLeave, selectFiles, analyze,
+    uncertain, types, cards, typesLoading, cardsLoading, typesError, cardsError, mayLeave, selectFiles, analyze,
     updateDraft, checkDraft, confirmSelected, reloadTypes: () => setTypesRevision(value => value + 1),
     reloadCards: () => setCardsRevision(value => value + 1) }
 }

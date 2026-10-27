@@ -372,7 +372,7 @@ export default function ReviewPage({ onLeaveGuardChange }: { onLeaveGuardChange:
 
   if (view === 'IMPORT') {
     return <ChatImportWorkbench onLeaveGuardChange={onLeaveGuardChange} onBack={returnToList}
-      onViewCard={viewCard} onSaved={() => setListReloadToken(value => value + 1)} />
+      onSaved={() => setListReloadToken(value => value + 1)} />
   }
 
   if (view === 'CARD_DETAIL') {

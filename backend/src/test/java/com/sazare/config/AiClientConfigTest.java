@@ -55,7 +55,7 @@ class AiClientConfigTest {
     @Test
     void aiQuestionClientShouldRejectUnsupportedProvider() {
         AiProperties properties = new AiProperties();
-        properties.setProvider("openai");
+        properties.setProvider("unsupported");
 
         assertThatThrownBy(() -> config.aiQuestionClient(
                 properties,
