@@ -102,12 +102,21 @@ sazare/
 - JDK 25
 - Node.js `^20.19.0` または `>=22.12.0`
 - Docker Compose が利用できる Docker Desktop
+- 一括起動には PowerShell 7.4 以降（`pwsh`）が必要です
 
 ### 1. リポジトリをクローン
 
 ```powershell
 git clone https://github.com/simokuzure/sazare.git
 ```
+
+### 一括起動（Windows）
+
+1. 初回は `.env.example` を `.env` にコピーし、AI キーを設定します。実際のキーがない場合は `AI_PROVIDER=mock` を使用します。
+2. `start.cmd` をダブルクリックするか、`pwsh -File .\start.ps1` を実行して全サービスを起動し、`http://localhost:5173` を開きます。
+3. `Ctrl+C` でフロントエンドとバックエンドを停止します。PostgreSQL と Redis は動作を続けます。
+
+ログは `.codex-tmp/start/` に保存されます。以下は手動起動の手順です。
 
 ### 2. PostgreSQL と Redis を起動
 

@@ -102,12 +102,21 @@ sazare/
 - JDK 25
 - Node.js `^20.19.0` or `>=22.12.0`
 - Docker Desktop with Docker Compose enabled
+- PowerShell 7.4 or newer (`pwsh`) for the one-command launcher
 
 ### 1. Clone the repository
 
 ```powershell
 git clone https://github.com/simokuzure/sazare.git
 ```
+
+### One-command startup (Windows)
+
+1. Copy `.env.example` to `.env` and fill in your AI keys. Use `AI_PROVIDER=mock` without real keys.
+2. Double-click `start.cmd`, or run `pwsh -File .\start.ps1`, to start all services. Open `http://localhost:5173`.
+3. Press `Ctrl+C` to stop the frontend and backend. PostgreSQL and Redis remain running.
+
+Logs are saved in `.codex-tmp/start/`. Manual startup steps follow.
 
 ### 2. Start PostgreSQL and Redis
 

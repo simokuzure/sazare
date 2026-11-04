@@ -103,12 +103,21 @@ sazare/
 - JDK 25
 - Node.js `^20.19.0` 或 `>=22.12.0`
 - Docker Desktop，并启用 Docker Compose
+- 一条命令启动需要 PowerShell 7.4 或更新版本（`pwsh`）
 
 ### 1. 获取代码
 
 ```powershell
 git clone https://github.com/simokuzure/sazare.git
 ```
+
+### 一键启动（Windows）
+
+1. 首次复制 `.env.example` 为 `.env`，填写 AI 密钥；无密钥时可设 `AI_PROVIDER=mock`。
+2. 双击 `start.cmd`，或执行 `pwsh -File .\start.ps1`，自动启动全部服务。访问 `http://localhost:5173`。
+3. 按 `Ctrl+C` 停止前后端；PostgreSQL 和 Redis 保留运行。
+
+日志位于 `.codex-tmp/start/`。以下为手动启动步骤。
 
 ### 2. 启动 PostgreSQL 和 Redis
 
