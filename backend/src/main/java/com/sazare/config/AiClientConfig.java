@@ -6,6 +6,7 @@ import com.sazare.service.ai.client.GoogleAiChatImportClient;
 import com.sazare.service.ai.client.MockAiChatImportClient;
 import com.sazare.service.ai.AiSpeechTranscriptionClient;
 import com.sazare.service.ai.client.GoogleAiSpeechTranscriptionClient;
+import com.sazare.service.ai.client.GoogleAiLiveSessionClient;
 import com.sazare.service.ai.client.MockAiSpeechTranscriptionClient;
 import com.sazare.service.ai.AiEmbeddingClient;
 import com.sazare.service.ai.AiAnswerScoringClient;
@@ -62,6 +63,12 @@ public class AiClientConfig {
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
         return new JavaAiProviderHttpClient(httpClient, aiProperties.getRequestTimeout());
+    }
+
+    @Bean
+    public GoogleAiLiveSessionClient googleAiLiveSessionClient(
+            AiProperties properties, ObjectMapper mapper, AiProviderHttpClient http) {
+        return new GoogleAiLiveSessionClient(properties.getProviders().getGoogle(), mapper, http);
     }
 
     @Bean

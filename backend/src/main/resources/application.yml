@@ -24,6 +24,7 @@ dictionary-cache:
 
 ai:
   provider: ${AI_PROVIDER:google}
+  speech-transcription-mode: ${SPEECH_TRANSCRIPTION_MODE:live}
   request-timeout: ${AI_REQUEST_TIMEOUT:300s}
   providers:
     openai:
@@ -32,7 +33,9 @@ ai:
       base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
     google:
       model: ${GOOGLE_AI_MODEL:gemini-3.8-flash}
+      # file 模式使用 transcription-model；live 模式使用 live-transcription-model。
       transcription-model: ${GOOGLE_AI_TRANSCRIPTION_MODEL:gemini-3.5-transcribe}
+      live-transcription-model: ${GOOGLE_AI_LIVE_TRANSCRIPTION_MODEL:gemini-3.5-transcribe-live}
       embedding-model: ${GOOGLE_AI_EMBEDDING_MODEL:gemini-embedding-001}
       api-key: ${GOOGLE_AI_API_KEY:}
       base-url: ${GOOGLE_AI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}

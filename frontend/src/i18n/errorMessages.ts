@@ -2,6 +2,14 @@ export const REQUEST_FAILED_EN = 'The request could not be completed. Please try
 
 // API 目前返回中文 message；集中适配显示文案，避免各页面遗漏或丢失校验细节。
 const ERROR_MESSAGES: Record<string, string> = {
+  '语音输入配置格式错误，请检查后端配置': 'Invalid speech input configuration. Check the backend configuration.',
+  '当前配置为文件转写，请重新开始录音': 'File transcription is configured. Please start recording again.',
+  '录音失败，请检查麦克风后重试。': 'Recording failed. Check your microphone and try again.',
+  '实时语音转写连接失败，请检查网络或稍后重试': 'Live transcription connection failed. Check your network or try again later.',
+  '实时语音转写超时，请重新录音': 'Live transcription timed out. Please record again.',
+  '语音转写会话创建失败，请检查 Google 配置或稍后重试': 'Could not create a transcription session. Check the Google configuration or try again later.',
+  '语音转写会话响应格式错误': 'The transcription session response has an invalid format.',
+  'Google AI 实时转写模型未配置': 'The Google live transcription model is not configured.',
   '参数错误': 'Invalid request parameters.',
   '请求参数不合法': 'Invalid request parameters.',
   '业务处理失败': REQUEST_FAILED_EN,

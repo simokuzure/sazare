@@ -8,8 +8,22 @@ import java.time.Duration;
 public class AiProperties {
 
     private String provider = "google";
+    private SpeechTranscriptionMode speechTranscriptionMode = SpeechTranscriptionMode.LIVE;
     private Duration requestTimeout = Duration.ofSeconds(300);
     private Providers providers = new Providers();
+
+    public enum SpeechTranscriptionMode { LIVE, FILE }
+
+    public SpeechTranscriptionMode getSpeechTranscriptionMode() {
+        return speechTranscriptionMode;
+    }
+
+    public void setSpeechTranscriptionMode(SpeechTranscriptionMode speechTranscriptionMode) {
+        if (speechTranscriptionMode == null) {
+            throw new IllegalArgumentException("语音转写模式只能是 live 或 file");
+        }
+        this.speechTranscriptionMode = speechTranscriptionMode;
+    }
 
     public String getProvider() {
         return provider;
@@ -92,6 +106,7 @@ public class AiProperties {
 
         private String model = "gemini-3.6-flash";
         private String transcriptionModel = "gemini-3.5-transcribe";
+        private String liveTranscriptionModel = "gemini-3.5-transcribe-live";
         private String embeddingModel = "gemini-embedding-001";
         private String apiKey = "";
         private String baseUrl = "https://generativelanguage.googleapis.com/v1beta";
@@ -108,6 +123,14 @@ public class AiProperties {
 
         public String getTranscriptionModel() {
             return transcriptionModel;
+        }
+
+        public String getLiveTranscriptionModel() {
+            return liveTranscriptionModel;
+        }
+
+        public void setLiveTranscriptionModel(String liveTranscriptionModel) {
+            this.liveTranscriptionModel = liveTranscriptionModel;
         }
 
         public void setTranscriptionModel(String transcriptionModel) {

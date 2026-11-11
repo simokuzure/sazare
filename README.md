@@ -171,6 +171,8 @@ $env:OPENAI_MODEL = "gpt-6.1-sol"
 
 OpenAI handles text features; speech transcription and embeddings still use Google. Question generation uses embedding-based deduplication and also requires `GOOGLE_AI_API_KEY`.
 
+For voice input, set `SPEECH_TRANSCRIPTION_MODE` in `.env` to `live` (default, streaming) or `file` (upload after recording). See [`.env.example`](.env.example) for model settings.
+
 `AI_PROVIDER` defaults to `google`; use `mock` for mock implementations. Restart the backend after configuration changes. Keep API keys in the backend environment and out of version control.
 
 ### 5. Start the backend

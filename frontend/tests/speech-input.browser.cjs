@@ -4,6 +4,8 @@ const assert = require('node:assert/strict')
 const http = require('node:http')
 const fs = require('node:fs/promises')
 const path = require('node:path')
+const speechMode = process.env.SPEECH_TEST_MODE || 'live'
+assert.ok(['live', 'file'].includes(speechMode))
 
 const dist = path.resolve(__dirname, '../dist')
 const server = http.createServer(async (req, res) => {
@@ -31,11 +33,13 @@ async function main() {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   const browser = await chromium.launch({ channel: process.env.SPEECH_TEST_BROWSER || 'chrome', headless: true })
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } })
+  page.setDefaultTimeout(60_000)
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   let unexpectedPosts = 0
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url())
+    if (!url.pathname.startsWith('/api/')) { await route.continue(); return }
     if (route.request().method() !== 'GET') unexpectedPosts++
     let data = { items: [], total: 0, page: 1, size: 20 }
     if (url.pathname === '/api/questions/random') data = [question(1), question(2)]
@@ -43,9 +47,12 @@ async function main() {
     if (url.pathname === '/api/review-cards/1') data = card
     await route.fulfill({ json: { code: 0, message: 'success', data } })
   })
-  await page.addInitScript(() => {
+  await page.addInitScript((mode) => {
+    const NativeWebSocket = window.WebSocket
     const state = window.__voice = { streams: [], requests: 0, transcript: '今日は日本語を勉強します。',
-      permission: 'allow', pending: [], defer: false, fail: false, empty: false, supported: true, NativeRecorder: window.MediaRecorder }
+      mode, configRequests: 0, fileRequests: 0, sessionRequests: 0,
+      permission: 'allow', pending: [], defer: false, fail: false, empty: false, supported: true,
+      NativeAudioContext: window.AudioContext, NativeAudioWorkletNode: window.AudioWorkletNode, sockets: [] }
     const stream = () => {
       const track = { stopped: false, stop() { this.stopped = true } }
       state.streams.push(track)
@@ -58,6 +65,24 @@ async function main() {
         return stream()
       },
     } })
+    window.AudioContext = class {
+      audioWorklet = { addModule: async () => { if (!state.supported) throw new Error('录音失败，请检查麦克风后重试。') } }
+      destination = {}
+      async resume() {}
+      async close() { this.closed = true }
+      createMediaStreamSource() { return { connect() {}, disconnect() {} } }
+    }
+    window.AudioWorkletNode = class {
+      constructor() {
+        state.recorder = this
+        this.port = { onmessage: null, postMessage: () => queueMicrotask(() => {
+          if (!state.empty) this.port.onmessage?.({ data: new ArrayBuffer(3200) })
+          this.port.onmessage?.({ data: 'flushed' })
+        }) }
+      }
+      connect() { if (!state.empty) this.port.onmessage?.({ data: new ArrayBuffer(3200) }) }
+      disconnect() {}
+    }
     window.MediaRecorder = class {
       static isTypeSupported() { return state.supported }
       constructor(_stream, options) { this.mimeType = options.mimeType; this.state = 'inactive'; state.recorder = this }
@@ -71,20 +96,74 @@ async function main() {
         })
       }
     }
+    window.WebSocket = class {
+      static OPEN = 1
+      readyState = 1
+      bufferedAmount = 0
+      constructor(url, protocols) {
+        if (!String(url).startsWith('wss://generativelanguage.googleapis.com/')) return new NativeWebSocket(url, protocols)
+        state.sockets.push(this)
+        state.lastUrl = String(url)
+        queueMicrotask(() => this.onopen?.())
+      }
+      emit(message) { this.onmessage?.({ data: JSON.stringify(message) }) }
+      send(raw) {
+        const message = JSON.parse(raw)
+        if (message.setup) {
+          state.lastSetup = message.setup
+          queueMicrotask(() => this.emit({ setupComplete: {} }))
+        }
+        if (message.realtimeInput?.audio) {
+          state.lastType = message.realtimeInput.audio.mimeType
+          state.lastBlob = atob(message.realtimeInput.audio.data).length === 3200
+        }
+        if (message.realtimeInput?.activityEnd) {
+          const finish = () => {
+            if (state.fail) { this.onerror?.(); return }
+            this.emit({ serverContent: { interimInputTranscription: { text: 'ignore interim' },
+              modelTurn: { parts: [{ text: 'ignore generated text' }] } } })
+            this.emit({ serverContent: { generationComplete: true } })
+            this.emit({ serverContent: { inputTranscription: { text: state.empty ? '' : state.transcript.slice(0, 4), finished: false } } })
+            this.emit({ serverContent: { inputTranscription: { text: state.empty ? '' : state.transcript.slice(4) } } })
+          }
+          if (state.defer) state.pending.push(finish)
+          else queueMicrotask(finish)
+        }
+      }
+      close() { this.readyState = 3 }
+    }
     const fetchOriginal = window.fetch.bind(window)
     window.fetch = async (url, options) => {
-      if (url !== '/api/speech-transcriptions') return fetchOriginal(url, options)
+      if (url === '/api/speech-transcription-config') {
+        state.configRequests++
+        state.configCache = options.cache
+        if (state.deferConfig) await new Promise(resolve => state.pending.push(resolve))
+        return new Response(JSON.stringify({ code: 0, message: 'success', data: {
+          mode: state.mode, model: state.mode === 'live' ? 'gemini-3.5-transcribe-live' : 'gemini-3.5-transcribe',
+        } }), { headers: { 'Content-Type': 'application/json' } })
+      }
+      if (url === '/api/speech-transcriptions') {
+        state.fileRequests++
+        state.lastType = options.headers['Content-Type']
+        state.lastBlob = options.body instanceof Blob
+        if (state.defer) await new Promise(resolve => state.pending.push(resolve))
+        if (state.fail) throw new TypeError('network failed')
+        return new Response(JSON.stringify({ code: 0, message: 'success', data: { text: state.transcript } }), {
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url !== '/api/speech-transcription-sessions') return fetchOriginal(url, options)
       state.requests++
-      state.lastType = options.headers['Content-Type']
-      state.lastBlob = options.body instanceof Blob
-      if (state.defer) await new Promise(resolve => state.pending.push(resolve))
-      if (state.fail) throw new TypeError('network failed')
-      return new Response(JSON.stringify({ code: 0, message: 'success', data: { text: state.transcript } }), {
+      state.sessionRequests++
+      return new Response(JSON.stringify({ code: 0, message: 'success', data: {
+        token: 'auth_tokens/test', websocketUrl: 'wss://generativelanguage.googleapis.com/test',
+        setup: { model: 'models/gemini-3.5-transcribe-live' }, mock: false,
+      } }), {
         headers: { 'Content-Type': 'application/json' },
       })
     }
-  })
-  const url = `http://127.0.0.1:${server.address().port}`
+  }, speechMode)
+  const url = process.env.SPEECH_TEST_ORIGIN || `http://127.0.0.1:${server.address().port}`
   const speech = () => page.locator('.speech-input:visible')
   const input = () => page.locator('textarea:visible').filter({ hasNot: page.locator('.speech-input-draft') }).first()
   const voice = () => speech().getByRole('button', { name: /^(语音输入|Voice input)$/ })
@@ -93,9 +172,9 @@ async function main() {
   const waitValue = value => page.waitForFunction(value => document.querySelector('textarea:not([hidden])') !== null
     && [...document.querySelectorAll('textarea')].some(el => el.checkVisibility() && el.value === value), value)
   const tracksStopped = async () => assert.equal(await page.evaluate(() => window.__voice.streams.every(track => track.stopped)), true)
-  const check = title => console.log(`PASS ${title}`)
+  const check = title => console.log(`PASS [${speechMode}] ${title}`)
   try {
-    await page.goto(url)
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120_000 })
     for (const direction of ['ZH_TO_JA', 'EN_TO_JA']) {
       await page.locator('.language-select select').selectOption(direction)
       for (const mode of ['sentence', 'article', 'correction', 'review']) {
@@ -187,15 +266,19 @@ async function main() {
     await tracksStopped()
     await page.evaluate(() => { window.__voice.fail = false; window.__voice.empty = true })
     await voice().click(); await stop().click()
-    await speech().getByRole('status').filter({ hasText: /empty|为空/ }).waitFor()
+    await speech().getByRole('status').filter({ hasText: /未识别|No speech|empty|为空/ }).waitFor()
     await page.evaluate(() => { window.__voice.empty = false; window.__voice.supported = false })
     await voice().click()
-    await speech().getByRole('status').filter({ hasText: /format|格式/ }).waitFor()
+    await speech().getByRole('status').filter({ hasText: /failed|失败|format|格式/ }).waitFor()
     await page.evaluate(() => { window.__voice.supported = true })
-    check('permission, network, empty recording, unsupported format errors recover')
+    check('permission, network, empty recording and worklet errors recover')
 
     await voice().click(); await stop().waitFor()
-    await page.evaluate(() => window.__voice.recorder.ondataavailable({ data: new Blob([new Uint8Array(8 * 1024 * 1024 + 1)]) }))
+    await page.evaluate(() => {
+      const state = window.__voice
+      if (state.mode === 'live') state.recorder.port.onmessage({ data: new ArrayBuffer(8 * 1024 * 1024 + 1) })
+      else state.recorder.ondataavailable({ data: new Blob([new Uint8Array(8 * 1024 * 1024 + 1)]) })
+    })
     await speech().getByRole('status').filter({ hasText: /8 MiB/ }).waitFor(); await tracksStopped()
     await voice().click(); await stop().waitFor()
     await page.evaluate(() => { window.__originalNow = Date.now; Date.now = () => window.__originalNow() + 61000 })
@@ -226,39 +309,97 @@ async function main() {
 
     await page.locator('#correction-practice-tab').click()
     await voice().click(); await stop().waitFor()
-    await page.evaluate(() => window.__voice.recorder.onerror())
+    await page.evaluate(() => {
+      const state = window.__voice
+      if (state.mode === 'live') state.recorder.onprocessorerror()
+      else state.recorder.onerror()
+    })
     await speech().getByRole('status').filter({ hasText: /失败|failed/ }).waitFor()
     await tracksStopped()
     await page.evaluate(() => { window.__voice.transcript = ' ' })
     await voice().click(); await stop().click()
-    await speech().getByRole('status').filter({ hasText: /未识别|failed/ }).waitFor()
+    await speech().getByRole('status').filter({ hasText: /未识别|No speech/ }).waitFor()
     await page.evaluate(() => { window.__voice.transcript = '今日は日本語を勉強します。' })
     await voice().click(); await stop().waitFor()
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')))
     await tracksStopped()
     check('recorder error, no recognized speech and pagehide release resources')
 
-    const nativeAudio = await page.evaluate(async () => {
-      const Recorder = window.__voice.NativeRecorder
-      const mimeType = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus'].find(type => Recorder.isTypeSupported(type))
-      if (!mimeType) return { supported: false }
-      const audio = new AudioContext()
-      const destination = audio.createMediaStreamDestination()
+    const routing = await page.evaluate(() => ({ file: window.__voice.fileRequests, live: window.__voice.sessionRequests }))
+    assert.equal(speechMode === 'file' ? routing.live : routing.file, 0)
+    if (speechMode === 'file') {
+      await page.evaluate(() => {
+        window.__voice.savedAudioContext = window.AudioContext
+        window.__voice.savedAudioWorkletNode = window.AudioWorkletNode
+        window.AudioContext = undefined
+        window.AudioWorkletNode = undefined
+      })
+      await voice().click(); await stop().click(); await voice().waitFor()
+      await tracksStopped()
+      await page.evaluate(() => {
+        window.AudioContext = window.__voice.savedAudioContext
+        window.AudioWorkletNode = window.__voice.savedAudioWorkletNode
+      })
+      check('file mode works without AudioContext or AudioWorklet support')
+    }
+    for (const mode of [speechMode === 'file' ? 'live' : 'file', speechMode]) {
+      await page.evaluate(mode => { window.__voice.mode = mode }, mode)
+      const original = await input().inputValue()
+      await voice().click(); await stop().click()
+      await waitValue(original ? `${original}\n今日は日本語を勉強します。` : '今日は日本語を勉強します。')
+      await tracksStopped()
+    }
+    await page.evaluate(() => { window.__voice.mode = 'invalid' })
+    await voice().click()
+    await speech().getByRole('status').filter({ hasText: /配置|configuration/ }).waitFor()
+    await tracksStopped()
+    await page.evaluate(mode => { window.__voice.mode = mode }, speechMode)
+    assert.equal(await page.evaluate(() => window.__voice.configCache), 'no-store')
+    check('fresh backend configuration switches modes without rebuilding; invalid configuration releases microphone')
+
+    await page.evaluate(() => { window.__voice.deferConfig = true })
+    await voice().click()
+    await page.waitForFunction(() => window.__voice.pending.length === 1)
+    await cancel().click()
+    await page.evaluate(() => { window.__voice.pending.shift()(); window.__voice.deferConfig = false })
+    await tracksStopped()
+    await voice().click(); await stop().click(); await voice().waitFor()
+    check('late configuration after cancellation cannot restart recording')
+
+    const nativeAudio = await page.evaluate(async (development) => {
+      const audio = new window.__voice.NativeAudioContext({ sampleRate: 16000 })
+      let workletPath = '/src/audio/pcm-recorder.worklet.js'
+      if (!development) {
+        const assets = await (await fetch('/')).text()
+        const entry = assets.match(/src="([^"]+\.js)"/)[1]
+        const code = await (await fetch(entry)).text()
+        workletPath = code.match(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/)?.[0]
+          ?? code.match(/\/assets\/pcm-recorder\.worklet[^"'` ]+\.js/)[0]
+      }
+      await audio.audioWorklet.addModule(workletPath)
+      const recorder = new window.__voice.NativeAudioWorkletNode(audio, 'pcm-recorder')
       const oscillator = audio.createOscillator()
-      oscillator.connect(destination); oscillator.start()
-      const recorder = new Recorder(destination.stream, { mimeType })
+      oscillator.connect(recorder); recorder.connect(audio.destination); oscillator.start()
       let size = 0
-      recorder.ondataavailable = event => { size += event.data.size }
-      const stopped = new Promise(resolve => { recorder.onstop = resolve })
-      recorder.start()
-      await new Promise(resolve => setTimeout(resolve, 300))
-      recorder.stop(); await stopped
-      oscillator.stop(); destination.stream.getTracks().forEach(track => track.stop()); await audio.close()
-      return { supported: true, size, mimeType }
-    })
+      const captured = new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error(`No PCM received: state=${audio.state}, rate=${audio.sampleRate}`)), 8000)
+        recorder.onprocessorerror = () => { clearTimeout(timeout); reject(new Error('Native AudioWorklet failed')) }
+        recorder.port.onmessage = event => {
+          if (event.data instanceof ArrayBuffer) {
+            size += event.data.byteLength
+            clearTimeout(timeout)
+            resolve()
+          }
+        }
+      })
+      await audio.resume()
+      await captured
+      oscillator.stop(); oscillator.disconnect(); recorder.disconnect(); await audio.close()
+      return { supported: true, size }
+    }, !!process.env.SPEECH_TEST_ORIGIN)
     assert.equal(nativeAudio.supported, true)
     assert.ok(nativeAudio.size > 0)
-    check('native MediaRecorder encodes synthetic audio in a supported format without files')
+    check('native AudioWorklet produces PCM from synthetic audio without microphone or files')
 
     await page.setViewportSize({ width: 390, height: 844 })
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true)
@@ -266,8 +407,15 @@ async function main() {
     assert.equal(unexpectedPosts, 0)
     assert.deepEqual(errors, [])
     assert.equal(await page.evaluate(() => window.__voice.lastBlob), true)
-    assert.match(await page.evaluate(() => window.__voice.lastType), /audio\/webm/)
+    const lastType = await page.evaluate(() => window.__voice.lastType)
+    if (speechMode === 'live') assert.equal(lastType, 'audio/pcm;rate=16000')
+    else assert.match(lastType, /^audio\/webm/)
+    assert.ok(await page.evaluate(() => window.__voice.sockets.every(socket => socket.readyState === 3)))
+    assert.match(await page.evaluate(() => window.__voice.lastUrl), /access_token=auth_tokens%2Ftest/)
     check('narrow viewport, no automatic scoring, no runtime errors, binary request')
+  } catch (error) {
+    console.error({ pageErrors: errors, body: (await page.locator('body').innerText()).slice(0, 2000) })
+    throw error
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)) }
 }
 main().catch(error => { console.error(error); server.close(); process.exitCode = 1 })

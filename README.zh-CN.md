@@ -172,6 +172,8 @@ $env:OPENAI_MODEL = "gpt-6.1-sol"
 
 OpenAI 用于文本功能；语音转写和向量生成仍使用 Google。出题包含向量去重，需同时配置 `GOOGLE_AI_API_KEY`。
 
+语音输入通过 `.env` 中的 `SPEECH_TRANSCRIPTION_MODE` 切换：`live` 为实时转写（默认），`file` 为录音结束后上传。模型配置见 [`.env.example`](.env.example)。
+
 `AI_PROVIDER` 默认为 `google`，设为 `mock` 可使用模拟实现。修改配置后重启后端；密钥仅存于后端环境，不提交到仓库。
 
 ### 5. 启动后端

@@ -35,6 +35,27 @@ class OpenAiClientConfigTest {
             .withUserConfiguration(TestAiClientConfig.class, MapperConfig.class);
 
     @Test
+    void bindsLowercaseSpeechModeAndRejectsUnknownValues() {
+        contextRunner.withPropertyValues("ai.speech-transcription-mode=file").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context.getBean(AiProperties.class).getSpeechTranscriptionMode())
+                    .isEqualTo(AiProperties.SpeechTranscriptionMode.FILE);
+        });
+        contextRunner.withPropertyValues("ai.speech-transcription-mode=live").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context.getBean(AiProperties.class).getSpeechTranscriptionMode())
+                    .isEqualTo(AiProperties.SpeechTranscriptionMode.LIVE);
+        });
+        contextRunner.withPropertyValues("ai.speech-transcription-mode=").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context.getBean(AiProperties.class).getSpeechTranscriptionMode())
+                    .isEqualTo(AiProperties.SpeechTranscriptionMode.LIVE);
+        });
+        contextRunner.withPropertyValues("ai.speech-transcription-mode=invalid").run(context ->
+                assertThat(context).hasFailed());
+    }
+
+    @Test
     void routesOnlyTextToOpenAiAndBindsProperties() {
         contextRunner.withPropertyValues(
                 "ai.provider= OpenAI ",

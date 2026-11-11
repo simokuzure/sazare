@@ -30,7 +30,7 @@ function Read-BackendEnvironment([string] $Path) {
         }
         $name = $Matches.name
         $value = $Matches.value.Trim()
-        if ($name -notmatch '^(AI_|OPENAI_|GOOGLE_AI_)') {
+        if ($name -notmatch '^(AI_|OPENAI_|GOOGLE_AI_)' -and $name -ne 'SPEECH_TRANSCRIPTION_MODE') {
             throw ".env 第 $lineNumber 行不是受支持的 AI 配置项。"
         }
         if ($value.StartsWith('"') -or $value.StartsWith("'")) {
