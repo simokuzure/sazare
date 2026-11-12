@@ -12,7 +12,17 @@
 
     <sql id="cardColumns">
         id, user_id, user_error_type_id, status, ease_factor, repetition_count,
-        interval_days, lapse_count, due_at, last_reviewed_at, mastered_at, deleted, created_at, updated_at
+        interval_days, lapse_count, due_at, last_reviewed_at, mastered_at, deleted, created_at, updated_at,
+        fsrs_stability, fsrs_difficulty
+    </sql>
+
+    <sql id="dueFilter">
+        <if test="dueOnly">
+            and card.due_at &lt;= #{now}
+        </if>
+        <if test="waitingOnly">
+            and card.due_at &gt; #{now}
+        </if>
     </sql>
 
     <select id="countCards" resultType="long">
@@ -25,9 +35,7 @@
           and card.deleted = false
           and card.status = #{status}
           and user_error_type.learning_mode = #{learningMode}
-        <if test="dueOnly">
-            and card.due_at &lt;= #{now}
-        </if>
+        <include refid="dueFilter" />
     </select>
 
     <select id="selectCardList" resultType="com.sazare.dto.ReviewCardListRow">
@@ -74,10 +82,18 @@
           and user_error_type.status = 'ACTIVE'
           and card.status = #{status}
           and user_error_type.learning_mode = #{learningMode}
-        <if test="dueOnly">
-            and card.due_at &lt;= #{now}
-        </if>
-        order by card.due_at asc nulls last, card.updated_at desc, card.id desc
+        <include refid="dueFilter" />
+        <choose>
+            <when test="status == 'MASTERED'">
+                order by card.mastered_at desc nulls last, card.id desc
+            </when>
+            <when test="dueOnly">
+                order by card.due_at asc, coalesce(cycle.failed_review_count, 0) desc, card.id asc
+            </when>
+            <otherwise>
+                order by card.due_at asc nulls last, card.id asc
+            </otherwise>
+        </choose>
         limit #{limit}
         offset #{offset}
     </select>
@@ -121,6 +137,12 @@
         where id = #{id}
           and user_id = #{userId}
           and deleted = false
+    </update>
+
+    <update id="updateMemoryState">
+        update review_cards
+        set fsrs_stability = #{stability}, fsrs_difficulty = #{difficulty}
+        where id = #{id} and deleted = false
     </update>
 
     <update id="updateSchedule">

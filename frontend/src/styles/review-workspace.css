@@ -71,6 +71,25 @@
   height: 7px;
 }
 
+.review-cycle-target {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0 14px 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.review-cycle-summary.has-fsrs {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.review-cycle-summary.has-fsrs .review-cycle-schedule {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  border-top: 1px solid var(--border);
+  padding: 8px 14px;
+}
+
 .review-cycle-schedule {
   display: flex;
   min-width: 0;

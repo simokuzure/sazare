@@ -34,7 +34,7 @@ public class ReviewAttempt {
     /** 本次结果：PASS或FAIL。 */
     private String result;
 
-    /** SM-2质量分，范围0到5。 */
+    /** 业务质量分，范围0到5；保留原字段名称以兼容历史。 */
     private Integer sm2Quality;
 
     /** 本次回答是否掌握复习重点。 */
@@ -51,6 +51,12 @@ public class ReviewAttempt {
 
     /** 处理本次事件后的复习间隔天数。 */
     private Integer intervalDaysAfter;
+
+    private Integer fsrsRating;
+
+    private Double fsrsStabilityAfter;
+
+    private Double fsrsDifficultyAfter;
 
     /** 处理本次事件后的周期累计成功次数。 */
     private Integer cycleSuccessCountAfter;

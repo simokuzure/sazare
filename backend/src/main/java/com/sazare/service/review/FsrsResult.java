@@ -2,10 +2,13 @@ package com.sazare.service.review;
 
 import java.math.BigDecimal;
 
-public record Sm2Result(
+public record FsrsResult(
         BigDecimal easeFactor,
         int repetitionCount,
         int intervalDays,
-        int lapseCount
+        int lapseCount,
+        double stability,
+        double difficulty,
+        int rating
 ) {
 }

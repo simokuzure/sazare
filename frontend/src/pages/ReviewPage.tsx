@@ -22,7 +22,7 @@ import {
   ReviewDetailView,
   ReviewResultView,
 } from '../components/review/ReviewViews'
-import { dueText, emptyListText, formatDateTime, isDue, listModeLabel } from '../components/review/reviewPresentation'
+import { dueText, emptyListText, formatDateTime, isDue, listModeDescription, listModeLabel } from '../components/review/reviewPresentation'
 import type { PageData, PracticeNotice } from '../types/api'
 import type {
   ReviewAttemptResult,
@@ -448,11 +448,11 @@ export default function ReviewPage({ onLeaveGuardChange }: { onLeaveGuardChange:
   return <section className="page-content target-page review-page" aria-label={text('复习卡片', 'Review cards')}>
     <PageHeader
       title={text('复习卡片', 'Review cards')}
-      description={text('按复习重点聚合的间隔复习计划，跟踪周期进度、待重试与下次到期时间。', 'Review cards organized by learning focus, with progress, retries, and due dates.')}
+      description={listModeDescription(filters.mode, text)}
       actions={<><button type="button" onClick={() => setView('IMPORT')}>{text('导入聊天记录', 'Import chat history')}</button><div className="segmented-control review-list-modes" aria-label={text('复习卡片视图', 'Review card view')}>
-          {(['DUE', 'ACTIVE', 'MASTERED'] as const).map((mode) => (
+          {(['DUE', 'WAITING', 'MASTERED'] as const).map((mode) => (
             <button key={mode} type="button" className={filters.mode === mode ? 'is-selected' : ''} onClick={() => changeMode(mode)}>
-              {text(listModeLabel(mode), mode === 'DUE' ? 'Due' : mode === 'ACTIVE' ? 'Active' : 'Mastered')}
+              {text(listModeLabel(mode), mode === 'DUE' ? 'Due' : mode === 'WAITING' ? 'In progress' : 'Mastered')}
             </button>
           ))}
         </div></>}
@@ -479,7 +479,7 @@ export default function ReviewPage({ onLeaveGuardChange }: { onLeaveGuardChange:
               <td data-label={text('原题', 'Original')}>{card.progress.originalPassedCount} / {card.progress.originalQuestionCount}</td>
               <td data-label={text('待重试', 'Retries')}>{card.progress.retryQuestionCount}</td>
               <td data-label={text('最近活动', 'Latest activity')}>{formatDateTime(card.status === 'MASTERED' ? card.masteredAt : card.lastReviewedAt)}</td>
-              <td data-label={text('操作', 'Actions')}><div className="review-card-actions"><button type="button" className="compact-button" disabled={deleting} onClick={() => viewCard(card.id)}>{text('查看', 'View')}</button>{due ? <button type="button" className="primary-button compact-button" disabled={deleting} onClick={() => startReview(card.id)}>{text('开始复习', 'Start review')}</button> : filters.mode === 'ACTIVE' ? <button type="button" className="primary-button compact-button" disabled={deleting} onClick={() => startEarlyReview(card.id)}>{text('提前复习', 'Review early')}</button> : null}<button type="button" className="danger-button compact-button" disabled={deleting} onClick={() => void deleteCard(card.id, card.userErrorTypeName, false)}>{deleting ? text('删除中', 'Deleting') : text('删除', 'Delete')}</button></div></td>
+              <td data-label={text('操作', 'Actions')}><div className="review-card-actions"><button type="button" className="compact-button" disabled={deleting} onClick={() => viewCard(card.id)}>{text('查看', 'View')}</button>{due ? <button type="button" className="primary-button compact-button" disabled={deleting} onClick={() => startReview(card.id)}>{text('开始复习', 'Start review')}</button> : filters.mode === 'WAITING' ? <button type="button" className="primary-button compact-button" disabled={deleting} onClick={() => startEarlyReview(card.id)}>{text('提前复习', 'Review early')}</button> : null}<button type="button" className="danger-button compact-button" disabled={deleting} onClick={() => void deleteCard(card.id, card.userErrorTypeName, false)}>{deleting ? text('删除中', 'Deleting') : text('删除', 'Delete')}</button></div></td>
             </tr>
           })}</tbody>
         </table>

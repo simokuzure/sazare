@@ -28,7 +28,7 @@ public class ReviewCard {
     /** 当前连续成功次数，失败时归零。 */
     private Integer repetitionCount;
 
-    /** 当前SM-2复习间隔天数。 */
+    /** 当前复习间隔天数。 */
     private Integer intervalDays;
 
     /** 累计失败次数。 */
@@ -37,7 +37,13 @@ public class ReviewCard {
     /** 下次应复习时间，已掌握时为空。 */
     private LocalDateTime dueAt;
 
-    /** 最近一次影响SM-2状态的时间。 */
+    /** FSRS记忆稳定性，单位为天；旧卡片首次新事件时初始化。 */
+    private Double fsrsStability;
+
+    /** FSRS记忆难度，范围1到10。 */
+    private Double fsrsDifficulty;
+
+    /** 最近一次影响调度状态的时间。 */
     private LocalDateTime lastReviewedAt;
 
     /** 最近一次完成周期的时间，激活时为空。 */

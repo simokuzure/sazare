@@ -23,6 +23,10 @@ public record ReviewCardDetailVO(
         String reviewState,
         ReviewCycleProgressVO progress,
         ReviewQuestionVO currentQuestion,
-        List<ReviewAttemptHistoryVO> reviewAttempts
+        List<ReviewAttemptHistoryVO> reviewAttempts,
+        String schedulingAlgorithm,
+        Double fsrsStability,
+        Double fsrsDifficulty,
+        Double desiredRetention
 ) {
 }

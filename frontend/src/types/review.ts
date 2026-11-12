@@ -103,6 +103,8 @@ export type ReviewCycleProgress = {
   failedReviewCount: number
   netSuccessCount: number
   targetSuccessCount: number
+  baseTargetSuccessCount?: number
+  extraTargetSuccessCount?: number
   originalQuestionCount: number
   originalPassedCount: number
   retryQuestionCount: number
@@ -163,6 +165,10 @@ export type ReviewCardDetail = {
   errorTypeName: string
   status: ReviewCardStatus
   easeFactor: number
+  schedulingAlgorithm?: 'SM2' | 'FSRS6'
+  fsrsStability?: number | null
+  fsrsDifficulty?: number | null
+  desiredRetention?: number
   repetitionCount: number
   intervalDays: number
   lapseCount: number
@@ -197,7 +203,7 @@ export type ReviewAttemptResult = {
   derivedGenerationStatus: DerivedGenerationStatus
 }
 
-export type ReviewCardListMode = 'DUE' | 'ACTIVE' | 'MASTERED'
+export type ReviewCardListMode = 'DUE' | 'WAITING' | 'ACTIVE' | 'MASTERED'
 
 export type ReviewCardFilterState = {
   learningMode?: 'ZH_TO_JA' | 'EN_TO_JA'

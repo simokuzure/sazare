@@ -118,6 +118,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   '已掌握卡片不能生成衍生题': 'Derived questions cannot be generated for mastered cards.',
   '当前周期不需要生成衍生题': 'The current cycle does not need a derived question.',
   '复习周期已变化，当前不需要生成衍生题': 'The review cycle has changed and no derived question is currently needed.',
+  '复习周期已变化，请重新开始复习': 'The review cycle has changed. Please start the review again.',
   '复习卡片归属不合法': 'The review card does not belong to the current user.',
   '复习题不存在或当前不可作答': 'The review question does not exist or cannot currently be answered.',
   '复习题当前不可作答': 'This review question cannot currently be answered.',

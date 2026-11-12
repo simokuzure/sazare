@@ -36,7 +36,7 @@ import com.sazare.service.ai.prompt.AiReviewScoringPromptBuilder;
 import com.sazare.service.ai.validation.AiErrorAnalysisValidator;
 import com.sazare.service.ai.validation.ReviewAiResponseValidator;
 import com.sazare.service.review.ReviewDerivedQuestionService;
-import com.sazare.service.review.Sm2Scheduler;
+import com.sazare.service.review.FsrsScheduler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -77,7 +77,83 @@ import static org.mockito.Mockito.when;
 class ReviewServiceImplTest {
 
     @ParameterizedTest
-    @CsvSource({"LOW,3", "MEDIUM,4", "HIGH,5"})
+    @CsvSource({"6,1,7", "8,2,11", "10,3,16", "10,4,20"})
+    void detailReturnsBaseAndCalculatedTargetWithoutUpdatingDatabase(int base, int failures, int target) {
+        stubLocalUser();
+        when(cardMapper.selectByIdAndUserId(1L, 1L))
+                .thenReturn(card("ACTIVE", LocalDateTime.now().plusDays(1)));
+        when(userErrorTypeMapper.selectActiveByIdAndUserId(2L, 1L)).thenReturn(userErrorType());
+        when(errorTypeMapper.selectEnabledLeafById(3L)).thenReturn(errorType());
+        when(cycleMapper.selectLatestByCardId(1L)).thenReturn(cycle(3, base, failures));
+        when(cycleQuestionMapper.selectProgress(eq(20L), any())).thenReturn(progress(1, 0, 1, 0, 1, 0, 0));
+
+        var detail = service.getReviewCard(1L, false);
+
+        assertThat(detail.progress().baseTargetSuccessCount()).isEqualTo(base);
+        assertThat(detail.progress().targetSuccessCount()).isEqualTo(target);
+        assertThat(detail.progress().extraTargetSuccessCount()).isEqualTo(target - base);
+        assertThat(detail.schedulingAlgorithm()).isEqualTo("FSRS6");
+        assertThat(detail.fsrsStability()).isNull();
+        verify(cardMapper, never()).updateMemoryState(anyLong(), org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"6,false", "7,true"})
+    void masteryUsesDynamicTargetAfterPreviousFailure(int successes, boolean mastered) {
+        stubReadyAttempt("RETRY", "DERIVED", successes, 6);
+        when(cycleMapper.selectCurrentByCardId(1L)).thenReturn(cycle(successes, 6, 1));
+        when(scoringClient.scoreAnswer(any())).thenReturn("""
+                {"review":{"quality":4,"targetErrorResolved":true,"feedback":"目标错误已解决。","scores":{"grammarVocabularyScore":88,"naturalFluencyScore":86,"scenarioAdaptationScore":90,"informationCompletenessScore":92},"errorAnalysis":[]}}
+                """);
+        when(cycleQuestionMapper.selectProgress(eq(20L), any())).thenReturn(progress(1, 1, 0, 0, 0, 1, 0));
+        when(questionClient.generateQuestion(any(), any(), any())).thenThrow(new BusinessException(
+                com.sazare.exception.ErrorCode.BUSINESS_ERROR, "测试不生成衍生题"));
+
+        var result = service.submitReviewAttempt(1L, new ReviewAttemptRequest(30L, "電車に間に合いました"));
+
+        assertThat(result.cardStatus()).isEqualTo(mastered ? "MASTERED" : "ACTIVE");
+        assertThat(result.progress().targetSuccessCount()).isEqualTo(7);
+        assertThat(result.progress().baseTargetSuccessCount()).isEqualTo(6);
+        verify(cycleMapper).updateProgress(eq(20L), eq(6), eq(successes + 1), eq(1), any(), any());
+        verify(attemptMapper).insertAttempt(argThat(attempt -> attempt.getFsrsRating() == 3
+                && attempt.getFsrsStabilityAfter() != null && attempt.getFsrsDifficultyAfter() != null));
+    }
+
+    @Test
+    void failedAttemptRaisesEffectiveTargetWithoutPersistingItAsBase() {
+        stubReadyAttempt("RETRY", "ORIGINAL", 0, 6);
+        when(scoringClient.scoreAnswer(any())).thenReturn("""
+                {"review":{"quality":2,"targetErrorResolved":false,"feedback":"目标错误仍存在。","scores":{"grammarVocabularyScore":80,"naturalFluencyScore":70,"scenarioAdaptationScore":90,"informationCompletenessScore":81},"errorAnalysis":[]}}
+                """);
+        when(cycleQuestionMapper.selectProgress(eq(20L), any())).thenReturn(progress(1, 0, 1, 0, 1, 0, 0));
+
+        var result = service.submitReviewAttempt(1L, new ReviewAttemptRequest(30L, "電車を間に合いました"));
+
+        assertThat(result.progress().baseTargetSuccessCount()).isEqualTo(6);
+        assertThat(result.progress().targetSuccessCount()).isEqualTo(7);
+        verify(cycleMapper).updateProgress(eq(20L), eq(6), eq(0), eq(1), any(), any());
+    }
+
+    @Test
+    void alreadyPassedQuestionAfterAiCallCannotBeSubmittedAgain() {
+        stubReadyAttempt("RETRY", "ORIGINAL", 0, 6);
+        when(scoringClient.scoreAnswer(any())).thenAnswer(invocation -> {
+            when(cycleQuestionMapper.selectByIdAndCycleId(30L, 20L))
+                    .thenReturn(cycleQuestion("PASSED", "ORIGINAL", 1));
+            return """
+                    {"review":{"quality":4,"targetErrorResolved":true,"feedback":"目标错误已解决。","scores":{"grammarVocabularyScore":88,"naturalFluencyScore":86,"scenarioAdaptationScore":90,"informationCompletenessScore":92},"errorAnalysis":[]}}
+                    """;
+        });
+
+        assertThatThrownBy(() -> service.submitReviewAttempt(1L,
+                new ReviewAttemptRequest(30L, "電車に間に合いました"))).isInstanceOf(BusinessException.class);
+        verify(userAnswerMapper, never()).insertUserAnswer(any());
+        verify(attemptMapper, never()).insertAttempt(any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"LOW,6", "MEDIUM,8", "HIGH,10"})
     void chatImportAddsMultipleQuestionsAndOneFailureWithoutAnswer(String severity, int target) {
         when(userErrorTypeMapper.selectActiveByIdAndUserId(2L, 1L)).thenReturn(userErrorType());
         when(questionMapper.selectActiveQuestionById(anyLong())).thenReturn(question());
@@ -111,7 +187,7 @@ class ReviewServiceImplTest {
         when(cycleMapper.selectCurrentForUpdateByCardId(1L)).thenReturn(cycle(0, 4, failures));
         service.recordChatImportErrors(1L, List.of(100L), 2L, "MEDIUM", LocalDateTime.now());
         verify(cycleMapper).insertCycle(argThat(c -> c.getCycleNo() == cycleNo
-                && c.getFailedReviewCount() == failures && c.getTargetSuccessCount() == 4));
+                && c.getFailedReviewCount() == failures && c.getTargetSuccessCount() == 8));
         verify(cardMapper).updateSchedule(eq(1L), eq("ACTIVE"), any(), eq(0), eq(1), eq(1), any(), any(), eq(null), any());
         verify(attemptMapper).insertAttempt(argThat(event -> event.getUserAnswerId() == null));
     }
@@ -170,7 +246,7 @@ class ReviewServiceImplTest {
         service = new ReviewServiceImpl(
                 cardMapper, cycleMapper, cycleQuestionMapper, attemptMapper, userMapper,
                 userErrorTypeMapper, errorTypeMapper, dictionaryCacheService, questionMapper, answerMapper,
-                tagMapper, userAnswerMapper, new Sm2Scheduler(),
+                tagMapper, userAnswerMapper, new FsrsScheduler(),
                 new AiReviewScoringPromptBuilder(objectMapper),
                 scoringClient,
                 responseValidator,
@@ -386,7 +462,7 @@ class ReviewServiceImplTest {
         verify(cardMapper).updateSchedule(
                 eq(1L), eq("ACTIVE"), easeCaptor.capture(), eq(0), eq(1), eq(1), dueAtCaptor.capture(),
                 reviewedAtCaptor.capture(), eq(null), any());
-        assertThat(easeCaptor.getValue()).isEqualByComparingTo("2.1800");
+        assertThat(easeCaptor.getValue()).isEqualByComparingTo("2.5000");
         assertThat(dueAtCaptor.getValue())
                 .isEqualTo(reviewedAtCaptor.getValue().toLocalDate().plusDays(1).atTime(7, 0));
         assertThat(result.nextDueAt()).isEqualTo(dueAtCaptor.getValue());
@@ -502,7 +578,7 @@ class ReviewServiceImplTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"LOW,3", "MEDIUM,4", "HIGH,5"})
+    @CsvSource({"LOW,6", "MEDIUM,8", "HIGH,10"})
     void activePracticeFailureShouldIncrementCycleFailureCountOnce(String severity, int target) {
         when(cardMapper.selectConfirmedSeverities(1L, 50L, 2L)).thenReturn(List.of(severity));
         ReviewCard card = card("ACTIVE", LocalDateTime.now().plusDays(3));
@@ -542,11 +618,11 @@ class ReviewServiceImplTest {
                         && question.getQuestionId().equals(101L)
                         && "RETRY".equals(question.getReviewStatus())
         ));
-        verify(cycleMapper).updateProgress(20L, 4, 1, 0, occurredAt, occurredAt);
+        verify(cycleMapper).updateProgress(20L, 8, 1, 0, occurredAt, occurredAt);
     }
 
     @ParameterizedTest
-    @CsvSource({"LOW,3", "MEDIUM,4", "HIGH,5"})
+    @CsvSource({"LOW,6", "MEDIUM,8", "HIGH,10"})
     void firstPracticeFailureShouldCreateCardCycleAndSingleLapse(String severity, int target) {
         when(cardMapper.selectConfirmedSeverities(1L, 50L, 2L)).thenReturn(List.of(severity));
         when(userErrorTypeMapper.selectActiveByIdAndUserId(2L, 1L)).thenReturn(userErrorType());
@@ -583,7 +659,7 @@ class ReviewServiceImplTest {
         assertThat(cycleCaptor.getValue().getTargetSuccessCount()).isEqualTo(target);
         ArgumentCaptor<LocalDateTime> dueAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         verify(cardMapper).updateSchedule(
-                eq(1L), eq("ACTIVE"), eq(new BigDecimal("2.1800")), eq(0), eq(1), eq(1),
+                eq(1L), eq("ACTIVE"), eq(new BigDecimal("2.5000")), eq(0), eq(1), eq(1),
                 dueAtCaptor.capture(), any(), eq(null), any());
         assertThat(dueAtCaptor.getValue()).isEqualTo(LocalDateTime.of(2027, 1, 1, 7, 0));
         verify(attemptMapper).insertAttempt(any());
@@ -652,7 +728,10 @@ class ReviewServiceImplTest {
         ReviewCycle cycle = cycle(successfulCount, targetCount);
         ReviewCycleQuestion cycleQuestion = cycleQuestion(status, role, 0);
         when(cardMapper.selectByIdAndUserId(1L, 1L)).thenReturn(card);
+        when(cardMapper.selectForUpdateByIdAndUserId(1L, 1L)).thenReturn(card);
         when(cycleMapper.selectCurrentByCardId(1L)).thenReturn(cycle);
+        when(cycleMapper.selectCurrentForUpdateByCardId(1L))
+                .thenAnswer(invocation -> cycleMapper.selectCurrentByCardId(1L));
         when(cycleQuestionMapper.selectByIdAndCycleId(30L, 20L)).thenReturn(cycleQuestion);
         when(cycleQuestionMapper.selectLatestRetry(20L))
                 .thenReturn("RETRY".equals(status) ? cycleQuestion : null);

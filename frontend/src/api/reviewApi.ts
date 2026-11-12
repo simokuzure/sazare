@@ -16,6 +16,7 @@ export async function fetchReviewCards(
   const searchParams = new URLSearchParams({
     status: filters.mode === 'MASTERED' ? 'MASTERED' : 'ACTIVE',
     dueOnly: String(filters.mode === 'DUE'),
+    waitingOnly: String(filters.mode === 'WAITING'),
     page: String(filters.page),
     size: String(filters.size),
     learningMode: filters.learningMode ?? 'ZH_TO_JA',

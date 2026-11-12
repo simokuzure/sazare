@@ -9,6 +9,7 @@ import com.sazare.dto.ReviewAttemptRequest;
 import com.sazare.dto.ReviewCardListRow;
 import com.sazare.dto.ReviewCardQueryRequest;
 import com.sazare.dto.ReviewCycleProgressRow;
+import com.sazare.dto.ReviewSchedulingEvent;
 import com.sazare.entity.ErrorType;
 import com.sazare.entity.Question;
 import com.sazare.entity.QuestionAnswer;
@@ -39,9 +40,10 @@ import com.sazare.service.ai.prompt.AiReviewScoringPromptBuilder;
 import com.sazare.service.ai.validation.ReviewAiResponseValidator;
 import com.sazare.service.ReviewService;
 import com.sazare.service.DictionaryCacheService;
-import com.sazare.service.review.Sm2Result;
+import com.sazare.service.review.FsrsResult;
 import com.sazare.service.review.ReviewDerivedQuestionService;
-import com.sazare.service.review.Sm2Scheduler;
+import com.sazare.service.review.FsrsScheduler;
+import com.sazare.service.review.ReviewTargetPolicy;
 import com.sazare.util.ReviewDueAtCalculator;
 import com.sazare.vo.AnswerErrorAnalysisVO;
 import com.sazare.vo.AnswerScoresVO;
@@ -99,7 +101,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final QuestionAnswerMapper questionAnswerMapper;
     private final TagMapper tagMapper;
     private final UserAnswerMapper userAnswerMapper;
-    private final Sm2Scheduler sm2Scheduler;
+    private final FsrsScheduler fsrsScheduler;
     private final AiReviewScoringPromptBuilder scoringPromptBuilder;
     private final AiReviewScoringClient scoringClient;
     private final ReviewAiResponseValidator aiResponseValidator;
@@ -119,7 +121,7 @@ public class ReviewServiceImpl implements ReviewService {
             QuestionAnswerMapper questionAnswerMapper,
             TagMapper tagMapper,
             UserAnswerMapper userAnswerMapper,
-            Sm2Scheduler sm2Scheduler,
+            FsrsScheduler fsrsScheduler,
             AiReviewScoringPromptBuilder scoringPromptBuilder,
             AiReviewScoringClient scoringClient,
             ReviewAiResponseValidator aiResponseValidator,
@@ -138,7 +140,7 @@ public class ReviewServiceImpl implements ReviewService {
         this.questionAnswerMapper = questionAnswerMapper;
         this.tagMapper = tagMapper;
         this.userAnswerMapper = userAnswerMapper;
-        this.sm2Scheduler = sm2Scheduler;
+        this.fsrsScheduler = fsrsScheduler;
         this.scoringPromptBuilder = scoringPromptBuilder;
         this.scoringClient = scoringClient;
         this.aiResponseValidator = aiResponseValidator;
@@ -151,14 +153,14 @@ public class ReviewServiceImpl implements ReviewService {
         User user = requireLocalUser();
         LocalDateTime now = LocalDateTime.now();
         long total = reviewCardMapper.countCards(
-                user.getId(), request.status(), request.learningMode(), request.dueOnly(), now);
+                user.getId(), request.status(), request.learningMode(), request.dueOnly(), request.waitingOnly(), now);
         if (total == 0) {
             return new PageVO<>(List.of(), request.page(), request.size(), 0);
         }
         long offset = (long) (request.page() - 1) * request.size();
         List<ReviewCardListVO> items = reviewCardMapper.selectCardList(
                         user.getId(), request.status(), request.learningMode(),
-                        request.dueOnly(), now, request.size(), offset)
+                        request.dueOnly(), request.waitingOnly(), now, request.size(), offset)
                 .stream()
                 .map(this::toCardListVO)
                 .toList();
@@ -199,7 +201,9 @@ public class ReviewServiceImpl implements ReviewService {
                 errorType.getId(), errorType.getCode(), errorType.getName(), card.getStatus(), card.getEaseFactor(),
                 card.getRepetitionCount(), card.getIntervalDays(), card.getLapseCount(), card.getDueAt(),
                 card.getLastReviewedAt(), card.getMasteredAt(), state, toProgressVO(cycle, progress), question,
-                reviewAttempts
+                reviewAttempts,
+                card.getFsrsStability() == null && CARD_MASTERED.equals(card.getStatus()) ? "SM2" : "FSRS6",
+                card.getFsrsStability(), card.getFsrsDifficulty(), FsrsScheduler.DESIRED_RETENTION
         );
     }
 
@@ -302,9 +306,16 @@ public class ReviewServiceImpl implements ReviewService {
             AiReviewDTO review
     ) {
         LocalDateTime now = LocalDateTime.now();
-        ReviewCard card = context.card();
-        ReviewCycle cycle = context.cycle();
-        ReviewCycleQuestion cycleQuestion = context.cycleQuestion();
+        ReviewCard card = requireCard(reviewCardMapper.selectForUpdateByIdAndUserId(
+                context.card().getId(), context.user().getId()));
+        requireReadyCard(card, now, request.earlyReview());
+        ReviewCycle cycle = requireCurrentCycle(card.getId());
+        if (!cycle.getId().equals(context.cycle().getId())) {
+            throw business("复习周期已变化，请重新开始复习");
+        }
+        ReviewCycleQuestion cycleQuestion = reviewCycleQuestionMapper
+                .selectByIdAndCycleId(request.cycleQuestionId(), cycle.getId());
+        validateAttemptEligibility(cycle, cycleQuestion);
 
         BigDecimal totalScore = calculateTotalScore(review);
         UserAnswer userAnswer = createSubmittedAnswer(
@@ -332,13 +343,11 @@ public class ReviewServiceImpl implements ReviewService {
         cycle.setSuccessfulReviewCount(successfulCount);
         cycle.setFailedReviewCount(failedCount);
 
-        Sm2Result sm2 = sm2Scheduler.schedule(
-                card.getEaseFactor(), card.getRepetitionCount(), card.getIntervalDays(), card.getLapseCount(),
-                review.quality());
+        FsrsResult scheduled = scheduleReview(card, review.quality(), now);
         ReviewCycleProgressRow progress = loadProgress(cycle);
         boolean completed = isCycleComplete(cycle, progress);
-        LocalDateTime nextDueAt = completed ? null : ReviewDueAtCalculator.calculate(now, sm2.intervalDays());
-        updateCardAfterAttempt(card, sm2, completed, nextDueAt, now);
+        LocalDateTime nextDueAt = completed ? null : ReviewDueAtCalculator.calculate(now, scheduled.intervalDays());
+        updateCardAfterAttempt(card, scheduled, completed, nextDueAt, now);
         if (completed) {
             reviewCycleMapper.completeCycle(cycle.getId(), now);
         }
@@ -346,7 +355,7 @@ public class ReviewServiceImpl implements ReviewService {
         ReviewAttempt attempt = buildAttempt(
                 context.user().getId(), card.getId(), cycle.getId(), cycleQuestion.getId(), userAnswer.getId(),
                 "REVIEW", passed ? RESULT_PASS : RESULT_FAIL, review.quality(), passed, review.feedback(),
-                sm2, successfulCount, nextDueAt, now);
+                scheduled, successfulCount, nextDueAt, now);
         reviewAttemptMapper.insertAttempt(attempt);
         return new ReviewAttemptWriteResult(
                 card, cycle, userAnswer, progress, nextDueAt, totalScore, passed, completed,
@@ -480,7 +489,7 @@ public class ReviewServiceImpl implements ReviewService {
         List<Long> ids = questionIds.stream().distinct().toList();
         if (ids.isEmpty()) throw business("导入复习题不能为空");
         ids.forEach(this::requireQuestion);
-        int target = switch (severity) { case "LOW" -> 3; case "HIGH" -> 5; default -> 4; };
+        int target = ReviewTargetPolicy.baseTarget(severity);
         ReviewCard card = reviewCardMapper.selectForUpdateByUserErrorTypeId(userErrorTypeId);
         boolean newCard = false;
         if (card == null) {
@@ -571,15 +580,12 @@ public class ReviewServiceImpl implements ReviewService {
             LocalDateTime occurredAt,
             String source
     ) {
-        Sm2Result sm2 = sm2Scheduler.schedule(
-                card.getEaseFactor(), card.getRepetitionCount(), card.getIntervalDays(), card.getLapseCount(), 2);
-        LocalDateTime dueAt = ReviewDueAtCalculator.calculate(occurredAt, 1);
-        reviewCardMapper.updateSchedule(
-                card.getId(), CARD_ACTIVE, sm2.easeFactor(), sm2.repetitionCount(), sm2.intervalDays(),
-                sm2.lapseCount(), dueAt, occurredAt, null, occurredAt);
+        FsrsResult scheduled = scheduleReview(card, 2, occurredAt);
+        LocalDateTime dueAt = ReviewDueAtCalculator.calculate(occurredAt, scheduled.intervalDays());
+        updateCardAfterAttempt(card, scheduled, false, dueAt, occurredAt);
         reviewAttemptMapper.insertAttempt(buildAttempt(
                 card.getUserId(), card.getId(), cycle.getId(), cycleQuestion.getId(), userAnswerId,
-                source, RESULT_FAIL, 2, false, null, sm2,
+                source, RESULT_FAIL, 2, false, null, scheduled,
                 cycle.getSuccessfulReviewCount(), dueAt, occurredAt));
     }
 
@@ -607,26 +613,32 @@ public class ReviewServiceImpl implements ReviewService {
         boolean allOriginalsPassed = progress.getOriginalQuestionCount() > 0
                 && progress.getOriginalQuestionCount().equals(progress.getOriginalPassedCount());
         boolean noUnfinishedQuestion = progress.getActiveQuestionCount() == 0;
-        return allOriginalsPassed && noUnfinishedQuestion && netSuccessCount(cycle) < cycle.getTargetSuccessCount();
+        return allOriginalsPassed && noUnfinishedQuestion && netSuccessCount(cycle) < effectiveTarget(cycle);
     }
 
     private boolean isCycleComplete(ReviewCycle cycle, ReviewCycleProgressRow progress) {
         return progress.getOriginalQuestionCount() > 0
                 && progress.getOriginalQuestionCount().equals(progress.getOriginalPassedCount())
-                && netSuccessCount(cycle) >= cycle.getTargetSuccessCount()
+                && netSuccessCount(cycle) >= effectiveTarget(cycle)
                 && progress.getActiveQuestionCount() == 0;
     }
 
     private int resolveTargetSuccessCount(ReviewCard card, Long userAnswerId) {
         return reviewCardMapper.selectConfirmedSeverities(
                         card.getUserId(), userAnswerId, card.getUserErrorTypeId()).stream()
-                .mapToInt(severity -> switch (severity) {
-                    case "LOW" -> 3;
-                    case "HIGH" -> 5;
-                    default -> 4;
-                })
+                .mapToInt(ReviewTargetPolicy::baseTarget)
                 .max()
-                .orElse(4);
+                .orElse(ReviewTargetPolicy.baseTarget("MEDIUM"));
+    }
+
+    private int effectiveTarget(ReviewCycle cycle) {
+        return ReviewTargetPolicy.effectiveTarget(cycle.getTargetSuccessCount(), cycle.getFailedReviewCount());
+    }
+
+    private FsrsResult scheduleReview(ReviewCard card, int quality, LocalDateTime occurredAt) {
+        var history = card.getFsrsStability() == null
+                ? reviewAttemptMapper.selectSchedulingHistory(card.getId()) : List.<ReviewSchedulingEvent>of();
+        return fsrsScheduler.schedule(card, quality, history, occurredAt);
     }
 
     private int netSuccessCount(ReviewCycle cycle) {
@@ -695,9 +707,13 @@ public class ReviewServiceImpl implements ReviewService {
     private ReviewCardListVO toCardListVO(ReviewCardListRow row) {
         ReviewCycleProgressVO progress = new ReviewCycleProgressVO(
                 row.getCycleNo(), row.getSuccessfulReviewCount(), row.getFailedReviewCount(),
-                row.getSuccessfulReviewCount() - row.getFailedReviewCount(), row.getTargetSuccessCount(),
+                row.getSuccessfulReviewCount() - row.getFailedReviewCount(),
+                row.getTargetSuccessCount() == 0 ? 0 : ReviewTargetPolicy.effectiveTarget(
+                        row.getTargetSuccessCount(), row.getFailedReviewCount()),
                 row.getOriginalQuestionCount(), row.getOriginalPassedCount(), row.getRetryQuestionCount(),
-                row.getPendingQuestionCount());
+                row.getPendingQuestionCount(), row.getTargetSuccessCount(),
+                row.getTargetSuccessCount() == 0 ? 0 : ReviewTargetPolicy.effectiveTarget(
+                        row.getTargetSuccessCount(), row.getFailedReviewCount()) - row.getTargetSuccessCount());
         return new ReviewCardListVO(
                 row.getId(), row.getUserErrorTypeId(), row.getErrorTypeId(), row.getErrorTypeCode(),
                 row.getErrorTypeName(), row.getUserErrorTypeName(), row.getUserErrorTypeDescription(),
@@ -710,9 +726,10 @@ public class ReviewServiceImpl implements ReviewService {
         }
         return new ReviewCycleProgressVO(
                 cycle.getCycleNo(), cycle.getSuccessfulReviewCount(), cycle.getFailedReviewCount(),
-                netSuccessCount(cycle), cycle.getTargetSuccessCount(),
+                netSuccessCount(cycle), effectiveTarget(cycle),
                 progress.getOriginalQuestionCount(), progress.getOriginalPassedCount(),
-                progress.getRetryQuestionCount(), progress.getPendingQuestionCount());
+                progress.getRetryQuestionCount(), progress.getPendingQuestionCount(),
+                cycle.getTargetSuccessCount(), effectiveTarget(cycle) - cycle.getTargetSuccessCount());
     }
 
     private ReviewCycleProgressRow loadProgress(ReviewCycle cycle) {
@@ -817,14 +834,15 @@ public class ReviewServiceImpl implements ReviewService {
 
     private void updateCardAfterAttempt(
             ReviewCard card,
-            Sm2Result sm2,
+            FsrsResult scheduled,
             boolean completed,
             LocalDateTime dueAt,
             LocalDateTime now
     ) {
         reviewCardMapper.updateSchedule(
-                card.getId(), completed ? CARD_MASTERED : CARD_ACTIVE, sm2.easeFactor(), sm2.repetitionCount(),
-                sm2.intervalDays(), sm2.lapseCount(), dueAt, now, completed ? now : null, now);
+                card.getId(), completed ? CARD_MASTERED : CARD_ACTIVE, scheduled.easeFactor(), scheduled.repetitionCount(),
+                scheduled.intervalDays(), scheduled.lapseCount(), dueAt, now, completed ? now : null, now);
+        reviewCardMapper.updateMemoryState(card.getId(), scheduled.stability(), scheduled.difficulty());
     }
 
     private ReviewCard newReviewCard(Long userId, Long userErrorTypeId, LocalDateTime now) {
@@ -872,7 +890,7 @@ public class ReviewServiceImpl implements ReviewService {
             int quality,
             boolean resolved,
             String feedback,
-            Sm2Result sm2,
+            FsrsResult scheduled,
             int cycleSuccessCount,
             LocalDateTime nextDueAt,
             LocalDateTime now
@@ -888,9 +906,12 @@ public class ReviewServiceImpl implements ReviewService {
         attempt.setSm2Quality(quality);
         attempt.setTargetErrorResolved(resolved);
         attempt.setAiFeedback(feedback);
-        attempt.setEaseFactorAfter(sm2.easeFactor());
-        attempt.setRepetitionCountAfter(sm2.repetitionCount());
-        attempt.setIntervalDaysAfter(sm2.intervalDays());
+        attempt.setEaseFactorAfter(scheduled.easeFactor());
+        attempt.setRepetitionCountAfter(scheduled.repetitionCount());
+        attempt.setIntervalDaysAfter(scheduled.intervalDays());
+        attempt.setFsrsRating(scheduled.rating());
+        attempt.setFsrsStabilityAfter(scheduled.stability());
+        attempt.setFsrsDifficultyAfter(scheduled.difficulty());
         attempt.setCycleSuccessCountAfter(cycleSuccessCount);
         attempt.setNextDueAt(nextDueAt);
         attempt.setCreatedAt(now);

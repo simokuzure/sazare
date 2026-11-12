@@ -7,14 +7,23 @@
             user_id, review_card_id, review_cycle_id, review_cycle_question_id, user_answer_id,
             attempt_source, result, sm2_quality, target_error_resolved, ai_feedback,
             ease_factor_after, repetition_count_after, interval_days_after,
-            cycle_success_count_after, next_due_at, created_at
+            cycle_success_count_after, next_due_at, created_at,
+            fsrs_rating, fsrs_stability_after, fsrs_difficulty_after
         ) values (
             #{userId}, #{reviewCardId}, #{reviewCycleId}, #{reviewCycleQuestionId}, #{userAnswerId},
             #{attemptSource}, #{result}, #{sm2Quality}, #{targetErrorResolved}, #{aiFeedback},
             #{easeFactorAfter}, #{repetitionCountAfter}, #{intervalDaysAfter},
-            #{cycleSuccessCountAfter}, #{nextDueAt}, #{createdAt}
+            #{cycleSuccessCountAfter}, #{nextDueAt}, #{createdAt},
+            #{fsrsRating}, #{fsrsStabilityAfter}, #{fsrsDifficultyAfter}
         )
     </insert>
+
+    <select id="selectSchedulingHistory" resultType="com.sazare.dto.ReviewSchedulingEvent">
+        select sm2_quality as quality, created_at as reviewed_at
+        from review_attempts
+        where review_card_id = #{reviewCardId}
+        order by created_at asc, id asc
+    </select>
 
     <select id="selectReviewHistory" resultType="com.sazare.dto.ReviewAttemptHistoryRow">
         select

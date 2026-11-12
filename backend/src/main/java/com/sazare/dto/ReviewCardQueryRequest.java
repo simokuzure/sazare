@@ -5,12 +5,15 @@ import com.sazare.common.TranslationDirection;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.AssertTrue;
 
 public record ReviewCardQueryRequest(
         @Pattern(regexp = "ACTIVE|MASTERED", message = "status 只能是 ACTIVE 或 MASTERED")
         String status,
 
         Boolean dueOnly,
+
+        Boolean waitingOnly,
 
         @Min(value = 1, message = "page 必须大于等于 1")
         Integer page,
@@ -25,13 +28,28 @@ public record ReviewCardQueryRequest(
     public ReviewCardQueryRequest {
         status = status == null || status.isBlank() ? "ACTIVE" : status.trim();
         dueOnly = dueOnly == null ? Boolean.FALSE : dueOnly;
+        waitingOnly = waitingOnly == null ? Boolean.FALSE : waitingOnly;
         page = page == null ? 1 : page;
         size = size == null ? 20 : size;
         learningMode = learningMode == null || learningMode.isBlank() ? "ZH_TO_JA" : learningMode.trim();
     }
 
     public ReviewCardQueryRequest(String status, Boolean dueOnly, Integer page, Integer size) {
-        this(status, dueOnly, page, size, "ZH_TO_JA");
+        this(status, dueOnly, false, page, size, "ZH_TO_JA");
+    }
+
+    public ReviewCardQueryRequest(String status, Boolean dueOnly, Integer page, Integer size, String learningMode) {
+        this(status, dueOnly, false, page, size, learningMode);
+    }
+
+    @AssertTrue(message = "dueOnly 与 waitingOnly 不能同时为 true")
+    public boolean isDueFilterValid() {
+        return !dueOnly || !waitingOnly;
+    }
+
+    @AssertTrue(message = "waitingOnly 仅适用于 ACTIVE 状态")
+    public boolean isWaitingStatusValid() {
+        return !waitingOnly || "ACTIVE".equals(status);
     }
 
     public String getStatus() {

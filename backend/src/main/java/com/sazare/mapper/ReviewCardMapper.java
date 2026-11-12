@@ -14,11 +14,13 @@ public interface ReviewCardMapper {
 
     long countCards(@Param("userId") Long userId, @Param("status") String status,
                     @Param("learningMode") String learningMode,
-                    @Param("dueOnly") boolean dueOnly, @Param("now") LocalDateTime now);
+                    @Param("dueOnly") boolean dueOnly, @Param("waitingOnly") boolean waitingOnly,
+                    @Param("now") LocalDateTime now);
 
     List<ReviewCardListRow> selectCardList(@Param("userId") Long userId, @Param("status") String status,
                                            @Param("learningMode") String learningMode,
-                                           @Param("dueOnly") boolean dueOnly, @Param("now") LocalDateTime now,
+                                           @Param("dueOnly") boolean dueOnly, @Param("waitingOnly") boolean waitingOnly,
+                                           @Param("now") LocalDateTime now,
                                            @Param("limit") int limit, @Param("offset") long offset);
 
     ReviewCard selectByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
@@ -32,6 +34,10 @@ public interface ReviewCardMapper {
                                            @Param("userErrorTypeId") Long userErrorTypeId);
 
     int insertCardIfAbsent(ReviewCard card);
+
+    int updateMemoryState(@Param("id") Long id,
+                          @Param("stability") double stability,
+                          @Param("difficulty") double difficulty);
 
     int logicalDelete(@Param("id") Long id, @Param("userId") Long userId,
                       @Param("updatedAt") LocalDateTime updatedAt);

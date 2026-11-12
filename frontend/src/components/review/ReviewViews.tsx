@@ -107,15 +107,22 @@ function ReviewOverviewAction({ detail, onStart, onStartEarly }: { detail: Revie
 
 function ReviewCycleSummary({ detail, progress, dueAt }: { detail: ReviewCardDetail | null; progress: ReviewCycleProgress; dueAt?: string | null }) {
   const { text } = useLanguage()
+  const fsrs = detail?.schedulingAlgorithm === 'FSRS6'
+  const baseTarget = progress.baseTargetSuccessCount ?? progress.targetSuccessCount
+  const extraTarget = progress.extraTargetSuccessCount ?? 0
   const percentage = progress.targetSuccessCount === 0 ? 0 : Math.max(0, Math.min(100, Math.round(progress.netSuccessCount / progress.targetSuccessCount * 100)))
-  return <section className="review-cycle-summary" aria-label={text('复习周期摘要', 'Review cycle summary')}>
+  return <section className={`review-cycle-summary${fsrs ? ' has-fsrs' : ''}`} aria-label={text('复习周期摘要', 'Review cycle summary')}>
     <div className="review-cycle-metrics">
       <div><span>{text('当前周期', 'Current cycle')}</span><strong>{text(`第 ${progress.cycleNo} 轮`, `Cycle ${progress.cycleNo}`)}</strong></div>
       <div className="review-cycle-progress"><span>{text('净成功', 'Net success')}</span><strong>{progress.netSuccessCount} / {progress.targetSuccessCount}</strong><div className="review-progress-track" aria-label={text(`净成功进度 ${percentage}%`, `Net success progress ${percentage}%`)}><span style={{ width: `${percentage}%` }} /></div></div>
       <div><span>{text('原题通过', 'Originals passed')}</span><strong>{progress.originalPassedCount} / {progress.originalQuestionCount}</strong></div>
       <div><span>{text('待处理', 'Pending')}</span><strong>{progress.retryQuestionCount + progress.pendingQuestionCount}</strong></div>
     </div>
-    {detail ? <dl className="review-cycle-schedule"><div><dt>{text('难度', 'Ease')}</dt><dd>{detail.easeFactor.toFixed(4)}</dd></div><div><dt>{text('连续通过', 'Pass streak')}</dt><dd>{detail.repetitionCount}</dd></div><div><dt>{text('间隔', 'Interval')}</dt><dd>{text(`${detail.intervalDays} 天`, `${detail.intervalDays} days`)}</dd></div><div><dt>{text('累计未通过', 'Total failures')}</dt><dd>{detail.lapseCount}</dd></div><div><dt>{text('下次到期', 'Next due')}</dt><dd>{formatDateTime(dueAt === undefined ? detail.dueAt : dueAt)}</dd></div></dl> : null}
+    {detail ? <dl className="review-cycle-schedule">
+      {fsrs ? <><div><dt>FSRS</dt><dd>{text(`目标记忆率 ${Math.round((detail.desiredRetention ?? 0.95) * 100)}%`, `Desired retention ${Math.round((detail.desiredRetention ?? 0.95) * 100)}%`)}</dd></div><div><dt>{text('难度', 'Difficulty')}</dt><dd>{detail.fsrsDifficulty?.toFixed(2) ?? '—'}</dd></div><div><dt>{text('稳定性', 'Stability')}</dt><dd>{detail.fsrsStability == null ? '—' : text(`${detail.fsrsStability.toFixed(2)} 天`, `${detail.fsrsStability.toFixed(2)} days`)}</dd></div></> : <div><dt>{text('难度', 'Ease')}</dt><dd>{detail.easeFactor.toFixed(4)}</dd></div>}
+      <div><dt>{text('连续通过', 'Pass streak')}</dt><dd>{detail.repetitionCount}</dd></div><div><dt>{text('间隔', 'Interval')}</dt><dd>{text(`${detail.intervalDays} 天`, `${detail.intervalDays} days`)}</dd></div><div><dt>{text('累计未通过', 'Total failures')}</dt><dd>{detail.lapseCount}</dd></div><div><dt>{text('下次到期', 'Next due')}</dt><dd>{formatDateTime(dueAt === undefined ? detail.dueAt : dueAt)}</dd></div>
+    </dl> : null}
+    {progress.baseTargetSuccessCount !== undefined ? <p className="review-cycle-target">{text(`目标 ${progress.targetSuccessCount} 次：基础 ${baseTarget} + 追加 ${extraTarget}（本周期未通过 ${progress.failedReviewCount} 次）`, `Target ${progress.targetSuccessCount}: base ${baseTarget} + extra ${extraTarget} (${progress.failedReviewCount} failures this cycle)`)}</p> : null}
   </section>
 }
 

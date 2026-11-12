@@ -408,6 +408,8 @@ create table if not exists review_cards (
     ease_factor numeric(5, 4) not null default 2.5000,
     repetition_count integer not null default 0,
     interval_days integer not null default 1,
+    fsrs_stability double precision null,
+    fsrs_difficulty double precision null,
     lapse_count integer not null default 0,
     due_at timestamp null,
     last_reviewed_at timestamp null,
@@ -422,6 +424,12 @@ create table if not exists review_cards (
     constraint ck_review_cards_repetition_count check (repetition_count >= 0),
     constraint ck_review_cards_interval_days check (interval_days >= 1),
     constraint ck_review_cards_lapse_count check (lapse_count >= 0),
+    constraint ck_review_cards_fsrs_memory check (
+        (fsrs_stability is null and fsrs_difficulty is null)
+        or (fsrs_stability is not null and fsrs_difficulty is not null
+            and fsrs_stability >= 0.001 and fsrs_stability < 'Infinity'::double precision
+            and fsrs_difficulty between 1 and 10)
+    ),
     constraint ck_review_cards_status_time check (
         (status = 'ACTIVE' and due_at is not null and mastered_at is null)
         or (status = 'MASTERED' and due_at is null and mastered_at is not null)
@@ -433,12 +441,14 @@ comment on column review_cards.id is '复习卡片主键ID';
 comment on column review_cards.user_id is '卡片所属用户ID，对应 users.id，由代码维护有效性';
 comment on column review_cards.user_error_type_id is '用户错误类型ID，对应 user_error_types.id，一种用户错误类型只有一张卡片';
 comment on column review_cards.status is '卡片状态：ACTIVE=复习中或等待到期，MASTERED=当前周期已完成并已掌握';
-comment on column review_cards.ease_factor is 'SM-2难度因子，默认2.5000，最低1.3000';
+comment on column review_cards.ease_factor is '历史SM-2难度因子，保留用于兼容，不参与FSRS调度';
 comment on column review_cards.repetition_count is '当前连续成功次数，复习失败时归零';
-comment on column review_cards.interval_days is '当前SM-2复习间隔天数，失败后重置为1天';
+comment on column review_cards.interval_days is '当前复习间隔天数，由FSRS计算，最短1天';
+comment on column review_cards.fsrs_stability is 'FSRS-6记忆稳定性，单位为天；旧卡片首次新事件时回放历史初始化';
+comment on column review_cards.fsrs_difficulty is 'FSRS-6记忆难度，范围1到10，与稳定性同时为空或同时有值';
 comment on column review_cards.lapse_count is '累计失败次数，包含复习失败和普通练习再次确认同类错误';
 comment on column review_cards.due_at is '下次应复习时间，已掌握时为空';
-comment on column review_cards.last_reviewed_at is '最近一次影响卡片SM-2状态的时间';
+comment on column review_cards.last_reviewed_at is '最近一次影响卡片调度状态的时间';
 comment on column review_cards.mastered_at is '最近一次完成复习周期并标记掌握的时间，重新激活时清空';
 comment on column review_cards.deleted is '逻辑删除标记：false=未删除，true=已删除';
 comment on column review_cards.created_at is '创建时间';
@@ -452,7 +462,7 @@ create table if not exists review_cycles (
     review_card_id bigint not null,
     cycle_no integer not null,
     status varchar(16) not null default 'IN_PROGRESS',
-    target_success_count integer not null default 4,
+    target_success_count integer not null default 8,
     successful_review_count integer not null default 0,
     failed_review_count integer not null default 0,
     verification_required_after timestamp not null default current_timestamp,
@@ -464,7 +474,7 @@ create table if not exists review_cycles (
     constraint uq_review_cycles_card_cycle_no unique (review_card_id, cycle_no),
     constraint ck_review_cycles_cycle_no check (cycle_no >= 1),
     constraint ck_review_cycles_status check (status in ('IN_PROGRESS', 'COMPLETED')),
-    constraint ck_review_cycles_target_success_count check (target_success_count in (3, 4, 5)),
+    constraint ck_review_cycles_target_success_count check (target_success_count in (3, 4, 5, 6, 8, 10)),
     constraint ck_review_cycles_successful_review_count check (successful_review_count >= 0),
     constraint ck_review_cycles_failed_review_count check (failed_review_count >= 0),
     constraint ck_review_cycles_status_time check (
@@ -478,7 +488,7 @@ comment on column review_cycles.id is '复习周期主键ID';
 comment on column review_cycles.review_card_id is '所属复习卡片ID，对应 review_cards.id，由代码维护有效性';
 comment on column review_cycles.cycle_no is '卡片周期序号，从1开始递增';
 comment on column review_cycles.status is '周期状态：IN_PROGRESS=进行中，COMPLETED=已完成';
-comment on column review_cycles.target_success_count is '本周期目标净成功次数：低3、中4、高5';
+comment on column review_cycles.target_success_count is '最新确认级别对应的基础目标：低6、中8、高10；有效目标由代码结合失败次数计算，3、4、5兼容旧周期';
 comment on column review_cycles.successful_review_count is '本周期累计成功作答次数，失败时不清零';
 comment on column review_cycles.failed_review_count is '本周期累计失败次数，不包含创建新卡片的首次错误';
 comment on column review_cycles.verification_required_after is '兼容字段，记录最近新增或再次答错原题的时间';
@@ -559,6 +569,9 @@ create table if not exists review_attempts (
     ease_factor_after numeric(5, 4) not null,
     repetition_count_after integer not null,
     interval_days_after integer not null,
+    fsrs_rating smallint null,
+    fsrs_stability_after double precision null,
+    fsrs_difficulty_after double precision null,
     cycle_success_count_after integer not null,
     next_due_at timestamp null,
     created_at timestamp not null default current_timestamp,
@@ -582,6 +595,13 @@ create table if not exists review_attempts (
     constraint ck_review_attempts_ease_factor check (ease_factor_after >= 1.3000),
     constraint ck_review_attempts_repetition_count check (repetition_count_after >= 0),
     constraint ck_review_attempts_interval_days check (interval_days_after >= 1),
+    constraint ck_review_attempts_fsrs_memory check (
+        (fsrs_rating is null and fsrs_stability_after is null and fsrs_difficulty_after is null)
+        or (fsrs_rating is not null and fsrs_stability_after is not null and fsrs_difficulty_after is not null
+            and ((result = 'PASS' and fsrs_rating = 3) or (result = 'FAIL' and fsrs_rating = 1))
+            and fsrs_stability_after >= 0.001 and fsrs_stability_after < 'Infinity'::double precision
+            and fsrs_difficulty_after between 1 and 10)
+    ),
     constraint ck_review_attempts_cycle_success_count check (cycle_success_count_after >= 0),
     constraint ck_review_attempts_fail_due_at check (result <> 'FAIL' or next_due_at is not null)
 );
@@ -595,7 +615,10 @@ comment on column review_attempts.review_cycle_question_id is '本次事件对�
 comment on column review_attempts.user_answer_id is '实际用户答案ID，对应 user_answers.id；CHAT_IMPORT 为空';
 comment on column review_attempts.attempt_source is '事件来源：REVIEW=复习作答，PRACTICE_ERROR=普通练习确认同类错误，CHAT_IMPORT=聊天导入确认错误';
 comment on column review_attempts.result is '复习结果：PASS=通过，FAIL=失败';
-comment on column review_attempts.sm2_quality is 'SM-2质量分，范围0到5，普通练习确认同类错误固定为2';
+comment on column review_attempts.sm2_quality is '业务质量分，范围0到5，保留历史字段名称；普通练习确认同类错误固定为2';
+comment on column review_attempts.fsrs_rating is 'FSRS评级：1=Again，3=Good；旧事件为空';
+comment on column review_attempts.fsrs_stability_after is '本次事件处理后的FSRS记忆稳定性，单位为天';
+comment on column review_attempts.fsrs_difficulty_after is '本次事件处理后的FSRS记忆难度，范围1到10';
 comment on column review_attempts.target_error_resolved is '本次回答是否解决卡片针对的目标错误';
 comment on column review_attempts.ai_feedback is '复习专用AI评分反馈，普通练习失败事件可以为空';
 comment on column review_attempts.ease_factor_after is '处理本次事件后的SM-2难度因子';

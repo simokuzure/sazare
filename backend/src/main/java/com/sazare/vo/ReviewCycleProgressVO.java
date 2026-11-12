@@ -9,6 +9,8 @@ public record ReviewCycleProgressVO(
         Integer originalQuestionCount,
         Integer originalPassedCount,
         Integer retryQuestionCount,
-        Integer pendingQuestionCount
+        Integer pendingQuestionCount,
+        Integer baseTargetSuccessCount,
+        Integer extraTargetSuccessCount
 ) {
 }

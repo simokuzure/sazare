@@ -53,7 +53,7 @@ AI-generated output is always treated as unverified candidate data. Only error a
 
 ### AI and question bank
 
-- Switch between `mock` and Google AI providers through a unified configuration.
+- Switch between Google and OpenAI providers through a unified configuration.
 - Use fixed JSON contracts for AI generation and scoring, with strict backend validation and error handling.
 - Use PostgreSQL `pgvector` to compare semantic similarity between vectors produced by the same embedding model, reducing duplicate AI-generated questions.
 - Create, edit, enable, disable, soft-delete, paginate, and filter sentence and article questions.
@@ -61,7 +61,7 @@ AI-generated output is always treated as unverified candidate data. Only error a
 ### Review and analytics
 
 - Review and confirm potential errors identified by AI, or manually save expressions that need improvement.
-- Review cards support review history, derived-question generation, soft deletion, and SM-2-based spaced-repetition scheduling.
+- Review cards support review history, derived questions, soft deletion, and FSRS-6 scheduling with dynamic review targets.
 - View sentence, article, and Japanese proofreading results in a unified answer history.
 - Track the current streak, total study days, practice trends, score dimensions, card status, and review performance.
 

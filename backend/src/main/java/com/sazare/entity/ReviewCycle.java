@@ -21,7 +21,7 @@ public class ReviewCycle {
     /** 周期状态：IN_PROGRESS=进行中，COMPLETED=已完成。 */
     private String status;
 
-    /** 本周期目标净成功次数，固定为4。 */
+    /** 最新确认级别对应的基础目标；有效净成功目标由策略计算。 */
     private Integer targetSuccessCount;
 
     /** 本周期累计成功作答次数。 */

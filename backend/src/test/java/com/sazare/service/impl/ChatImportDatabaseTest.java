@@ -28,8 +28,40 @@ class ChatImportDatabaseTest {
     private com.sazare.service.ai.client.AiProviderHttpClient aiHttpClient;
 
     @Autowired private ChatImportService service;
+    @Autowired private com.sazare.service.ReviewService reviews;
     @Autowired private ErrorTypeMapper errorTypes;
     @Autowired private JdbcTemplate jdbc;
+
+    @Test
+    void latestSeverityChangesBaseAndLegacyImportHistoryCanBeReplayed() {
+        Set<String> excluded = Set.of("OMISSION", "MISTRANSLATION", "ADDITION", "FALSE_FRIEND", "CHINESE_CALQUE");
+        Long errorId = errorTypes.selectEnabledLeafOptions().stream().filter(type -> !excluded.contains(type.code()))
+                .findFirst().orElseThrow().id();
+        var first = service.confirm(new ChatImportConfirmationRequest("ZH_TO_JA", List.of(
+                new ChatImportConfirmationRequest.Item("NEW_USER_ERROR_TYPE", errorId, null,
+                        "FSRS事务测试-" + UUID.randomUUID(), "事务回滚", "MEDIUM", "我去了学校。", "学校に行きました。"))));
+        var card = first.cards().getFirst();
+        assertThat(reviews.getReviewCard(card.cardId(), false).progress().baseTargetSuccessCount()).isEqualTo(8);
+        var high = new ChatImportConfirmationRequest.Item("EXISTING_USER_ERROR_TYPE", null, card.userErrorTypeId(),
+                null, null, "HIGH", "我去了学校。", "学校に行きました。");
+        service.confirm(new ChatImportConfirmationRequest("ZH_TO_JA", List.of(high)));
+        assertThat(reviews.getReviewCard(card.cardId(), false).progress().targetSuccessCount()).isEqualTo(11);
+
+        jdbc.update("update review_cards set fsrs_stability=null, fsrs_difficulty=null where id=?", card.cardId());
+        var low = new ChatImportConfirmationRequest.Item("EXISTING_USER_ERROR_TYPE", null, card.userErrorTypeId(),
+                null, null, "LOW", "我去了学校。", "学校に行きました。");
+        service.confirm(new ChatImportConfirmationRequest("ZH_TO_JA", List.of(low)));
+
+        var detail = reviews.getReviewCard(card.cardId(), false);
+        assertThat(detail.schedulingAlgorithm()).isEqualTo("FSRS6");
+        assertThat(detail.fsrsStability()).isPositive();
+        assertThat(detail.progress().baseTargetSuccessCount()).isEqualTo(6);
+        assertThat(detail.progress().failedReviewCount()).isEqualTo(2);
+        assertThat(detail.progress().targetSuccessCount()).isEqualTo(9);
+        assertThat(detail.status()).isEqualTo("ACTIVE");
+        assertThat(value("select target_success_count from review_cycles where review_card_id=?", card.cardId())).isEqualTo(6);
+        assertThat(value("select count(*) from review_attempts where review_card_id=? and fsrs_rating=1 and fsrs_stability_after is not null", card.cardId())).isEqualTo(3);
+    }
 
     @Test
     void createsUpdatesAndReactivatesWithoutAnswerRecords() {
@@ -49,7 +81,7 @@ class ChatImportDatabaseTest {
         var request = new ChatImportConfirmationRequest("ZH_TO_JA", List.of(item, item));
         assertThat(service.confirm(request).cards().getFirst().action()).isEqualTo("UPDATED");
         assertThat(value("select failed_review_count from review_cycles where review_card_id = ?", card.cardId())).isEqualTo(1);
-        assertThat(value("select target_success_count from review_cycles where review_card_id = ?", card.cardId())).isEqualTo(5);
+        assertThat(value("select target_success_count from review_cycles where review_card_id = ?", card.cardId())).isEqualTo(10);
         assertThat(value("select count(*) from review_cycle_questions q join review_cycles c on c.id=q.review_cycle_id where c.review_card_id=?", card.cardId())).isEqualTo(2);
         service.confirm(request);
         assertThat(value("select failed_review_count from review_cycles where review_card_id = ?", card.cardId())).isEqualTo(2);
